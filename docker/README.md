@@ -6,39 +6,85 @@ This document describes how to build and run the AegisTrader applications using 
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
-- HTTP Proxy configured at `http://192.168.10.23:10809` (for builds in restricted networks)
+- (Optional) HTTP Proxy for builds in restricted networks
+
+## Quick Start
+
+1. **Create `.env` file** (copy from `.env.example`):
+```bash
+cp .env.example .env
+# Edit .env to set your proxy if needed
+```
+
+2. **Build and start all services**:
+```bash
+docker-compose up -d
+```
+
+3. **Access the services**:
+- Monitor UI: http://localhost:3100
+- Monitor API: http://localhost:8100
+- NATS Monitoring: http://localhost:8222
 
 ## Services
 
 The system consists of three main services:
 
-1. **NATS JetStream** - Message broker and service registry
-2. **Monitor API** - FastAPI management backend (port 8100, uses `uv` for faster Python package management)
-3. **Monitor UI** - Next.js monitoring frontend (port 3100, with Tailwind CSS and TypeScript)
+1. **NATS JetStream** (`nats:2.10-alpine`)
+   - Message broker and service registry
+   - Ports: 4222 (client), 8222 (monitoring)
+   
+2. **Monitor API** (Python 3.13 + FastAPI)
+   - Management backend with NATS integration
+   - Port: 8100
+   - Features: Health checks, readiness probes, structured logging
+   - Uses `uv` for fast Python package management
+   
+3. **Monitor UI** (Node 20 + Next.js 14)
+   - Monitoring frontend
+   - Port: 3100
+   - Features: Tailwind CSS, TypeScript, Shadcn/ui ready
 
 ## Building Images
 
-### Individual Image Build
+### Using Docker Compose (Recommended)
 
-Build FastAPI service:
+Docker Compose automatically reads proxy settings from `.env` file:
+
 ```bash
-export http_proxy=http://192.168.10.23:10809
-export https_proxy=http://192.168.10.23:10809
-docker build -f apps/monitor-api/Dockerfile -t aegistrader/monitor-api:latest .
+# Build all services
+docker-compose build
+
+# Build specific service
+docker-compose build monitor-api
+docker-compose build monitor-ui
 ```
 
-Build Next.js UI:
+### Individual Image Build
+
+For manual builds without docker-compose:
+
 ```bash
-export http_proxy=http://192.168.10.23:10809
-export https_proxy=http://192.168.10.23:10809
+# Set proxy if needed
+export HTTP_PROXY=http://your-proxy:port
+export HTTPS_PROXY=http://your-proxy:port
+
+# Build FastAPI service
+docker build -f apps/monitor-api/Dockerfile -t aegistrader/monitor-api:latest .
+
+# Build Next.js UI  
 docker build -f apps/monitor-ui/Dockerfile -t aegistrader/monitor-ui:latest .
 ```
 
-### Using Docker Compose
+### Proxy Configuration
 
-Build all services:
+If you're behind a corporate proxy, configure it in `.env`:
+
 ```bash
-docker-compose build
+# .env file
+HTTP_PROXY=http://192.168.10.23:10809
+HTTPS_PROXY=http://192.168.10.23:10809
+NO_PROXY=localhost,127.0.0.1,nats,monitor-api,monitor-ui
 ```
 
 ## Running Services
@@ -87,11 +133,19 @@ docker run -d --name monitor-ui \
 
 ## Environment Variables
 
-### Monitor API
-- `NATS_URL`: NATS server connection URL (default: `nats://localhost:4222`)
+### Build-time Variables (in `.env`)
+- `HTTP_PROXY`: HTTP proxy for package downloads
+- `HTTPS_PROXY`: HTTPS proxy for package downloads  
+- `NO_PROXY`: Hosts to bypass proxy
 
-### Monitor UI
-- `NEXT_PUBLIC_API_URL`: Backend API URL (default: `http://localhost:8100`)
+### Runtime Variables
+
+#### Monitor API
+- `NATS_URL`: NATS server connection URL (default: `nats://nats:4222`)
+- `LOG_LEVEL`: Logging level (default: `INFO`)
+
+#### Monitor UI
+- `NEXT_PUBLIC_API_URL`: Backend API URL (default: `http://monitor-api:8100`)
 - `PORT`: Next.js server port (default: `3100`)
 
 ## Health Checks
@@ -132,14 +186,45 @@ Service discovery:
 - `monitor-api`: FastAPI backend
 - `monitor-ui`: Next.js frontend
 
+## Development Workflow
+
+### Hot Reload Development
+
+For local development with hot reload:
+
+```bash
+# Start only infrastructure services
+docker-compose up -d nats
+
+# Run apps locally
+cd apps/monitor-api && uvicorn app.main:app --reload --port 8100
+cd apps/monitor-ui && npm run dev
+```
+
+### Viewing Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f monitor-api
+
+# Last 100 lines
+docker-compose logs --tail=100 monitor-api
+```
+
 ## Troubleshooting
 
 ### Build Issues
 
 If builds fail due to network issues:
-1. Verify proxy settings are correct
-2. Check proxy connectivity: `curl -I http://192.168.10.23:10809`
-3. Use China npm mirror: Already configured in Dockerfiles
+1. Check `.env` file exists and has correct proxy settings
+2. Verify proxy connectivity: `curl -I $HTTP_PROXY`
+3. Clear Docker build cache: `docker-compose build --no-cache`
+4. The Dockerfiles use:
+   - China npm mirror (registry.npmmirror.com) for faster downloads
+   - `uv` tool for faster Python package installation
 
 ### Runtime Issues
 
@@ -158,4 +243,37 @@ docker exec monitor-api ping nats
 The services use non-default ports to avoid conflicts:
 - FastAPI: 8100 (instead of 8000)
 - Next.js: 3100 (instead of 3000)
-- NATS: 4222 (standard)
+- NATS: 4222 (client), 8222 (monitoring)
+
+To change ports, modify `docker-compose.yaml` or use environment variables:
+```bash
+# Custom port mapping
+PORT=3200 docker-compose up -d monitor-ui
+```
+
+### Common Issues
+
+1. **Container can't connect to NATS**
+   - Ensure all services are on the same Docker network
+   - Use service names (e.g., `nats`) not `localhost`
+
+2. **Slow builds**
+   - Enable Docker BuildKit: `export DOCKER_BUILDKIT=1`
+   - Use `.env` file for proxy configuration
+   - Consider using `docker-compose build --parallel`
+
+3. **Out of disk space**
+   ```bash
+   # Clean up Docker resources
+   docker system prune -a
+   ```
+
+## Production Deployment
+
+For production deployment:
+
+1. Use specific image tags instead of `latest`
+2. Set proper resource limits in docker-compose.yaml
+3. Use Docker secrets for sensitive data
+4. Enable health checks for container orchestration
+5. Consider using Kubernetes with the provided health/ready endpoints
