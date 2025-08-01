@@ -1,6 +1,6 @@
 [project]
 name = "aegis-sdk"
-version = "0.1.0"
+version = "1.0.1"
 description = "Minimal IPC SDK based on pure NATS with hexagonal architecture"
 authors = [{name = "AegisIPC Team"}]
 readme = "README.md"
@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.1.0",
     "black>=23.0.0",
     "mypy>=1.0.0",
+    "testcontainers[nats]>=4.0.0",
 ]
 
 test = [
@@ -27,6 +28,7 @@ test = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.10.0",
+    "testcontainers[nats]>=4.0.0",
 ]
 
 [build-system]

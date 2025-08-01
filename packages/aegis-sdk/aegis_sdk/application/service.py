@@ -49,9 +49,18 @@ class Service:
         # Health management
         self._heartbeat_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
+        self._start_time = None
 
     async def start(self) -> None:
         """Start the service."""
+        from datetime import datetime
+
+        # Set start time
+        self._start_time = datetime.now()
+
+        # Call on_start hook for subclasses to register handlers
+        await self.on_start()
+
         # Register service
         await self._bus.register_service(self.service_name, self.instance_id)
 
@@ -233,3 +242,61 @@ class Service:
         if status not in ["ACTIVE", "STANDBY", "UNHEALTHY", "SHUTDOWN"]:
             raise ValueError(f"Invalid status: {status}")
         self._info.status = status
+
+    async def on_start(self) -> None:
+        """Hook for subclasses to perform initialization during start.
+
+        Override this method to register handlers or perform other initialization.
+        This is called before the service registers with the message bus.
+        """
+        pass
+
+    async def register_rpc_method(self, method: str, handler: Callable) -> None:
+        """Register an RPC method handler.
+
+        Args:
+            method: The method name
+            handler: The handler function
+        """
+        if not SubjectPatterns.is_valid_method_name(method):
+            raise ValueError(f"Invalid method name: {method}")
+        self._rpc_handlers[method] = handler
+
+    async def register_command_handler(self, command_name: str, handler: Callable) -> None:
+        """Register a command handler.
+
+        Args:
+            command_name: The command name
+            handler: The handler function
+        """
+        self._command_handlers[command_name] = handler
+
+    async def subscribe_event(self, domain: str, event_type: str, handler: Callable) -> None:
+        """Subscribe to an event pattern.
+
+        Args:
+            domain: The event domain
+            event_type: The event type (can include wildcards)
+            handler: The handler function
+        """
+        # Use the full event pattern that matches SubjectPatterns.event()
+        pattern = SubjectPatterns.event(domain, event_type)
+        if pattern not in self._event_handlers:
+            self._event_handlers[pattern] = []
+        self._event_handlers[pattern].append(handler)
+
+    async def emit_event(self, domain: str, event_type: str, payload: dict[str, Any]) -> None:
+        """Emit an event.
+
+        Args:
+            domain: The event domain
+            event_type: The event type
+            payload: The event payload
+        """
+        event = Event(
+            domain=domain,
+            event_type=event_type,
+            payload=payload,
+            source=self.instance_id,
+        )
+        await self._bus.publish_event(event)
