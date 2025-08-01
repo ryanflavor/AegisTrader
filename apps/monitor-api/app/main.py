@@ -10,8 +10,9 @@ from pydantic import BaseModel, Field
 
 
 # Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO")
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -33,12 +34,16 @@ class ErrorResponse(BaseModel):
 def validate_environment() -> Dict[str, str]:
     """Validate required environment variables."""
     nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
+    api_port = int(os.getenv("API_PORT", "8100"))
 
     # Log configuration
     logger.info(f"NATS URL: {nats_url}")
+    logger.info(f"API Port: {api_port}")
+    logger.info(f"Log Level: {log_level}")
 
     return {
         "nats_url": nats_url,
+        "api_port": api_port,
     }
 
 

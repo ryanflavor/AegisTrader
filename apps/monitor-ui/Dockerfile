@@ -5,6 +5,7 @@ FROM node:20-slim
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 # Set proxy environment variables
 ENV HTTP_PROXY=${HTTP_PROXY}
@@ -24,7 +25,7 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
       npm config set proxy $HTTP_PROXY && \
       npm config set https-proxy $HTTPS_PROXY; \
     fi && \
-    npm config set registry https://registry.npmmirror.com && \
+    npm config set registry ${NPM_REGISTRY} && \
     npm install
 
 # Copy application source
