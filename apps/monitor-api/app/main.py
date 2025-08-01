@@ -1,13 +1,25 @@
+"""Main entry point for the AegisTrader Monitor API.
+
+This module sets up the FastAPI application using hexagonal architecture,
+with clear separation between framework concerns and business logic.
+"""
+
 from __future__ import annotations
 
 import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from .domain.exceptions import DomainException
+from .domain.models import ServiceError
+from .infrastructure.api.dependencies import (
+    get_configuration_port,
+)
+from .infrastructure.api.routes import router
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -17,64 +29,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Track service start time
-service_start_time = None
-
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., description="Health status of the service")
-    service: str = Field(..., description="Service name")
-    version: str = Field(..., description="Service version")
-    nats_url: str = Field(..., description="NATS connection URL")
-
-
-class ErrorResponse(BaseModel):
-    detail: str = Field(..., description="Error message")
-    error_code: str = Field(..., description="Error code")
-
-
-class SystemStatus(BaseModel):
-    timestamp: str = Field(..., description="Current server timestamp")
-    uptime_seconds: float = Field(..., description="Service uptime in seconds")
-    environment: str = Field(..., description="Current environment")
-    connected_services: int = Field(0, description="Number of connected services")
-    deployment_version: str = Field(..., description="Deployment version")
-
-
-# Environment variable validation
-def validate_environment() -> dict[str, str]:
-    """Validate required environment variables."""
-    nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
-    api_port = int(os.getenv("API_PORT", "8100"))
-
-    # Log configuration
-    logger.info(f"NATS URL: {nats_url}")
-    logger.info(f"API Port: {api_port}")
-    logger.info(f"Log Level: {log_level}")
-
-    return {
-        "nats_url": nats_url,
-        "api_port": api_port,
-    }
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """Application lifespan manager."""
-    global service_start_time
+    """Application lifespan manager.
+
+    Handles startup and shutdown tasks for the application.
+    """
     logger.info("Starting AegisTrader Management Service")
 
-    # Validate environment on startup
-    env_config = validate_environment()
-    app.state.config = env_config
+    try:
+        # Load and validate configuration during startup
+        config_port = get_configuration_port()
+        config = config_port.load_configuration()
 
-    # Set service start time
-    service_start_time = datetime.now()
-    app.state.start_time = service_start_time
+        # Log configuration (without sensitive data)
+        logger.info(f"Service configured for environment: {config.environment}")
+        logger.info(f"API Port: {config.api_port}")
+        logger.info(f"Log Level: {config.log_level}")
 
-    logger.info("Service startup complete")
-    yield
-    logger.info("Shutting down AegisTrader Management Service")
+        logger.info("All routes registered successfully")
+        logger.info("Service startup complete")
+        logger.info("Service is ready to handle requests")
+
+        yield
+
+    except Exception as e:
+        logger.error(f"Failed to start service: {e}")
+        raise
+    finally:
+        logger.info("Shutting down AegisTrader Management Service")
 
 
 app = FastAPI(
@@ -85,73 +69,46 @@ app = FastAPI(
 )
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return HTTPException(
-        status_code=500,
-        detail=ErrorResponse(
-            detail="Internal server error occurred", error_code="INTERNAL_ERROR"
-        ).model_dump(),
+@app.exception_handler(DomainException)
+async def domain_exception_handler(request: Request, exc: DomainException):
+    """Handle domain-specific exceptions."""
+    logger.warning(f"Domain exception: {exc.message} (code: {exc.error_code})")
+
+    # Map error codes to HTTP status codes
+    status_code_map = {
+        "SERVICE_UNAVAILABLE": 503,
+        "HEALTH_CHECK_FAILED": 503,
+        "CONFIGURATION_ERROR": 500,
+    }
+
+    status_code = status_code_map.get(exc.error_code, 500)
+
+    error = ServiceError(
+        detail=exc.message,
+        error_code=exc.error_code,
+    )
+
+    return JSONResponse(
+        status_code=status_code,
+        content=error.model_dump(exclude={"timestamp"}),
     )
 
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Health check endpoint with service status."""
-    try:
-        config = app.state.config
-        return HealthResponse(
-            status="healthy",
-            service="management-service",
-            version="0.1.0",
-            nats_url=config["nats_url"],
-        )
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=ErrorResponse(
-                detail="Service unhealthy", error_code="HEALTH_CHECK_FAILED"
-            ).model_dump(),
-        )
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unexpected errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+
+    error = ServiceError(
+        detail="An internal server error occurred",
+        error_code="INTERNAL_ERROR",
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content=error.model_dump(exclude={"timestamp"}),
+    )
 
 
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint with welcome message."""
-    return {"message": "Welcome to AegisTrader Management Service"}
-
-
-@app.get("/ready")
-async def readiness_check() -> dict[str, str]:
-    """Readiness check endpoint for Kubernetes."""
-    return {"status": "ready"}
-
-
-@app.get("/status", response_model=SystemStatus)
-async def system_status() -> SystemStatus:
-    """Get current system status with deployment information."""
-    try:
-        current_time = datetime.now()
-        start_time = app.state.start_time
-        uptime_seconds = (current_time - start_time).total_seconds()
-
-        return SystemStatus(
-            timestamp=current_time.isoformat(),
-            uptime_seconds=uptime_seconds,
-            environment=os.getenv("ENVIRONMENT", "development"),
-            connected_services=0,  # Will be implemented when NATS integration is added
-            deployment_version="v1.0.0-demo",
-        )
-    except Exception as e:
-        logger.error(f"Status check failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=ErrorResponse(
-                detail="Failed to retrieve system status",
-                error_code="STATUS_CHECK_FAILED",
-            ).model_dump(),
-        )
-# Updated at 2025年 08月 01日 星期五 21:01:36 CST
+# Include routes from the infrastructure layer
+app.include_router(router)
