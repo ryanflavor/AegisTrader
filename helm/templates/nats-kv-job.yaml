@@ -7,9 +7,8 @@ metadata:
     {{- include "aegis-trader.labels" . | nindent 4 }}
     app.kubernetes.io/component: nats-kv-setup
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "10"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    # Removed helm hooks to avoid circular dependency with --wait
+    # The job will run as a normal Kubernetes resource
 spec:
   template:
     metadata:
@@ -19,42 +18,73 @@ spec:
         app.kubernetes.io/component: nats-kv-setup
     spec:
       restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: create-kv-bucket
-        image: nats:alpine
+        image: natsio/nats-box:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
         command:
         - sh
         - -c
         - |
-          set -e
-          echo "Waiting for NATS JetStream to be ready..."
-          for i in $(seq 1 60); do
-            if nats server check jetstream --server={{ include "aegis-trader.natsUrl" . }} 2>/dev/null; then
-              echo "JetStream is ready!"
-              break
-            fi
-            echo "JetStream not ready yet. Waiting... ($i/60)"
-            sleep 5
-          done
-          echo "JetStream is ready. Creating KV bucket..."
+          set -eo pipefail
+          NATS_URL="{{ include "aegis-trader.natsUrl" . }}"
+          BUCKET="{{ .Values.serviceRegistry.bucketName }}"
           
-          # Check if bucket already exists
-          if nats kv ls --server={{ include "aegis-trader.natsUrl" . }} | grep -q "^{{ .Values.serviceRegistry.bucketName }}$"; then
-            echo "KV bucket '{{ .Values.serviceRegistry.bucketName }}' already exists"
-          else
-            echo "Creating KV bucket '{{ .Values.serviceRegistry.bucketName }}'..."
-            nats kv add {{ .Values.serviceRegistry.bucketName }} \
-              --server={{ include "aegis-trader.natsUrl" . }} \
+          # Wait a bit for NATS to be fully ready
+          echo "Waiting for NATS to be ready..."
+          sleep 10
+          
+          # Try to create bucket with retries
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to check/create KV bucket..."
+            
+            # Check if bucket exists
+            if nats kv ls --server="$NATS_URL" 2>/dev/null | grep -q "^${BUCKET}$"; then
+              echo "KV bucket '$BUCKET' already exists"
+              exit 0
+            fi
+            
+            # Try to create bucket
+            if nats kv add "$BUCKET" --server="$NATS_URL" \
               --replicas={{ .Values.serviceRegistry.bucket.replicas }} \
-              --max-bytes={{ .Values.serviceRegistry.bucket.maxBytes }} \
-              --max-msg-size={{ .Values.serviceRegistry.bucket.maxMsgSize }} \
+              --max-bucket-size={{ int .Values.serviceRegistry.bucket.maxBytes }} \
+              --max-value-size={{ int .Values.serviceRegistry.bucket.maxMsgSize }} \
               {{- if gt (int .Values.serviceRegistry.bucket.ttl) 0 }}
               --ttl={{ .Values.serviceRegistry.bucket.ttl }}s \
               {{- end }}
-              {{- if ne (int .Values.serviceRegistry.bucket.maxMsgs) -1 }}
-              --max-msgs={{ .Values.serviceRegistry.bucket.maxMsgs }} \
-              {{- end }}
-              --description="Service registry for AegisTrader"
-            echo "KV bucket created successfully"
-          fi
+              --description="Service registry for AegisTrader" 2>/dev/null; then
+              echo "KV bucket '$BUCKET' created successfully"
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Failed to create bucket, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+          
+          echo "Failed to create KV bucket after $MAX_RETRIES attempts"
+          exit 1
 {{- end }}

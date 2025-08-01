@@ -42,8 +42,9 @@ ENV http_proxy=""
 ENV https_proxy=""
 
 # Expose port
-EXPOSE 3100
-ENV PORT=3100
+ARG UI_PORT=3100
+ENV PORT=${UI_PORT}
+EXPOSE ${PORT}
 
 # Run the application
 CMD ["npm", "start"]

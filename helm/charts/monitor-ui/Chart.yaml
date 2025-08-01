@@ -2,8 +2,8 @@ apiVersion: v2
 name: monitor-ui
 description: AegisTrader Monitor UI (Next.js)
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 1.0.1
+appVersion: "1.0.1"
 keywords:
   - nextjs
   - ui

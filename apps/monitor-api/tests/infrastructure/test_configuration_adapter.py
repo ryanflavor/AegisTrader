@@ -133,7 +133,7 @@ class TestEnvironmentConfigurationAdapter:
             with pytest.raises(ConfigurationException) as exc_info:
                 adapter.load_configuration()
 
-            assert "Production environment should not use localhost NATS URL" in str(
+            assert "Production environment should not use localhost in NATS URL" in str(
                 exc_info.value
             )
 
@@ -164,6 +164,6 @@ class TestEnvironmentConfigurationAdapter:
         with pytest.raises(ConfigurationException) as exc_info:
             adapter.validate_configuration(config)
 
-        assert "Production environment should not use localhost NATS URL" in str(
+        assert "Production environment should not use localhost in NATS URL" in str(
             exc_info.value
         )

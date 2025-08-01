@@ -30,6 +30,17 @@ monitor-ui:
 
 # NATS configuration
 nats:
+  replicas: 3
+  config:
+    cluster:
+      enabled: true
+      port: 6222
+      replicas: 3
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        size: 10Gi
   nats:
     service:
       ports:

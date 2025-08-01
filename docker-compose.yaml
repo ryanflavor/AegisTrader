@@ -6,7 +6,7 @@ services:
     ports:
       - "${NATS_CLIENT_PORT:-4222}:4222"  # NATS client port
       - "${NATS_MONITOR_PORT:-8222}:8222"  # NATS monitoring port
-    command: ["-js", "-m", "8222"]
+    command: ["-js", "-m", "${NATS_MONITOR_PORT:-8222}"]
     networks:
       - aegis-network
 

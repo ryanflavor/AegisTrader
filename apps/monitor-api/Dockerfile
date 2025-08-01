@@ -75,8 +75,10 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
 COPY apps/monitor-api/ /app/
 
 # Expose the FastAPI port (using non-default port to avoid conflicts)
-EXPOSE 8100
+ARG API_PORT=8100
+ENV API_PORT=${API_PORT}
+EXPOSE ${API_PORT}
 
 # Run the application with uvicorn (async-compatible production server)
 # Using --workers 1 to ensure single process for proper async handling
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${API_PORT} --workers 1

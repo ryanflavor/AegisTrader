@@ -77,7 +77,7 @@ Get NATS service URL
     {{- end }}
   {{- end }}
 {{- end }}
-{{- printf "nats://%s-nats:%d" .Release.Name $natsPort }}
+{{- printf "nats://%s-nats:%v" .Release.Name (int $natsPort) }}
 {{- end }}
 
 {{/*

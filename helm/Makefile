@@ -45,7 +45,7 @@ create-namespace: ## Create namespace if it doesn't exist
 .PHONY: helm-deps
 helm-deps: ## Update Helm dependencies
 	@echo "$(YELLOW)Updating Helm dependencies...$(NC)"
-	@$(HELM) repo add nats https://nats-io.github.io/k8s/helm/charts/ || true
+	@$(HELM) repo add nats $${NATS_HELM_REPO:-https://nats-io.github.io/k8s/helm/charts/} || true
 	@$(HELM) repo update
 	@$(HELM) dependency update .
 	@echo "$(GREEN)Dependencies updated$(NC)"
@@ -118,11 +118,11 @@ logs: ## Show logs from all pods
 .PHONY: port-forward
 port-forward: ## Port forward to access services locally
 	@echo "$(YELLOW)Setting up port forwarding...$(NC)"
-	@echo "UI will be available at http://localhost:3100"
-	@echo "API will be available at http://localhost:8100"
+	@echo "UI will be available at http://localhost:$${UI_PORT:-3100}"
+	@echo "API will be available at http://localhost:$${API_PORT:-8100}"
 	@echo "Press Ctrl+C to stop"
-	@kubectl port-forward -n $(NAMESPACE) svc/$(RELEASE_NAME)-monitor-ui 3100:3100 &
-	@kubectl port-forward -n $(NAMESPACE) svc/$(RELEASE_NAME)-monitor-api 8100:8100
+	@kubectl port-forward -n $(NAMESPACE) svc/$(RELEASE_NAME)-monitor-ui $${UI_PORT:-3100}:$${UI_PORT:-3100} &
+	@kubectl port-forward -n $(NAMESPACE) svc/$(RELEASE_NAME)-monitor-api $${API_PORT:-8100}:$${API_PORT:-8100}
 
 .PHONY: uninstall
 uninstall: check-tools ## Uninstall the stack

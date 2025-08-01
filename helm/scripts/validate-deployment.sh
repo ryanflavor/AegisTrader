@@ -13,7 +13,7 @@ NC='\033[0m'
 # Default values
 NAMESPACE="${NAMESPACE:-aegis-trader}"
 RELEASE_NAME="${RELEASE_NAME:-aegis-trader}"
-TIMEOUT="${TIMEOUT:-300}"
+TIMEOUT="${TIMEOUT:-${DEPLOYMENT_TIMEOUT:-300}}"
 
 # Functions
 log_info() {
