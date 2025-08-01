@@ -2,19 +2,21 @@
 
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
 from typing import Any
 
+from .metrics_models import MetricsSnapshot, MetricsSummaryData
 
-@dataclass
+
 class MetricsSummary:
     """Summary of collected metrics."""
 
-    count: int = 0
-    total: float = 0.0
-    min: float = float("inf")
-    max: float = float("-inf")
-    values: list[float] = field(default_factory=list)
+    def __init__(self):
+        """Initialize metrics summary."""
+        self.count: int = 0
+        self.total: float = 0.0
+        self.min: float = float("inf")
+        self.max: float = float("-inf")
+        self.values: list[float] = []
 
     def add(self, value: float) -> None:
         """Add a value to the summary."""
@@ -36,6 +38,18 @@ class MetricsSummary:
         sorted_values = sorted(self.values)
         index = int((p / 100) * len(sorted_values))
         return sorted_values[min(index, len(sorted_values) - 1)]
+
+    def to_pydantic(self) -> MetricsSummaryData:
+        """Convert to Pydantic model."""
+        return MetricsSummaryData(
+            count=self.count,
+            average=round(self.average, 2),
+            min=round(self.min, 2) if self.count > 0 else 0,
+            max=round(self.max, 2) if self.count > 0 else 0,
+            p50=round(self.percentile(50), 2),
+            p90=round(self.percentile(90), 2),
+            p99=round(self.percentile(99), 2),
+        )
 
 
 class Metrics:
@@ -81,25 +95,18 @@ class Metrics:
 
     def get_all(self) -> dict[str, Any]:
         """Get all metrics as a dictionary."""
+        return self.get_snapshot().model_dump()
+
+    def get_snapshot(self) -> MetricsSnapshot:
+        """Get metrics snapshot as Pydantic model."""
         uptime = time.time() - self._start_time
 
-        return {
-            "uptime_seconds": round(uptime, 2),
-            "counters": dict(self._counters),
-            "gauges": dict(self._gauges),
-            "summaries": {
-                name: {
-                    "count": summary.count,
-                    "average": round(summary.average, 2),
-                    "min": round(summary.min, 2) if summary.count > 0 else 0,
-                    "max": round(summary.max, 2) if summary.count > 0 else 0,
-                    "p50": round(summary.percentile(50), 2),
-                    "p90": round(summary.percentile(90), 2),
-                    "p99": round(summary.percentile(99), 2),
-                }
-                for name, summary in self._summaries.items()
-            },
-        }
+        return MetricsSnapshot(
+            uptime_seconds=round(uptime, 2),
+            counters=dict(self._counters),
+            gauges=dict(self._gauges),
+            summaries={name: summary.to_pydantic() for name, summary in self._summaries.items()},
+        )
 
     def reset(self) -> None:
         """Reset all metrics."""

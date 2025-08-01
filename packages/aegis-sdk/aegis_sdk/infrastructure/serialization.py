@@ -6,13 +6,9 @@ from typing import Any, TypeVar
 import msgpack
 from pydantic import BaseModel
 
+from ..domain.exceptions import SerializationError
+
 T = TypeVar("T", bound=BaseModel)
-
-
-class SerializationError(Exception):
-    """Raised when serialization/deserialization fails."""
-
-    pass
 
 
 def serialize_to_msgpack(obj: BaseModel) -> bytes:
