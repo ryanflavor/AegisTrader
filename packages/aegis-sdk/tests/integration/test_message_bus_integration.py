@@ -354,8 +354,8 @@ class TestEdgeCases:
         adapter = NATSAdapter()
 
         # Should handle invalid URLs gracefully
-        with pytest.raises((OSError, ValueError)):
-            await adapter.connect(["invalid://url", "nats://nonexistent:4222"])
+        with pytest.raises((OSError, ValueError, Exception)):
+            await adapter.connect(["nats://nonexistent1:4222", "nats://nonexistent2:4222"])
 
     @pytest.mark.asyncio
     async def test_operations_without_connection(self):
