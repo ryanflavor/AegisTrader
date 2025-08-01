@@ -1,6 +1,8 @@
 """Integration tests for service patterns (RPC, Events, Commands)."""
 
 import asyncio
+import builtins
+import contextlib
 from datetime import datetime
 
 import pytest
@@ -20,7 +22,9 @@ class TestRPCPatterns:
         class TestService(Service):
             def __init__(self, message_bus):
                 super().__init__(
-                    service_name="test_service", version="1.0.0", message_bus=message_bus
+                    service_name="test_service",
+                    version="1.0.0",
+                    message_bus=message_bus,
                 )
                 self.calculation_count = 0
 
@@ -113,7 +117,10 @@ class TestRPCPatterns:
             from aegis_sdk.domain.models import RPCRequest
 
             request = RPCRequest(
-                target="error_service", method="divide", params={"a": 10, "b": 2}, timeout=2.0
+                target="error_service",
+                method="divide",
+                params={"a": 10, "b": 2},
+                timeout=2.0,
             )
             response = await nats_adapter.call_rpc(request)
             assert response.success
@@ -121,7 +128,10 @@ class TestRPCPatterns:
 
             # Test error case
             error_request = RPCRequest(
-                target="error_service", method="divide", params={"a": 10, "b": 0}, timeout=2.0
+                target="error_service",
+                method="divide",
+                params={"a": 10, "b": 0},
+                timeout=2.0,
             )
             error_response = await nats_adapter.call_rpc(error_request)
             assert not error_response.success
@@ -143,7 +153,9 @@ class TestEventPatterns:
 
         class EventEmitter(Service):
             async def on_start(self):
-                await self.register_command_handler("create_user", self.handle_create_user)
+                await self.register_command_handler(
+                    "create_user", self.handle_create_user
+                )
 
             async def handle_create_user(self, command, progress):
                 user_id = command.payload.get("user_id")
@@ -280,7 +292,9 @@ class TestCommandPatterns:
 
         class WorkerService(Service):
             async def on_start(self):
-                await self.register_command_handler("process_batch", self.handle_process_batch)
+                await self.register_command_handler(
+                    "process_batch", self.handle_process_batch
+                )
 
             async def handle_process_batch(self, command, progress_reporter):
                 batch_size = command.payload.get("size", 100)
@@ -288,7 +302,8 @@ class TestCommandPatterns:
                 # Simulate batch processing with progress
                 for i in range(0, batch_size, 10):
                     await progress_reporter(
-                        percent=(i / batch_size) * 100, status=f"Processing item {i}/{batch_size}"
+                        percent=(i / batch_size) * 100,
+                        status=f"Processing item {i}/{batch_size}",
                     )
                     await asyncio.sleep(0.01)  # Simulate work
 
@@ -308,7 +323,9 @@ class TestCommandPatterns:
             await asyncio.sleep(0.2)
 
             # Execute command
-            command = Command(target="worker", command="process_batch", payload={"size": 50})
+            command = Command(
+                target="worker", command="process_batch", payload={"size": 50}
+            )
 
             result = await nats_adapter.send_command(command, track_progress=True)
 
@@ -336,7 +353,9 @@ class TestCommandPatterns:
 
         class RetryService(Service):
             async def on_start(self):
-                await self.register_command_handler("flaky_operation", self.handle_flaky)
+                await self.register_command_handler(
+                    "flaky_operation", self.handle_flaky
+                )
 
             async def handle_flaky(self, command, progress):
                 nonlocal attempt_count
@@ -368,7 +387,9 @@ class TestCommandPatterns:
             result = None
             for i in range(3):
                 try:
-                    result = await nats_adapter.send_command(command, track_progress=True)
+                    result = await nats_adapter.send_command(
+                        command, track_progress=True
+                    )
                     if result and result.get("result"):
                         break
                 except Exception:
@@ -436,7 +457,5 @@ class TestSingleActiveServicePattern:
 
         except Exception:
             # Clean up on error
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 await primary.stop()
-            except:
-                pass

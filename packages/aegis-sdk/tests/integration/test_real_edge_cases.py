@@ -42,7 +42,9 @@ class TestRealNATSEdgeCases:
     async def test_event_retry_on_stream_error(self, nats_adapter):
         """Test event publishing handles stream errors gracefully."""
         # Publish to a domain that might not have a stream
-        event = Event(domain="nonexistent_domain", event_type="test", payload={"data": "test"})
+        event = Event(
+            domain="nonexistent_domain", event_type="test", payload={"data": "test"}
+        )
 
         # This should either succeed (if stream gets created) or fail gracefully
         try:
@@ -55,7 +57,10 @@ class TestRealNATSEdgeCases:
     async def test_command_completion_timeout(self, nats_adapter):
         """Test command timeout when no handler responds."""
         command = Command(
-            target="nonexistent_service", command="timeout_test", payload={}, timeout=0.5
+            target="nonexistent_service",
+            command="timeout_test",
+            payload={},
+            timeout=0.5,
         )
 
         # Send without progress tracking for simpler test
@@ -81,7 +86,9 @@ class TestRealNATSEdgeCases:
 
         tasks = []
         for i in range(5):
-            request = RPCRequest(target="test", method="concurrent", params={"id": i}, timeout=2.0)
+            request = RPCRequest(
+                target="test", method="concurrent", params={"id": i}, timeout=2.0
+            )
             tasks.append(nats_adapter.call_rpc(request))
 
         responses = await asyncio.gather(*tasks)

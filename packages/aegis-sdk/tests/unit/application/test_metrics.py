@@ -295,7 +295,7 @@ class TestMetricsIntegration:
         metrics = Metrics()
 
         # Simulate concurrent updates
-        for i in range(100):
+        for _i in range(100):
             metrics.increment("concurrent_counter")
 
         assert metrics._counters["concurrent_counter"] == 100

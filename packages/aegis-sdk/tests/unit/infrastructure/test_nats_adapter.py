@@ -475,7 +475,9 @@ class TestNATSAdapterRPC:
 
         # Mock response
         response = RPCResponse(
-            correlation_id=request.message_id, success=True, result={"result": "success"}
+            correlation_id=request.message_id,
+            success=True,
+            result={"result": "success"},
         )
         mock_response_msg = Mock()
         mock_response_msg.data = serialize_to_msgpack(response)
@@ -488,7 +490,9 @@ class TestNATSAdapterRPC:
         assert result.success is True
         assert result.result == {"result": "success"}
         mock_nc.request.assert_called_once_with(
-            "rpc.test_service.test_method", serialize_to_msgpack(request), timeout=request.timeout
+            "rpc.test_service.test_method",
+            serialize_to_msgpack(request),
+            timeout=request.timeout,
         )
         adapter._metrics.increment.assert_called_with("rpc.client.test_service.test_method.success")
 
@@ -1191,7 +1195,8 @@ class TestNATSAdapterCommands:
             await completion_handler(mock_msg)
 
         # Start completion simulation
-        asyncio.create_task(simulate_completion())
+        task = asyncio.create_task(simulate_completion())
+        task.add_done_callback(lambda t: None)  # Prevent unused variable warning
 
         # Send command
         result = await adapter.send_command(command, track_progress=True)

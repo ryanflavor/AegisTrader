@@ -105,7 +105,9 @@ class Metrics:
             uptime_seconds=round(uptime, 2),
             counters=dict(self._counters),
             gauges=dict(self._gauges),
-            summaries={name: summary.to_pydantic() for name, summary in self._summaries.items()},
+            summaries={
+                name: summary.to_pydantic() for name, summary in self._summaries.items()
+            },
         )
 
     def reset(self) -> None:

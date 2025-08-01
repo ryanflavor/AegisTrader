@@ -27,7 +27,10 @@ class TestServiceInitialization:
     def test_service_init_with_custom_values(self, mock_message_bus):
         """Test service initialization with custom values."""
         service = Service(
-            "custom-service", mock_message_bus, instance_id="custom-123", version="2.0.0"
+            "custom-service",
+            mock_message_bus,
+            instance_id="custom-123",
+            version="2.0.0",
         )
 
         assert service.service_name == "custom-service"

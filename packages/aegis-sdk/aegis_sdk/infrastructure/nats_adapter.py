@@ -44,7 +44,7 @@ class NATSAdapter(MessageBusPort):
     async def connect(self, servers: list[str]) -> None:
         """Connect to NATS servers with clustering support."""
         # Create connections
-        for i in range(self._pool_size):
+        for _i in range(self._pool_size):
             nc = await nats.connect(
                 servers=servers,
                 max_reconnect_attempts=10,
@@ -103,7 +103,7 @@ class NATSAdapter(MessageBusPort):
         # Event stream
         try:
             await self._js.stream_info("EVENTS")
-        except:
+        except Exception:
             await self._js.add_stream(
                 name="EVENTS",
                 subjects=["events.>"],
@@ -114,7 +114,7 @@ class NATSAdapter(MessageBusPort):
         # Command stream
         try:
             await self._js.stream_info("COMMANDS")
-        except:
+        except Exception:
             await self._js.add_stream(
                 name="COMMANDS",
                 subjects=["commands.>"],
@@ -298,7 +298,7 @@ class NATSAdapter(MessageBusPort):
 
             for attempt in range(max_retries):
                 try:
-                    ack = await self._js.publish(
+                    await self._js.publish(
                         subject,
                         event_data,
                     )
@@ -315,7 +315,7 @@ class NATSAdapter(MessageBusPort):
                         self._metrics.increment("events.publish.json_errors")
                         raise Exception(
                             f"JetStream publish failed after {max_retries} attempts: {e}"
-                        )
+                        ) from e
                 except Exception:
                     # Other errors, don't retry
                     raise
@@ -449,7 +449,7 @@ class NATSAdapter(MessageBusPort):
                         self._metrics.increment("commands.send.json_errors")
                         raise Exception(
                             f"JetStream publish failed after {max_retries} attempts: {e}"
-                        )
+                        ) from e
 
         if track_progress:
             # Wait for completion
@@ -463,7 +463,11 @@ class NATSAdapter(MessageBusPort):
 
             return completion_data or {"error": "Command timeout"}
         else:
-            return {"command_id": command.message_id, "stream": ack.stream, "seq": ack.seq}
+            return {
+                "command_id": command.message_id,
+                "stream": ack.stream,
+                "seq": ack.seq,
+            }
 
     # Service Registration
     async def register_service(self, service_name: str, instance_id: str) -> None:

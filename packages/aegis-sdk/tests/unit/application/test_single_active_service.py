@@ -1,12 +1,16 @@
 """Unit tests for SingleActiveService implementation."""
 
 import asyncio
+import contextlib
 import time
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from aegis_sdk.application.single_active_service import SingleActiveService, exclusive_rpc
+from aegis_sdk.application.single_active_service import (
+    SingleActiveService,
+    exclusive_rpc,
+)
 from aegis_sdk.domain.models import Event
 
 
@@ -70,11 +74,11 @@ class TestSingleActiveService:
 
         # Run one iteration of election
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            mock_sleep.side_effect = asyncio.CancelledError()  # Stop after first iteration
-            try:
+            mock_sleep.side_effect = (
+                asyncio.CancelledError()
+            )  # Stop after first iteration
+            with contextlib.suppress(asyncio.CancelledError):
                 await service._run_election()
-            except asyncio.CancelledError:
-                pass
 
         # Should become active
         assert service.is_active is True
@@ -92,14 +96,14 @@ class TestSingleActiveService:
         # Run one iteration
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             mock_sleep.side_effect = asyncio.CancelledError()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await service._run_election()
-            except asyncio.CancelledError:
-                pass
 
         # Should have published heartbeat
         service.publish_event.assert_called_once_with(
-            "service.test-service.election", "heartbeat", {"instance_id": service.instance_id}
+            "service.test-service.election",
+            "heartbeat",
+            {"instance_id": service.instance_id},
         )
 
     @pytest.mark.asyncio
@@ -207,11 +211,12 @@ class TestSingleActiveService:
 
         # Run one iteration - should handle error gracefully
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            mock_sleep.side_effect = [None, asyncio.CancelledError()]  # Sleep once then cancel
-            try:
+            mock_sleep.side_effect = [
+                None,
+                asyncio.CancelledError(),
+            ]  # Sleep once then cancel
+            with contextlib.suppress(asyncio.CancelledError):
                 await service._run_election()
-            except asyncio.CancelledError:
-                pass
 
         # Should have tried to publish and handled the error
 

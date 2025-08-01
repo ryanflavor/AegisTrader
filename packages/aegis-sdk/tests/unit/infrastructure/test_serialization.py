@@ -79,7 +79,11 @@ class TestDeserializeFromMsgpack:
     def test_deserialize_simple_model(self):
         """Test deserializing to a Pydantic model."""
         data = msgpack.packb(
-            {"message_id": "123", "trace_id": "456", "timestamp": "2025-01-01T00:00:00Z"},
+            {
+                "message_id": "123",
+                "trace_id": "456",
+                "timestamp": "2025-01-01T00:00:00Z",
+            },
             use_bin_type=True,
         )
 

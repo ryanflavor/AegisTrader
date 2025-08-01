@@ -1,6 +1,7 @@
 """Service base class for building microservices."""
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -92,10 +93,8 @@ class Service:
         # Stop heartbeat
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
 
         # Unregister service
         await self._bus.unregister_service(self.service_name, self.instance_id)
@@ -155,12 +154,7 @@ class Service:
                 self._event_handlers[pattern] = []
             self._event_handlers[pattern].append(handler)
 
-            # Create durable subscription name
-            durable_name = (
-                f"{self.service_name}-{pattern.replace('*', 'star').replace('.', '-')}"
-                if durable
-                else None
-            )
+            # Durable subscription name will be created during registration
 
             # Registration will happen in start()
 

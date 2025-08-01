@@ -1,6 +1,7 @@
 """Sticky Single Active Pattern - Working Implementation."""
 
 import asyncio
+import contextlib
 import json
 import time
 
@@ -48,7 +49,9 @@ class StickySingleActiveService:
     async def start(self):
         """启动服务和选举."""
         # 订阅心跳
-        await self.nc.subscribe(f"{self.service_name}.heartbeat", cb=self._handle_heartbeat)
+        await self.nc.subscribe(
+            f"{self.service_name}.heartbeat", cb=self._handle_heartbeat
+        )
 
         # 启动选举循环
         election_task = asyncio.create_task(self._election_loop())
@@ -153,7 +156,9 @@ class StickySingleActiveService:
                             data = json.loads(msg.data.decode())
                             self.processed_count += 1
 
-                            print(f"📦 {self.instance_id} 处理命令 #{self.processed_count}: {data}")
+                            print(
+                                f"📦 {self.instance_id} 处理命令 #{self.processed_count}: {data}"
+                            )
 
                             # 模拟处理时间
                             await asyncio.sleep(0.5)
@@ -299,10 +304,8 @@ async def demo():
 
     for task in tasks:
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     for instance in instances:
         await instance.stop()

@@ -103,13 +103,17 @@ class TestMessageBusPortImplementation:
             async def is_connected(self) -> bool:
                 return self.connected
 
-            async def register_rpc_handler(self, service: str, method: str, handler) -> None:
+            async def register_rpc_handler(
+                self, service: str, method: str, handler
+            ) -> None:
                 key = f"{service}.{method}"
                 self.rpc_handlers[key] = handler
 
             async def call_rpc(self, request: RPCRequest) -> RPCResponse:
                 return RPCResponse(
-                    correlation_id=request.message_id, success=True, result={"test": "response"}
+                    correlation_id=request.message_id,
+                    success=True,
+                    result={"test": "response"},
                 )
 
             async def subscribe_event(
@@ -120,17 +124,25 @@ class TestMessageBusPortImplementation:
             async def publish_event(self, event: Event) -> None:
                 pass
 
-            async def register_command_handler(self, service: str, command: str, handler) -> None:
+            async def register_command_handler(
+                self, service: str, command: str, handler
+            ) -> None:
                 key = f"{service}.{command}"
                 self.command_handlers[key] = handler
 
-            async def send_command(self, command: Command, track_progress: bool = True) -> dict:
+            async def send_command(
+                self, command: Command, track_progress: bool = True
+            ) -> dict:
                 return {"command_id": command.message_id, "status": "sent"}
 
-            async def register_service(self, service_name: str, instance_id: str) -> None:
+            async def register_service(
+                self, service_name: str, instance_id: str
+            ) -> None:
                 pass
 
-            async def unregister_service(self, service_name: str, instance_id: str) -> None:
+            async def unregister_service(
+                self, service_name: str, instance_id: str
+            ) -> None:
                 pass
 
             async def send_heartbeat(self, service_name: str, instance_id: str) -> None:
@@ -160,11 +172,15 @@ class TestMessageBusPortImplementation:
         """Test RPC registration and calling."""
         # Register handler
         handler = AsyncMock(return_value={"user_id": 123})
-        await mock_implementation.register_rpc_handler("user-service", "get_user", handler)
+        await mock_implementation.register_rpc_handler(
+            "user-service", "get_user", handler
+        )
         assert "user-service.get_user" in mock_implementation.rpc_handlers
 
         # Call RPC
-        request = RPCRequest(method="get_user", params={"id": 123}, target="user-service")
+        request = RPCRequest(
+            method="get_user", params={"id": 123}, target="user-service"
+        )
         response = await mock_implementation.call_rpc(request)
 
         assert isinstance(response, RPCResponse)
@@ -176,7 +192,9 @@ class TestMessageBusPortImplementation:
         """Test event subscription and publishing."""
         # Subscribe to events
         handler = AsyncMock()
-        await mock_implementation.subscribe_event("order.*", handler, durable="test-durable")
+        await mock_implementation.subscribe_event(
+            "order.*", handler, durable="test-durable"
+        )
         assert "order.*" in mock_implementation.event_handlers
 
         # Publish event
@@ -193,7 +211,9 @@ class TestMessageBusPortImplementation:
         assert "worker.process" in mock_implementation.command_handlers
 
         # Send command
-        command = Command(command="process", target="worker", payload={"task_id": "456"})
+        command = Command(
+            command="process", target="worker", payload={"task_id": "456"}
+        )
         result = await mock_implementation.send_command(command, track_progress=True)
 
         assert isinstance(result, dict)
@@ -261,16 +281,24 @@ class TestMessageBusPortContract:
             async def publish_event(self, event: Event) -> None:
                 pass
 
-            async def register_command_handler(self, service: str, command: str, handler) -> None:
+            async def register_command_handler(
+                self, service: str, command: str, handler
+            ) -> None:
                 pass
 
-            async def send_command(self, command: Command, track_progress: bool = True) -> dict:
+            async def send_command(
+                self, command: Command, track_progress: bool = True
+            ) -> dict:
                 return {}
 
-            async def register_service(self, service_name: str, instance_id: str) -> None:
+            async def register_service(
+                self, service_name: str, instance_id: str
+            ) -> None:
                 pass
 
-            async def unregister_service(self, service_name: str, instance_id: str) -> None:
+            async def unregister_service(
+                self, service_name: str, instance_id: str
+            ) -> None:
                 pass
 
             async def send_heartbeat(self, service_name: str, instance_id: str) -> None:

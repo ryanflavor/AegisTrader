@@ -60,7 +60,9 @@ class MessageBusPort(ABC):
         ...
 
     @abstractmethod
-    async def send_command(self, command: Command, track_progress: bool = True) -> dict[str, Any]:
+    async def send_command(
+        self, command: Command, track_progress: bool = True
+    ) -> dict[str, Any]:
         """Send a command with optional progress tracking."""
         ...
 

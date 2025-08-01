@@ -74,7 +74,10 @@ class TestMessageBusIntegration:
 
         # Call RPC
         request = RPCRequest(
-            target="test_service", method="echo", params={"message": "hello"}, timeout=2.0
+            target="test_service",
+            method="echo",
+            params={"message": "hello"},
+            timeout=2.0,
         )
         response = await nats_adapter.call_rpc(request)
 
@@ -104,7 +107,9 @@ class TestMessageBusIntegration:
 
         # Publish an event
         event = Event(
-            domain="user", event_type="created", payload={"user_id": "123", "name": "Test User"}
+            domain="user",
+            event_type="created",
+            payload={"user_id": "123", "name": "Test User"},
         )
         await nats_adapter.publish_event(event)
 
@@ -248,7 +253,10 @@ class TestMessageBusIntegration:
 
             # Send RPC from JSON adapter to msgpack handler
             request = RPCRequest(
-                target="test", method="method", params={"test": "json_to_msgpack"}, timeout=2.0
+                target="test",
+                method="method",
+                params={"test": "json_to_msgpack"},
+                timeout=2.0,
             )
 
             response = await json_adapter.call_rpc(request)
@@ -270,7 +278,11 @@ class TestMessageBusIntegration:
         """Test concurrent operations on the message bus."""
         # Register multiple handlers
         call_counts = {"rpc": 0, "events": 0, "commands": 0}
-        locks = {"rpc": asyncio.Lock(), "events": asyncio.Lock(), "commands": asyncio.Lock()}
+        locks = {
+            "rpc": asyncio.Lock(),
+            "events": asyncio.Lock(),
+            "commands": asyncio.Lock(),
+        }
 
         async def rpc_handler(params):
             async with locks["rpc"]:
@@ -342,7 +354,7 @@ class TestEdgeCases:
         adapter = NATSAdapter()
 
         # Should handle invalid URLs gracefully
-        with pytest.raises(Exception):
+        with pytest.raises((OSError, ValueError)):
             await adapter.connect(["invalid://url", "nats://nonexistent:4222"])
 
     @pytest.mark.asyncio

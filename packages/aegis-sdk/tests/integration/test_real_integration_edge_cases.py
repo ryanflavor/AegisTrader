@@ -22,7 +22,7 @@ class TestRealIntegrationEdgeCases:
         assert len(adapter._connections) == 3
 
         # Verify all connections work
-        for i in range(3):
+        for _i in range(3):
             conn = adapter._get_connection()
             assert conn.is_connected
 
@@ -95,7 +95,10 @@ class TestRealIntegrationEdgeCases:
         tasks = []
         for i in range(10):
             request = RPCRequest(
-                target="test_service", method="echo", params={"message": f"test_{i}"}, timeout=2.0
+                target="test_service",
+                method="echo",
+                params={"message": f"test_{i}"},
+                timeout=2.0,
             )
             tasks.append(nats_adapter.call_rpc(request))
 

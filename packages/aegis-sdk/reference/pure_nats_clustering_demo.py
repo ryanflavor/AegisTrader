@@ -184,7 +184,9 @@ class ClusteredNATSDemo:
 
         for i in range(10):
             try:
-                await self.single_conn.publish("test.failover", f"Failover test {i}".encode())
+                await self.single_conn.publish(
+                    "test.failover", f"Failover test {i}".encode()
+                )
                 await self.single_conn.flush()
                 print(f"✓ Message {i} sent via {self.single_conn.connected_url}")
             except Exception as e:

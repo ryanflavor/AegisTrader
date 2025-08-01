@@ -18,7 +18,7 @@ def serialize_to_msgpack(obj: BaseModel) -> bytes:
         data = obj.model_dump(mode="json")
         return msgpack.packb(data, use_bin_type=True)
     except Exception as e:
-        raise SerializationError(f"Failed to serialize to msgpack: {e}")
+        raise SerializationError(f"Failed to serialize to msgpack: {e}") from e
 
 
 def deserialize_from_msgpack(data: bytes, model_class: type[T]) -> T:
@@ -27,7 +27,7 @@ def deserialize_from_msgpack(data: bytes, model_class: type[T]) -> T:
         unpacked = msgpack.unpackb(data, raw=False)
         return model_class(**unpacked)
     except Exception as e:
-        raise SerializationError(f"Failed to deserialize from msgpack: {e}")
+        raise SerializationError(f"Failed to deserialize from msgpack: {e}") from e
 
 
 def serialize_to_json(obj: BaseModel) -> bytes:
@@ -35,7 +35,7 @@ def serialize_to_json(obj: BaseModel) -> bytes:
     try:
         return obj.model_dump_json().encode()
     except Exception as e:
-        raise SerializationError(f"Failed to serialize to JSON: {e}")
+        raise SerializationError(f"Failed to serialize to JSON: {e}") from e
 
 
 def deserialize_from_json(data: bytes, model_class: type[T]) -> T:
@@ -46,9 +46,9 @@ def deserialize_from_json(data: bytes, model_class: type[T]) -> T:
             raise SerializationError("Empty or whitespace-only JSON data")
         return model_class(**json.loads(json_str))
     except json.JSONDecodeError as e:
-        raise SerializationError(f"Invalid JSON format: {e}")
+        raise SerializationError(f"Invalid JSON format: {e}") from e
     except Exception as e:
-        raise SerializationError(f"Failed to deserialize from JSON: {e}")
+        raise SerializationError(f"Failed to deserialize from JSON: {e}") from e
 
 
 def is_msgpack(data: bytes) -> bool:
@@ -91,7 +91,7 @@ def serialize_dict(data: dict[str, Any], use_msgpack: bool = True) -> bytes:
             # For JSON, we need to handle non-serializable objects
             return json.dumps(data, default=str).encode()
     except Exception as e:
-        raise SerializationError(f"Failed to serialize dict: {e}")
+        raise SerializationError(f"Failed to serialize dict: {e}") from e
 
 
 def deserialize_params(data: bytes, use_msgpack: bool = True) -> dict[str, Any]:
@@ -102,4 +102,4 @@ def deserialize_params(data: bytes, use_msgpack: bool = True) -> dict[str, Any]:
         else:
             return json.loads(data.decode())
     except Exception as e:
-        raise SerializationError(f"Failed to deserialize params: {e}")
+        raise SerializationError(f"Failed to deserialize params: {e}") from e

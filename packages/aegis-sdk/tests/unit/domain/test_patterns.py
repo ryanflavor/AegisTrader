@@ -10,7 +10,8 @@ class TestSubjectPatterns:
         """Test RPC subject pattern generation."""
         assert SubjectPatterns.rpc("user", "get") == "rpc.user.get"
         assert (
-            SubjectPatterns.rpc("order-service", "create_order") == "rpc.order-service.create_order"
+            SubjectPatterns.rpc("order-service", "create_order")
+            == "rpc.order-service.create_order"
         )
         assert SubjectPatterns.rpc("a", "b") == "rpc.a.b"
 
@@ -18,23 +19,33 @@ class TestSubjectPatterns:
         """Test event subject pattern generation."""
         assert SubjectPatterns.event("order", "created") == "events.order.created"
         assert SubjectPatterns.event("user", "updated") == "events.user.updated"
-        assert SubjectPatterns.event("payment", "processed") == "events.payment.processed"
+        assert (
+            SubjectPatterns.event("payment", "processed") == "events.payment.processed"
+        )
 
     def test_command_pattern(self):
         """Test command subject pattern generation."""
-        assert SubjectPatterns.command("processor", "batch") == "commands.processor.batch"
+        assert (
+            SubjectPatterns.command("processor", "batch") == "commands.processor.batch"
+        )
         assert SubjectPatterns.command("worker", "task") == "commands.worker.task"
         assert SubjectPatterns.command("service", "action") == "commands.service.action"
 
     def test_service_instance_pattern(self):
         """Test service instance subject pattern."""
         assert SubjectPatterns.service_instance("api", "inst-1") == "service.api.inst-1"
-        assert SubjectPatterns.service_instance("worker", "abc123") == "service.worker.abc123"
+        assert (
+            SubjectPatterns.service_instance("worker", "abc123")
+            == "service.worker.abc123"
+        )
 
     def test_heartbeat_pattern(self):
         """Test heartbeat subject pattern."""
         assert SubjectPatterns.heartbeat("api") == "internal.heartbeat.api"
-        assert SubjectPatterns.heartbeat("order-service") == "internal.heartbeat.order-service"
+        assert (
+            SubjectPatterns.heartbeat("order-service")
+            == "internal.heartbeat.order-service"
+        )
 
     def test_registry_patterns(self):
         """Test registry subject patterns."""
@@ -64,11 +75,21 @@ class TestSubjectPatterns:
 
         # Invalid service names
         assert SubjectPatterns.is_valid_service_name("") is False
-        assert SubjectPatterns.is_valid_service_name("123service") is False  # starts with number
-        assert SubjectPatterns.is_valid_service_name("-service") is False  # starts with dash
-        assert SubjectPatterns.is_valid_service_name("_service") is False  # starts with underscore
-        assert SubjectPatterns.is_valid_service_name("service.name") is False  # contains dot
-        assert SubjectPatterns.is_valid_service_name("service name") is False  # contains space
+        assert (
+            SubjectPatterns.is_valid_service_name("123service") is False
+        )  # starts with number
+        assert (
+            SubjectPatterns.is_valid_service_name("-service") is False
+        )  # starts with dash
+        assert (
+            SubjectPatterns.is_valid_service_name("_service") is False
+        )  # starts with underscore
+        assert (
+            SubjectPatterns.is_valid_service_name("service.name") is False
+        )  # contains dot
+        assert (
+            SubjectPatterns.is_valid_service_name("service name") is False
+        )  # contains space
         assert (
             SubjectPatterns.is_valid_service_name("service@name") is False
         )  # contains special char
@@ -84,12 +105,24 @@ class TestSubjectPatterns:
 
         # Invalid method names
         assert SubjectPatterns.is_valid_method_name("") is False
-        assert SubjectPatterns.is_valid_method_name("123method") is False  # starts with number
-        assert SubjectPatterns.is_valid_method_name("-method") is False  # starts with dash
-        assert SubjectPatterns.is_valid_method_name("method-name") is False  # contains dash
-        assert SubjectPatterns.is_valid_method_name("method.name") is False  # contains dot
-        assert SubjectPatterns.is_valid_method_name("method name") is False  # contains space
-        assert SubjectPatterns.is_valid_method_name("method@name") is False  # contains special char
+        assert (
+            SubjectPatterns.is_valid_method_name("123method") is False
+        )  # starts with number
+        assert (
+            SubjectPatterns.is_valid_method_name("-method") is False
+        )  # starts with dash
+        assert (
+            SubjectPatterns.is_valid_method_name("method-name") is False
+        )  # contains dash
+        assert (
+            SubjectPatterns.is_valid_method_name("method.name") is False
+        )  # contains dot
+        assert (
+            SubjectPatterns.is_valid_method_name("method name") is False
+        )  # contains space
+        assert (
+            SubjectPatterns.is_valid_method_name("method@name") is False
+        )  # contains special char
 
     def test_pattern_consistency(self):
         """Test that patterns are consistent and predictable."""
@@ -105,7 +138,9 @@ class TestSubjectPatterns:
         assert SubjectPatterns.rpc(service, method).startswith("rpc.")
         assert SubjectPatterns.event(domain, event_type).startswith("events.")
         assert SubjectPatterns.command(service, command).startswith("commands.")
-        assert SubjectPatterns.service_instance(service, instance).startswith("service.")
+        assert SubjectPatterns.service_instance(service, instance).startswith(
+            "service."
+        )
         assert SubjectPatterns.heartbeat(service).startswith("internal.heartbeat.")
 
         # Registry patterns should be under internal
@@ -127,6 +162,15 @@ class TestSubjectPatterns:
 
         # Special characters in IDs
         special_id = "id-with_special.chars"
-        assert SubjectPatterns.command_progress(special_id) == f"commands.progress.{special_id}"
-        assert SubjectPatterns.command_callback(special_id) == f"commands.callback.{special_id}"
-        assert SubjectPatterns.command_cancel(special_id) == f"commands.cancel.{special_id}"
+        assert (
+            SubjectPatterns.command_progress(special_id)
+            == f"commands.progress.{special_id}"
+        )
+        assert (
+            SubjectPatterns.command_callback(special_id)
+            == f"commands.callback.{special_id}"
+        )
+        assert (
+            SubjectPatterns.command_cancel(special_id)
+            == f"commands.cancel.{special_id}"
+        )

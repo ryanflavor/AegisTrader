@@ -16,24 +16,24 @@ from .models import Command, Event, Message, RPCRequest, RPCResponse, ServiceInf
 from .patterns import SubjectPatterns
 
 __all__ = [
+    # Exceptions
+    "AegisError",
+    "Command",
+    "CommandError",
+    "ConnectionError",
+    "Event",
+    "EventError",
     # Models
     "Message",
+    "MessageBusError",
+    "RPCError",
     "RPCRequest",
     "RPCResponse",
-    "Event",
-    "Command",
+    "SerializationError",
+    "ServiceError",
     "ServiceInfo",
     # Patterns
     "SubjectPatterns",
-    # Exceptions
-    "AegisError",
-    "ServiceError",
-    "MessageBusError",
-    "ConnectionError",
     "TimeoutError",
-    "SerializationError",
     "ValidationError",
-    "RPCError",
-    "CommandError",
-    "EventError",
 ]
