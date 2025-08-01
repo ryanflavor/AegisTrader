@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+# Keep .deploy.env as it's configuration
 
 # Python
 __pycache__/
@@ -149,6 +150,16 @@ temp/
 *.pb
 *.tflite
 *.onnx
+
+# Project specific
+.bmad-core/
+.claude/
+helm/values.temp.yaml
+helm/values.version.yaml
+helm/values.deployment.yaml
+/tmp/
+*.pid
+*-port-forward.log
 
 # Secrets & Keys
 *.pem
