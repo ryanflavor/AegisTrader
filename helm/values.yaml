@@ -1,0 +1,184 @@
+# Default values for aegis-trader
+# This is a YAML-formatted file
+# Declare variables to be passed into your templates
+
+# Create namespace
+createNamespace: false
+
+global:
+  # Global image pull secrets
+  imagePullSecrets: []
+  # Global storage class
+  storageClass: ""
+  # Environment: development, staging, production
+  environment: development
+
+# NATS Configuration
+nats:
+  enabled: true
+  # Number of NATS replicas
+  replicas: 3
+  # NATS container configuration
+  nats:
+    jetstream:
+      enabled: true
+      # JetStream file storage configuration
+      fileStorage:
+        enabled: true
+        size: 10Gi
+        storageClassName: "" # Uses default if empty
+      # Memory storage configuration (for development)
+      memoryStorage:
+        enabled: false
+        size: 1Gi
+    # Resource limits
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
+  # Container environment variables
+  container:
+    env:
+      # Go memory limit for efficiency
+      GOMEMLIMIT: 7GiB
+  # Service configuration
+  service:
+    type: ClusterIP
+  # Pod topology spread constraints for HA
+  podTemplate:
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: nats
+  # Monitoring configuration
+  promExporter:
+    enabled: false # Enable for production monitoring
+
+# Management Service (FastAPI) Configuration
+monitor-api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aegis-trader/monitor-api
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: ClusterIP
+    port: 8100
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  env:
+    NATS_URL: "nats://{{ .Release.Name }}-nats:4222"
+    NATS_KV_BUCKET: "service-registry"
+  probes:
+    liveness:
+      enabled: true
+      httpGet:
+        path: /health
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readiness:
+      enabled: true
+      httpGet:
+        path: /ready
+        port: http
+      initialDelaySeconds: 30
+      periodSeconds: 5
+    startup:
+      enabled: true
+      httpGet:
+        path: /health
+        port: http
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      failureThreshold: 60
+
+# Monitor UI (Next.js) Configuration  
+monitor-ui:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aegis-trader/monitor-ui
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    type: ClusterIP
+    port: 3100
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  env:
+    NEXT_PUBLIC_API_URL: "http://{{ .Release.Name }}-monitor-api:8100"
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+    hosts:
+      - host: aegis-trader.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+    #  - secretName: aegis-trader-tls
+    #    hosts:
+    #      - aegis-trader.local
+  probes:
+    liveness:
+      enabled: true
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readiness:
+      enabled: true
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 5
+
+# Service Registry Configuration
+serviceRegistry:
+  # Create KV bucket for service registry
+  createBucket: true
+  bucketName: service-registry
+  # Bucket configuration
+  bucket:
+    replicas: 3
+    ttl: 0 # No TTL by default
+    maxBytes: 1073741824 # 1GB
+    maxMsgs: -1 # Unlimited
+    maxMsgSize: 1048576 # 1MB
+
+# Development overrides
+development:
+  # Use local storage for development
+  nats:
+    nats:
+      jetstream:
+        fileStorage:
+          size: 5Gi
+  # Single replica for development
+  monitor-api:
+    replicaCount: 1
+  monitor-ui:
+    replicaCount: 1

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: monitor-ui
+description: AegisTrader Monitor UI (Next.js)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - nextjs
+  - ui
+  - monitoring
+home: https://github.com/AegisTrader
+maintainers:
+  - name: AegisTrader Team
+    email: support@aegistrader.io

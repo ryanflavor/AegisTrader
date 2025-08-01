@@ -1,0 +1,49 @@
+# Real images with reduced resources for local testing
+
+# Use actual monitor-api image
+monitor-api:
+  image:
+    repository: aegistrader-monitor-api
+    tag: latest
+    pullPolicy: Never  # Never pull since we loaded locally
+
+# Use actual monitor-ui image  
+monitor-ui:
+  image:
+    repository: aegistrader-monitor-ui
+    tag: latest
+    pullPolicy: Never  # Never pull since we loaded locally
+
+# Reduce NATS for local
+nats:
+  replicas: 1
+  nats:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    jetstream:
+      fileStorage:
+        size: 1Gi
+
+# Reduce app resources for local
+monitor-api:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+monitor-ui:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
