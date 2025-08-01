@@ -1,0 +1,47 @@
+# Local development values - using nginx as placeholder
+monitor-api:
+  enabled: true
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+
+monitor-ui:
+  enabled: true  
+  image:
+    repository: nginx
+    tag: alpine
+    pullPolicy: IfNotPresent
+
+# Reduce resources for local development
+nats:
+  replicas: 1
+  nats:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    jetstream:
+      fileStorage:
+        size: 1Gi
+
+monitor-api:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+monitor-ui:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

@@ -1,0 +1,56 @@
+{{- if and .Values.nats.enabled .Values.serviceRegistry.createBucket }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "aegis-trader.fullname" . }}-create-kv-bucket
+  labels:
+    {{- include "aegis-trader.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats-kv-setup
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      name: {{ include "aegis-trader.fullname" . }}-create-kv-bucket
+      labels:
+        {{- include "aegis-trader.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats-kv-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: create-kv-bucket
+        image: nats:alpine
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Waiting for NATS JetStream to be ready..."
+          until nats server check jetstream --server={{ include "aegis-trader.natsUrl" . }}; do
+            echo "JetStream not ready yet. Waiting..."
+            sleep 5
+          done
+          echo "JetStream is ready. Creating KV bucket..."
+          
+          # Check if bucket already exists
+          if nats kv ls --server={{ include "aegis-trader.natsUrl" . }} | grep -q "^{{ .Values.serviceRegistry.bucketName }}$"; then
+            echo "KV bucket '{{ .Values.serviceRegistry.bucketName }}' already exists"
+          else
+            echo "Creating KV bucket '{{ .Values.serviceRegistry.bucketName }}'..."
+            nats kv add {{ .Values.serviceRegistry.bucketName }} \
+              --server={{ include "aegis-trader.natsUrl" . }} \
+              --replicas={{ .Values.serviceRegistry.bucket.replicas }} \
+              --max-bytes={{ .Values.serviceRegistry.bucket.maxBytes }} \
+              --max-msg-size={{ .Values.serviceRegistry.bucket.maxMsgSize }} \
+              {{- if gt (int .Values.serviceRegistry.bucket.ttl) 0 }}
+              --ttl={{ .Values.serviceRegistry.bucket.ttl }}s \
+              {{- end }}
+              {{- if ne (int .Values.serviceRegistry.bucket.maxMsgs) -1 }}
+              --max-msgs={{ .Values.serviceRegistry.bucket.maxMsgs }} \
+              {{- end }}
+              --description="Service registry for AegisTrader"
+            echo "KV bucket created successfully"
+          fi
+{{- end }}

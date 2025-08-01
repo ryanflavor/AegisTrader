@@ -1,0 +1,30 @@
+# Production values - use actual images
+
+# Use actual monitor-api image
+monitor-api:
+  image:
+    repository: aegistrader-monitor-api
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Use actual monitor-ui image  
+monitor-ui:
+  image:
+    repository: aegistrader-monitor-ui
+    tag: latest
+    pullPolicy: IfNotPresent
+
+# Production NATS configuration
+nats:
+  replicas: 3  # HA setup
+  nats:
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
+    jetstream:
+      fileStorage:
+        size: 10Gi

@@ -30,7 +30,7 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install the aegis-sdk package from the monorepo
-COPY aegis_sdk /packages/aegis-sdk
+COPY packages/aegis-sdk /packages/aegis-sdk
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
       export https_proxy=$HTTPS_PROXY && \
