@@ -18,20 +18,26 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install system dependencies and uv
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY; \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && mv /root/.cargo/bin/uv /usr/local/bin/ \
+    && mv /root/.local/bin/uv /usr/local/bin/ \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install the aegis-sdk package from the monorepo
 COPY aegis_sdk /packages/aegis-sdk
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY; \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY && \
+      export UV_HTTP_PROXY=$HTTP_PROXY && \
+      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
     uv pip install --system --no-cache -e /packages/aegis-sdk
 
@@ -41,7 +47,11 @@ COPY apps/monitor-api/requirements.txt* /app/
 # Install FastAPI and production dependencies using uv
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY; \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY && \
+      export UV_HTTP_PROXY=$HTTP_PROXY && \
+      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
     uv pip install --system --no-cache \
     fastapi==0.115.0 \
@@ -53,7 +63,11 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
 # Install additional requirements if file exists
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY; \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY && \
+      export UV_HTTP_PROXY=$HTTP_PROXY && \
+      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
     if [ -f requirements.txt ]; then uv pip install --system --no-cache -r requirements.txt; fi
 
