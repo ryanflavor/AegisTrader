@@ -7,7 +7,7 @@
   - [Tech Stack](#tech-stack.md)
   - [Data Models & Schema Design](#data-models-schema-design.md)
   - [API Interface Contracts](#api-interface-contracts.md)
-  - [Source Tree & Project Structure](#source-tree-project-structure.md)
+  - [Source Tree & Project Structure](#source-tree.md)
   - [Infrastructure & Deployment](#infrastructure-deployment.md)
   - [Component Details](#component-details.md)
   - [Coding Standards](#coding-standards.md)
