@@ -1,0 +1,31 @@
+# Auto-generated Helm values from environment variables
+# Generated at: 2025-08-01 22:20:36
+
+# Monitor API configuration
+monitor-api:
+  service:
+    port: 8100
+  env:
+    NATS_URL: "nats://aegis-trader-nats:4222"
+    NATS_KV_BUCKET: "service-registry"
+    API_PORT: "8100"
+  waitForNatsPort: 4222
+
+# Monitor UI configuration  
+monitor-ui:
+  service:
+    port: 3100
+  env:
+    NEXT_PUBLIC_API_URL: "http://aegis-trader-monitor-api:8100"
+    PORT: "3100"
+  waitForApiPort: 8100
+
+# NATS configuration
+nats:
+  nats:
+    service:
+      ports:
+        client:
+          port: 4222
+        monitor:
+          port: 8222

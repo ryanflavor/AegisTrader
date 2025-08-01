@@ -65,12 +65,25 @@ Create the name of the service account to use
 Get NATS service URL
 */}}
 {{- define "aegis-trader.natsUrl" -}}
-{{- printf "nats://%s-nats:4222" .Release.Name }}
+{{- $natsPort := 4222 }}
+{{- if .Values.nats }}
+  {{- if .Values.nats.nats }}
+    {{- if .Values.nats.nats.service }}
+      {{- if .Values.nats.nats.service.ports }}
+        {{- if .Values.nats.nats.service.ports.client }}
+          {{- $natsPort = .Values.nats.nats.service.ports.client.port | default 4222 }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- printf "nats://%s-nats:%d" .Release.Name $natsPort }}
 {{- end }}
 
 {{/*
 Get Monitor API service URL
 */}}
 {{- define "aegis-trader.monitorApiUrl" -}}
-{{- printf "http://%s-monitor-api:8100" .Release.Name }}
+{{- $apiPort := index .Values "monitor-api" "service" "port" | default 8100 }}
+{{- printf "http://%s-monitor-api:%d" .Release.Name $apiPort }}
 {{- end }}

@@ -24,7 +24,7 @@ spec:
       
       # Wait for API to be ready
       for i in $(seq 1 30); do
-        if nc -z {{ .Release.Name }}-monitor-api 8100; then
+        if nc -z {{ .Release.Name }}-monitor-api {{ index .Values "monitor-api" "service" "port" }}; then
           echo "✓ API is reachable"
           break
         fi
@@ -33,7 +33,7 @@ spec:
       done
       
       # Test health endpoint
-      if wget -qO- http://{{ .Release.Name }}-monitor-api:8100/health; then
+      if wget -qO- http://{{ .Release.Name }}-monitor-api:{{ index .Values "monitor-api" "service" "port" }}/health; then
         echo "✓ Health endpoint responding"
       else
         echo "✗ Health endpoint failed"

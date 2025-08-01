@@ -27,7 +27,7 @@ Management Service (FastAPI):
   Internal URL: {{ include "aegis-trader.monitorApiUrl" . }}
   
   To check service health:
-    $ kubectl exec -it deploy/{{ .Release.Name }}-monitor-api -- curl http://localhost:8100/health
+    $ kubectl exec -it deploy/{{ .Release.Name }}-monitor-api -- curl http://localhost:{{ index .Values "monitor-api" "service" "port" }}/health
 {{- end }}
 
 {{- if index .Values "monitor-ui" "enabled" }}
@@ -38,14 +38,14 @@ Monitor UI (Next.js):
   {{- if index .Values "monitor-ui" "ingress" "enabled" }}
   External Access:
     {{- range $host := index .Values "monitor-ui" "ingress" "hosts" }}
-    http{{ if $.Values.monitorUi.ingress.tls }}s{{ end }}://{{ $host.host }}{{ range $path := $host.paths }}{{ $path.path }}{{ end }}
+    http{{ if index $.Values "monitor-ui" "ingress" "tls" }}s{{ end }}://{{ $host.host }}{{ range $path := $host.paths }}{{ $path.path }}{{ end }}
     {{- end }}
   {{- else }}
   
   To access the UI locally:
-    $ kubectl port-forward svc/{{ .Release.Name }}-monitor-ui 3100:3100
+    $ kubectl port-forward svc/{{ .Release.Name }}-monitor-ui {{ index .Values "monitor-ui" "service" "port" }}:{{ index .Values "monitor-ui" "service" "port" }}
     
-  Then visit http://localhost:3100 in your browser.
+  Then visit http://localhost:{{ index .Values "monitor-ui" "service" "port" }} in your browser.
   {{- end }}
 {{- end }}
 

@@ -1,0 +1,12 @@
+# Override values for Docker Compose built images
+# This file ensures Helm uses the same image names as Docker Compose
+
+monitor-api:
+  image:
+    repository: aegistrader-monitor-api
+    pullPolicy: IfNotPresent  # 优先使用本地镜像
+
+monitor-ui:
+  image:
+    repository: aegistrader-monitor-ui
+    pullPolicy: IfNotPresent  # 优先使用本地镜像

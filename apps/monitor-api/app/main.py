@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Dict
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-
 
 # Configure logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -16,6 +16,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Track service start time
+service_start_time = None
 
 
 class HealthResponse(BaseModel):
@@ -30,8 +33,16 @@ class ErrorResponse(BaseModel):
     error_code: str = Field(..., description="Error code")
 
 
+class SystemStatus(BaseModel):
+    timestamp: str = Field(..., description="Current server timestamp")
+    uptime_seconds: float = Field(..., description="Service uptime in seconds")
+    environment: str = Field(..., description="Current environment")
+    connected_services: int = Field(0, description="Number of connected services")
+    deployment_version: str = Field(..., description="Deployment version")
+
+
 # Environment variable validation
-def validate_environment() -> Dict[str, str]:
+def validate_environment() -> dict[str, str]:
     """Validate required environment variables."""
     nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
     api_port = int(os.getenv("API_PORT", "8100"))
@@ -48,13 +59,18 @@ def validate_environment() -> Dict[str, str]:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan manager."""
+    global service_start_time
     logger.info("Starting AegisTrader Management Service")
 
     # Validate environment on startup
     env_config = validate_environment()
     app.state.config = env_config
+
+    # Set service start time
+    service_start_time = datetime.now()
+    app.state.start_time = service_start_time
 
     logger.info("Service startup complete")
     yield
@@ -103,12 +119,39 @@ async def health_check() -> HealthResponse:
 
 
 @app.get("/")
-async def root() -> Dict[str, str]:
+async def root() -> dict[str, str]:
     """Root endpoint with welcome message."""
     return {"message": "Welcome to AegisTrader Management Service"}
 
 
 @app.get("/ready")
-async def readiness_check() -> Dict[str, str]:
+async def readiness_check() -> dict[str, str]:
     """Readiness check endpoint for Kubernetes."""
     return {"status": "ready"}
+
+
+@app.get("/status", response_model=SystemStatus)
+async def system_status() -> SystemStatus:
+    """Get current system status with deployment information."""
+    try:
+        current_time = datetime.now()
+        start_time = app.state.start_time
+        uptime_seconds = (current_time - start_time).total_seconds()
+
+        return SystemStatus(
+            timestamp=current_time.isoformat(),
+            uptime_seconds=uptime_seconds,
+            environment=os.getenv("ENVIRONMENT", "development"),
+            connected_services=0,  # Will be implemented when NATS integration is added
+            deployment_version="v1.0.0-demo",
+        )
+    except Exception as e:
+        logger.error(f"Status check failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=ErrorResponse(
+                detail="Failed to retrieve system status",
+                error_code="STATUS_CHECK_FAILED",
+            ).model_dump(),
+        )
+# Updated at 2025年 08月 01日 星期五 21:01:36 CST

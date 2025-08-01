@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app:/packages \
     UV_CACHE_DIR=/tmp/uv-cache
 
-# Install system dependencies and uv
+# Install system dependencies and uv (这一层很少变化，会被缓存)
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
       export https_proxy=$HTTPS_PROXY && \
@@ -29,22 +29,7 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     && mv /root/.local/bin/uv /usr/local/bin/ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install the aegis-sdk package from the monorepo
-COPY packages/aegis-sdk /packages/aegis-sdk
-RUN if [ -n "$HTTP_PROXY" ]; then \
-      export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY && \
-      export HTTP_PROXY=$HTTP_PROXY && \
-      export HTTPS_PROXY=$HTTPS_PROXY && \
-      export UV_HTTP_PROXY=$HTTP_PROXY && \
-      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
-    fi && \
-    uv pip install --system --no-cache -e /packages/aegis-sdk
-
-# Copy requirements file if it exists
-COPY apps/monitor-api/requirements.txt* /app/
-
-# Install FastAPI and production dependencies using uv
+# Install FastAPI and production dependencies first (这些依赖很少变化)
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
       export https_proxy=$HTTPS_PROXY && \
@@ -60,6 +45,9 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     python-multipart==0.0.12 \
     httpx==0.28.0
 
+# Copy requirements file if it exists (requirements.txt 变化时才会重新构建)
+COPY apps/monitor-api/requirements.txt* /app/
+
 # Install additional requirements if file exists
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
@@ -71,7 +59,19 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     fi && \
     if [ -f requirements.txt ]; then uv pip install --system --no-cache -r requirements.txt; fi
 
-# Copy application code
+# Copy and install the aegis-sdk package (SDK 变化时才会重新构建)
+COPY packages/aegis-sdk /packages/aegis-sdk
+RUN if [ -n "$HTTP_PROXY" ]; then \
+      export http_proxy=$HTTP_PROXY && \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY && \
+      export UV_HTTP_PROXY=$HTTP_PROXY && \
+      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
+    fi && \
+    uv pip install --system --no-cache -e /packages/aegis-sdk
+
+# Copy application code (只有应用代码变化时才会重新构建这一层)
 COPY apps/monitor-api/ /app/
 
 # Expose the FastAPI port (using non-default port to avoid conflicts)

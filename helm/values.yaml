@@ -65,7 +65,7 @@ monitor-api:
   enabled: true
   replicaCount: 1
   image:
-    repository: aegis-trader/monitor-api
+    repository: aegistrader-monitor-api
     pullPolicy: IfNotPresent
     tag: "latest"
   service:
@@ -79,7 +79,7 @@ monitor-api:
       cpu: 1000m
       memory: 2Gi
   env:
-    NATS_URL: "nats://{{ .Release.Name }}-nats:4222"
+    # NATS_URL 将在部署模板中动态生成
     NATS_KV_BUCKET: "service-registry"
   probes:
     liveness:
@@ -110,7 +110,7 @@ monitor-ui:
   enabled: true
   replicaCount: 1
   image:
-    repository: aegis-trader/monitor-ui
+    repository: aegistrader-monitor-ui
     pullPolicy: IfNotPresent
     tag: "latest"
   service:
@@ -124,7 +124,7 @@ monitor-ui:
       cpu: 500m
       memory: 1Gi
   env:
-    NEXT_PUBLIC_API_URL: "http://{{ .Release.Name }}-monitor-api:8100"
+    # NEXT_PUBLIC_API_URL will be set by values.deployment.yaml
   ingress:
     enabled: false
     className: ""

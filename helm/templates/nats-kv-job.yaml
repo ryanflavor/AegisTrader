@@ -28,8 +28,12 @@ spec:
         - |
           set -e
           echo "Waiting for NATS JetStream to be ready..."
-          until nats server check jetstream --server={{ include "aegis-trader.natsUrl" . }}; do
-            echo "JetStream not ready yet. Waiting..."
+          for i in $(seq 1 60); do
+            if nats server check jetstream --server={{ include "aegis-trader.natsUrl" . }} 2>/dev/null; then
+              echo "JetStream is ready!"
+              break
+            fi
+            echo "JetStream not ready yet. Waiting... ($i/60)"
             sleep 5
           done
           echo "JetStream is ready. Creating KV bucket..."

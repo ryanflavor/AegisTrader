@@ -24,7 +24,7 @@ spec:
       
       # Wait for UI to be ready
       for i in $(seq 1 30); do
-        if nc -z {{ .Release.Name }}-monitor-ui 3100; then
+        if nc -z {{ .Release.Name }}-monitor-ui {{ index .Values "monitor-ui" "service" "port" }}; then
           echo "✓ UI is reachable"
           break
         fi
@@ -33,7 +33,7 @@ spec:
       done
       
       # Test UI endpoint
-      if wget -qO- http://{{ .Release.Name }}-monitor-ui:3100/ | grep -q "<html"; then
+      if wget -qO- http://{{ .Release.Name }}-monitor-ui:{{ index .Values "monitor-ui" "service" "port" }}/ | grep -q "<html"; then
         echo "✓ UI is serving content"
       else
         echo "✗ UI content check failed"
