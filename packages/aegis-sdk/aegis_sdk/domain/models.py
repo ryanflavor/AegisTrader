@@ -13,6 +13,8 @@ class Message(BaseModel):
     model_config = ConfigDict(
         extra="forbid",  # This prevents extra fields
         str_strip_whitespace=True,
+        strict=True,  # Enforce strict type checking
+        validate_assignment=True,  # Validate on assignment
         json_schema_extra={
             "example": {
                 "message_id": "123e4567-e89b-12d3-a456-426614174000",
@@ -121,7 +123,9 @@ class Command(Message):
 class ServiceInfo(BaseModel):
     """Service instance information."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", str_strip_whitespace=True, strict=True, validate_assignment=True
+    )
 
     service_name: str = Field(..., min_length=1, description="Service name")
     instance_id: str = Field(..., min_length=1, description="Instance identifier")

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class MetricsSummaryData(BaseModel):
     """Summary statistics for a metric."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
     count: int = Field(default=0, ge=0, description="Number of values recorded")
     average: float = Field(default=0.0, description="Average value")
@@ -20,7 +20,7 @@ class MetricsSummaryData(BaseModel):
 class MetricsSnapshot(BaseModel):
     """Complete metrics snapshot."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
     uptime_seconds: float = Field(ge=0, description="Service uptime in seconds")
     counters: dict[str, int] = Field(default_factory=dict, description="Counter metrics")

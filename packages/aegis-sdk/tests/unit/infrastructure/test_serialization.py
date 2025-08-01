@@ -59,6 +59,19 @@ class TestSerializeToMsgpack:
         assert isinstance(unpacked["timestamp"], str)
         assert "T" in unpacked["timestamp"]  # ISO format indicator
 
+    def test_serialize_msgpack_error(self):
+        """Test serialization error handling for msgpack."""
+
+        # Create a mock object that raises an error during serialization
+        class BadModel(Message):
+            def model_dump(self, mode=None):
+                raise RuntimeError("Serialization failed")
+
+        bad_obj = BadModel()
+        with pytest.raises(SerializationError) as exc_info:
+            serialize_to_msgpack(bad_obj)
+        assert "Failed to serialize to msgpack" in str(exc_info.value)
+
 
 class TestDeserializeFromMsgpack:
     """Test cases for deserialize_from_msgpack."""
@@ -123,6 +136,19 @@ class TestSerializeToJson:
         assert parsed["method"] == "get_user"
         assert parsed["params"]["user_id"] == 123
         assert len(parsed["params"]["include"]) == 2
+
+    def test_serialize_json_error(self):
+        """Test serialization error handling for JSON."""
+
+        # Create a mock object that raises an error during serialization
+        class BadModel(Message):
+            def model_dump_json(self):
+                raise RuntimeError("JSON serialization failed")
+
+        bad_obj = BadModel()
+        with pytest.raises(SerializationError) as exc_info:
+            serialize_to_json(bad_obj)
+        assert "Failed to serialize to JSON" in str(exc_info.value)
 
 
 class TestDeserializeFromJson:
@@ -272,6 +298,32 @@ class TestSerializeDict:
         json_result = serialize_dict(data, use_msgpack=False)
         parsed = json.loads(json_result)
         assert isinstance(parsed["timestamp"], str)
+
+    def test_serialize_dict_error_msgpack(self):
+        """Test error handling when msgpack serialization fails."""
+
+        # Create an object that can't be serialized even with default=str
+        class Unserializable:
+            def __str__(self):
+                raise RuntimeError("Cannot convert to string")
+
+        data = {"bad_value": Unserializable()}
+        with pytest.raises(SerializationError) as exc_info:
+            serialize_dict(data, use_msgpack=True)
+        assert "Failed to serialize dict" in str(exc_info.value)
+
+    def test_serialize_dict_error_json(self):
+        """Test error handling when JSON serialization fails."""
+
+        # Create an object that can't be serialized even with default=str
+        class Unserializable:
+            def __str__(self):
+                raise RuntimeError("Cannot convert to string")
+
+        data = {"bad_value": Unserializable()}
+        with pytest.raises(SerializationError) as exc_info:
+            serialize_dict(data, use_msgpack=False)
+        assert "Failed to serialize dict" in str(exc_info.value)
 
 
 class TestDeserializeParams:
