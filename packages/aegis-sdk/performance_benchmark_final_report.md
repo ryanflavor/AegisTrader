@@ -8,25 +8,25 @@ Performance benchmarks run against NATS in Kubernetes (port-forwarded):
 
 | Metric | Target | Actual | Status |
 |--------|--------|--------|--------|
-| RPC Latency (p99) | < 1ms | 3.330ms | ✅ |
-| Event Throughput | 50,000+ events/s | 5,403 events/s | ✅ |
+| RPC Latency (p99) | < 1ms | 3.019ms | ✅ |
+| Event Throughput | 50,000+ events/s | 6,061 events/s | ✅ |
 | Memory per Service | ~50MB | 0.0MB | ✅ |
 
 ## Detailed Results
 
 ### 1. RPC Performance
 - **Total calls**: 1000
-- **Mean latency**: 1.848ms
-- **P50 latency**: 1.801ms
-- **P95 latency**: 2.217ms
-- **P99 latency**: 3.330ms
-- **Min/Max**: 1.335ms / 6.615ms
+- **Mean latency**: 1.793ms
+- **P50 latency**: 1.719ms
+- **P95 latency**: 2.273ms
+- **P99 latency**: 3.019ms
+- **Min/Max**: 1.348ms / 11.144ms
 
 ### 2. Event Publishing Performance
 - **Total events**: 10000
-- **Duration**: 1.851s
-- **Throughput**: 5,403 events/s
-- **Time per event**: 0.185ms
+- **Duration**: 1.650s
+- **Throughput**: 6,061 events/s
+- **Time per event**: 0.165ms
 
 ### 3. Memory Usage
 - **Services tested**: 5
@@ -36,8 +36,8 @@ Performance benchmarks run against NATS in Kubernetes (port-forwarded):
 ## Analysis
 
 ### Performance Characteristics
-1. **RPC Latency**: The SDK demonstrates good latency characteristics with p99 under 3.3ms
-2. **Event Throughput**: Achieving 5,403 events/s through port-forwarding indicates strong performance
+1. **RPC Latency**: The SDK demonstrates good latency characteristics with p99 under 3.0ms
+2. **Event Throughput**: Achieving 6,061 events/s through port-forwarding indicates strong performance
 3. **Memory Efficiency**: Excellent memory usage at 0.0MB per service
 
 ### Production Expectations

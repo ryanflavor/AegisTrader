@@ -32,6 +32,30 @@ help: ## 显示帮助信息
 	@echo '开发命令:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+# ========== Staging 环境命令 ==========
+
+.PHONY: deploy-local-staging
+deploy-local-staging: ## 部署到本地 staging 环境
+	@echo "🚀 部署到本地 Staging 环境..."
+	@./scripts/setup-local-staging.sh
+
+.PHONY: staging-status
+staging-status: ## 查看 staging 环境状态
+	@echo "📊 Staging 环境状态:"
+	@kubectl get all -n aegis-staging
+	@echo ""
+	@echo "🔗 端口转发状态:"
+	@ps aux | grep "kubectl port-forward.*aegis-staging" | grep -v grep || echo "未检测到端口转发"
+
+.PHONY: staging-clean
+staging-clean: ## 清理 staging 环境
+	@echo "🧹 清理 Staging 环境..."
+	@helm uninstall aegis -n aegis-staging 2>/dev/null || true
+	@helm uninstall nats -n aegis-staging 2>/dev/null || true
+	@kubectl delete namespace aegis-staging --ignore-not-found=true
+	@pkill -f "kubectl port-forward.*aegis-staging" || true
+	@echo "✅ Staging 环境已清理"
+
 # ========== 快速部署命令 ==========
 
 # 智能部署 - 自动检测是安装还是更新

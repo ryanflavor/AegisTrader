@@ -1,0 +1,84 @@
+name: CI/CD Pipeline (Local Staging)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  PYTHON_VERSION: '3.13'
+  NODE_VERSION: '20'
+
+jobs:
+  deploy-local-staging:
+    name: Deploy to Local Staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Local Kubernetes
+        run: |
+          # This is a mock deployment for demonstration
+          echo "=== Local Staging Deployment ==="
+          echo "This workflow demonstrates how to deploy locally."
+          echo ""
+          echo "To actually deploy to your local cluster:"
+          echo "1. Clone the repository locally"
+          echo "2. Ensure you have a local Kubernetes cluster (k3s/minikube)"
+          echo "3. Run: make deploy-local-staging"
+          echo ""
+          echo "Or use the provided scripts:"
+          echo "- ./scripts/setup-local-staging.sh"
+          echo "- ./deploy.sh staging"
+
+      - name: Generate Deployment Instructions
+        run: |
+          cat > deployment-instructions.txt << 'EOF'
+          # Local Staging Deployment Instructions
+
+          ## Quick Start (Using Make)
+          make deploy-local-staging
+
+          ## Manual Deployment
+          1. Ensure local Kubernetes is running:
+             kubectl cluster-info
+
+          2. Create staging namespace:
+             kubectl create namespace aegis-staging --dry-run=client -o yaml | kubectl apply -f -
+
+          3. Deploy NATS:
+             helm upgrade --install nats ./helm/charts/nats \
+               --namespace aegis-staging \
+               --values ./helm/values.local.yaml
+
+          4. Build and load images:
+             docker build -t aegis/monitor-api:local -f apps/monitor-api/Dockerfile .
+             docker build -t aegis/monitor-ui:local -f apps/monitor-ui/Dockerfile .
+
+          5. Deploy services:
+             helm upgrade --install aegis ./helm \
+               --namespace aegis-staging \
+               --values ./helm/values.local.yaml \
+               --set global.imageTag=local
+
+          6. Access services:
+             kubectl port-forward -n aegis-staging svc/monitor-api 8100:8100 &
+             kubectl port-forward -n aegis-staging svc/monitor-ui 3100:3100 &
+             kubectl port-forward -n aegis-staging svc/nats 4222:4222 &
+
+          7. Verify deployment:
+             curl http://localhost:8100/health
+             curl http://localhost:3100
+          EOF
+
+          cat deployment-instructions.txt

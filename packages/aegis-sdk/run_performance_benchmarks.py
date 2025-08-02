@@ -35,6 +35,9 @@ class PerformanceBenchmark:
 
         await service.start()
 
+        # Wait for service to be ready
+        await asyncio.sleep(0.1)
+
         # Warmup
         for i in range(100):
             await service.call_rpc("benchmark_service", "echo", {"message": f"warmup-{i}"})
@@ -84,6 +87,9 @@ class PerformanceBenchmark:
             event_count += 1
 
         await service.start()
+
+        # Wait for service to be ready
+        await asyncio.sleep(0.1)
 
         # Benchmark
         target_events = 10000
