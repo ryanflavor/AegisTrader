@@ -15,7 +15,7 @@ env:
   PYTHON_VERSION: '3.13'
   NODE_VERSION: '20'
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
+  IMAGE_PREFIX: ${{ github.repository_owner }}/aegistrader
 
 jobs:
   test:
