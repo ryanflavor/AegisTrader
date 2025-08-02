@@ -168,7 +168,7 @@ class TestDeserializeFromJson:
     def test_deserialize_string(self):
         """Test deserializing from string (non-bytes)."""
         data = '{"message_id": "789", "trace_id": "012", "timestamp": "2025-01-01T00:00:00Z"}'
-        message = deserialize_from_json(data, Message)  # type: ignore
+        message = deserialize_from_json(data.encode(), Message)
 
         assert isinstance(message, Message)
         assert message.message_id == "789"

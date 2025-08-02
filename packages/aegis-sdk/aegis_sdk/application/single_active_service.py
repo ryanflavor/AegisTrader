@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from functools import wraps
+from typing import Any, cast
 
 from ..domain.models import Event
 from .service import Service
@@ -79,7 +80,8 @@ class SingleActiveService(Service):
                         "error": "NOT_ACTIVE",
                         "message": "This instance is not active. Please retry.",
                     }
-                return await handler(params)  # type: ignore[no-any-return]
+                result = await handler(params)
+                return cast(dict[Any, Any], result)
 
             # Register with parent class
             self._rpc_handlers[method] = wrapper
@@ -101,10 +103,12 @@ def exclusive_rpc(method: str):
                     "message": "This instance is not active. Please retry.",
                 }
 
-            return await func(self, params)  # type: ignore[no-any-return]
+            result = await func(self, params)
+            return cast(dict[Any, Any], result)
 
         # Mark as exclusive for registration
-        wrapper._exclusive = True  # type: ignore[attr-defined]
+        wrapper_with_attr = cast(Any, wrapper)
+        wrapper_with_attr._exclusive = True
         return wrapper
 
     # Handle both @exclusive_rpc and @exclusive_rpc("method_name")
@@ -113,7 +117,8 @@ def exclusive_rpc(method: str):
 
     def outer_decorator(func: Callable) -> Callable:
         wrapped = decorator(func)
-        wrapped._rpc_method = method  # type: ignore[attr-defined]
+        wrapped_with_attr = cast(Any, wrapped)
+        wrapped_with_attr._rpc_method = method
         return wrapped
 
     return outer_decorator

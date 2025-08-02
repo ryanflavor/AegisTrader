@@ -25,7 +25,7 @@ repos:
         additional_dependencies: [types-PyYAML, types-requests]
         args: [--ignore-missing-imports, --check-untyped-defs]
         files: ^(packages|apps)/.*\.py$
-        exclude: ^(tests|test_|conftest|setup)\.py$
+        exclude: ^(.*/(tests|test)/.*|.*test_.*|.*conftest.*|setup)\.py$
 
   # General purpose hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

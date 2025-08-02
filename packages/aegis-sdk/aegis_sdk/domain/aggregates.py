@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ServiceInfo
 from .value_objects import InstanceId, ServiceName
@@ -68,14 +68,12 @@ class ServiceAggregate(BaseModel):
         super().__init__(**data)
         self._record_event("service.registered")
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def is_healthy(self) -> bool:
         """Check if service is healthy based on heartbeat."""
         time_since_heartbeat = (datetime.now(UTC) - self.last_heartbeat).total_seconds()
         return time_since_heartbeat < 30.0 and self.status != ServiceStatus.UNHEALTHY
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def uptime_seconds(self) -> float:
         """Calculate service uptime in seconds."""

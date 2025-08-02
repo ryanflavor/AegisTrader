@@ -44,8 +44,8 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             config = ServiceConfiguration(
                 nats_url=nats_url,
                 api_port=api_port,
-                log_level=log_level,  # type: ignore
-                environment=environment,  # type: ignore
+                log_level=log_level,
+                environment=environment,
             )
 
             self.validate_configuration(config)
