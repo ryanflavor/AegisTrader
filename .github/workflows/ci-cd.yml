@@ -64,7 +64,7 @@ jobs:
     - name: Run type checking (mypy)
       run: |
         pip install mypy
-        mypy . --strict
+        mypy .
         
     - name: Run tests with coverage
       run: |

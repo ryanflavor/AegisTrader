@@ -32,7 +32,7 @@ class SingleActiveService(Service):
             if event.payload.get("instance_id") != self.instance_id:
                 # Another instance is active
                 self.is_active = False
-                self.last_active_heartbeat = time.time()
+                self.last_active_heartbeat = int(time.time())
 
         # Start election process
         self._election_task = asyncio.create_task(self._run_election())
@@ -79,7 +79,7 @@ class SingleActiveService(Service):
                         "error": "NOT_ACTIVE",
                         "message": "This instance is not active. Please retry.",
                     }
-                return await handler(params)
+                return await handler(params)  # type: ignore[no-any-return]
 
             # Register with parent class
             self._rpc_handlers[method] = wrapper
@@ -94,21 +94,17 @@ def exclusive_rpc(method: str):
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         async def wrapper(self: SingleActiveService, params: dict) -> dict:
-            if not isinstance(self, SingleActiveService):
-                # Fallback for regular services
-                return await func(self, params)
-
-            if not self.is_active:
+            if isinstance(self, SingleActiveService) and not self.is_active:
                 return {
                     "success": False,
                     "error": "NOT_ACTIVE",
                     "message": "This instance is not active. Please retry.",
                 }
 
-            return await func(self, params)
+            return await func(self, params)  # type: ignore[no-any-return]
 
         # Mark as exclusive for registration
-        wrapper._exclusive = True
+        wrapper._exclusive = True  # type: ignore[attr-defined]
         return wrapper
 
     # Handle both @exclusive_rpc and @exclusive_rpc("method_name")
@@ -117,7 +113,7 @@ def exclusive_rpc(method: str):
 
     def outer_decorator(func: Callable) -> Callable:
         wrapped = decorator(func)
-        wrapped._rpc_method = method
+        wrapped._rpc_method = method  # type: ignore[attr-defined]
         return wrapped
 
     return outer_decorator

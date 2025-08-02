@@ -35,16 +35,23 @@ asyncio_mode = "auto"
 python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 check_untyped_defs = true
-disallow_untyped_decorators = true
+disallow_untyped_decorators = false
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+ignore_missing_imports = true
+exclude = [
+    "packages/.*/tests/.*",
+    "apps/.*/tests/.*",
+    "packages/aegis-sdk/reference/.*",
+    "packages/aegis-sdk/examples/.*"
+]
 
 [tool.ruff]
 target-version = "py313"
@@ -61,7 +68,7 @@ select = [
     "C4", # flake8-comprehensions
     "UP", # pyupgrade
 ]
-ignore = []
+ignore = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"

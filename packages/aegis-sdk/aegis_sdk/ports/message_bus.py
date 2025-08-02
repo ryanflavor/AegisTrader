@@ -41,7 +41,7 @@ class MessageBusPort(ABC):
     # Event Operations
     @abstractmethod
     async def subscribe_event(
-        self, pattern: str, handler: Callable[[Event], None], durable: str | None = None
+        self, pattern: str, handler: Callable, durable: str | None = None
     ) -> None:
         """Subscribe to events matching pattern."""
         ...

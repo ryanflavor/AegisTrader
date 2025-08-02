@@ -3,7 +3,7 @@
 import asyncio
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import nats
@@ -164,7 +164,9 @@ class NATSAdapter(MessageBusPort):
                 except Exception as e:
                     # Error response
                     response = RPCResponse(
-                        correlation_id=request.message_id if "request" in locals() else None,
+                        correlation_id=request.message_id
+                        if "request" in locals()
+                        else None,
                         success=False,
                         error=str(e),
                     )
@@ -240,7 +242,10 @@ class NATSAdapter(MessageBusPort):
 
     # Event Implementation
     async def subscribe_event(
-        self, pattern: str, handler: Callable[[Event], None], durable: str | None = None
+        self,
+        pattern: str,
+        handler: Callable[[Event], Awaitable[None]],
+        durable: str | None = None,
     ) -> None:
         """Subscribe to events."""
         if not self._js:
@@ -261,7 +266,9 @@ class NATSAdapter(MessageBusPort):
                 # Acknowledge only if JetStream message
                 if hasattr(msg, "ack"):
                     await msg.ack()
-                self._metrics.increment(f"events.processed.{event.domain}.{event.event_type}")
+                self._metrics.increment(
+                    f"events.processed.{event.domain}.{event.event_type}"
+                )
 
             except Exception as e:
                 print(f"Event handler error: {e}")
@@ -308,13 +315,15 @@ class NATSAdapter(MessageBusPort):
                         subject,
                         event_data,
                     )
-                    self._metrics.increment(f"events.published.{event.domain}.{event.event_type}")
+                    self._metrics.increment(
+                        f"events.published.{event.domain}.{event.event_type}"
+                    )
                     return  # Success
                 except json.JSONDecodeError as e:
                     # This is the empty response issue from NATS server
                     if attempt < max_retries - 1:
                         # Retry with exponential backoff
-                        await asyncio.sleep(retry_delay * (2**attempt))
+                        await asyncio.sleep(retry_delay * (2 ** attempt))
                         continue
                     else:
                         # Final attempt failed, raise the error
@@ -392,7 +401,9 @@ class NATSAdapter(MessageBusPort):
             manual_ack=True,
         )
 
-    async def send_command(self, command: Command, track_progress: bool = True) -> dict[str, Any]:
+    async def send_command(
+        self, command: Command, track_progress: bool = True
+    ) -> dict[str, Any]:
         """Send a command."""
         if not self._js:
             raise Exception("JetStream not initialized")
@@ -407,7 +418,9 @@ class NATSAdapter(MessageBusPort):
 
             async def progress_handler(msg: Msg) -> None:
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
-                    progress_updates.append(deserialize_params(msg.data, self._use_msgpack))
+                    progress_updates.append(
+                        deserialize_params(msg.data, self._use_msgpack)
+                    )
                 else:
                     progress_updates.append(json.loads(msg.data.decode()))
 
@@ -449,7 +462,7 @@ class NATSAdapter(MessageBusPort):
                     break  # Success
                 except json.JSONDecodeError as e:
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay * (2**attempt))
+                        await asyncio.sleep(retry_delay * (2 ** attempt))
                         continue
                     else:
                         self._metrics.increment("commands.send.json_errors")
@@ -460,7 +473,9 @@ class NATSAdapter(MessageBusPort):
         if track_progress:
             # Wait for completion
             start_time = time.time()
-            while completion_data is None and (time.time() - start_time) < command.timeout:
+            while (
+                completion_data is None and (time.time() - start_time) < command.timeout
+            ):
                 await asyncio.sleep(0.1)
 
             # Cleanup

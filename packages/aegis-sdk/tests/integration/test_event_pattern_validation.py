@@ -13,7 +13,9 @@ class TestEventPatternValidation:
     """Test suite for comprehensive Event pattern validation."""
 
     @pytest.mark.asyncio
-    async def test_jetstream_event_publishing_durable(self, nats_adapter, nats_container):
+    async def test_jetstream_event_publishing_durable(
+        self, nats_adapter, nats_container
+    ):
         """Test JetStream event publishing with durable subscriptions."""
         domain = "order"
         event_type = "created"
@@ -25,7 +27,9 @@ class TestEventPatternValidation:
 
         # Subscribe with durable name
         await nats_adapter.subscribe_event(
-            SubjectPatterns.event(domain, event_type), event_handler, durable="test-durable"
+            SubjectPatterns.event(domain, event_type),
+            event_handler,
+            durable="test-durable",
         )
         await asyncio.sleep(0.1)
 
@@ -154,7 +158,9 @@ class TestEventPatternValidation:
 
         # Subscribe with JetStream (no wildcards for JetStream features)
         await nats_adapter.subscribe_event(
-            SubjectPatterns.event(domain, event_type), failing_handler, durable="test-redelivery"
+            SubjectPatterns.event(domain, event_type),
+            failing_handler,
+            durable="test-redelivery",
         )
         await asyncio.sleep(0.1)
 
@@ -201,13 +207,21 @@ class TestEventPatternValidation:
             Event(
                 domain=domain,
                 event_type=event_type,
-                payload={"product_id": "P2", "name": "Product 2", "category": "Electronics"},
+                payload={
+                    "product_id": "P2",
+                    "name": "Product 2",
+                    "category": "Electronics",
+                },
                 version="2.0",
             ),
             Event(
                 domain=domain,
                 event_type=event_type,
-                payload={"product_id": "P3", "name": "Product 3", "metadata": {"tags": ["new"]}},
+                payload={
+                    "product_id": "P3",
+                    "name": "Product 3",
+                    "metadata": {"tags": ["new"]},
+                },
                 version="3.0",
             ),
             Event(
@@ -249,7 +263,9 @@ class TestEventPatternValidation:
         nats_adapter._js.publish = capture_publish
 
         # Publish event
-        event = Event(domain=domain, event_type=event_type, payload={"test": True}, version="1.0")
+        event = Event(
+            domain=domain, event_type=event_type, payload={"test": True}, version="1.0"
+        )
         await nats_adapter.publish_event(event)
 
         # Verify correct subject pattern used
@@ -261,7 +277,9 @@ class TestEventPatternValidation:
         nats_adapter._js.publish = original_publish
 
     @pytest.mark.asyncio
-    async def test_event_serialization_formats(self, nats_adapter, nats_adapter_msgpack):
+    async def test_event_serialization_formats(
+        self, nats_adapter, nats_adapter_msgpack
+    ):
         """Test both JSON and MessagePack serialization for events."""
         domain = "format"
         event_type = "test"
@@ -275,7 +293,11 @@ class TestEventPatternValidation:
                 {"sku": "ITEM-1", "quantity": 2, "price": 99.99},
                 {"sku": "ITEM-2", "quantity": 1, "price": 149.99},
             ],
-            "metadata": {"source": "web", "ip": "192.168.1.1", "user_agent": "Mozilla/5.0"},
+            "metadata": {
+                "source": "web",
+                "ip": "192.168.1.1",
+                "user_agent": "Mozilla/5.0",
+            },
             "unicode": "Event with émojis 🎉 and 中文",
         }
 
@@ -289,7 +311,9 @@ class TestEventPatternValidation:
             msgpack_events.append(event)
 
         # Subscribe with JSON adapter
-        await nats_adapter.subscribe_event(SubjectPatterns.event(domain, event_type), json_handler)
+        await nats_adapter.subscribe_event(
+            SubjectPatterns.event(domain, event_type), json_handler
+        )
 
         # Subscribe with MessagePack adapter
         await nats_adapter_msgpack.subscribe_event(
@@ -300,7 +324,9 @@ class TestEventPatternValidation:
 
         # Publish with both formats
         json_event = Event(domain=domain, event_type=event_type, payload=test_data)
-        msgpack_event = Event(domain=domain, event_type=f"{event_type}_msgpack", payload=test_data)
+        msgpack_event = Event(
+            domain=domain, event_type=f"{event_type}_msgpack", payload=test_data
+        )
 
         await nats_adapter.publish_event(json_event)
         await nats_adapter_msgpack.publish_event(msgpack_event)

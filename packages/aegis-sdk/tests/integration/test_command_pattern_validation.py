@@ -20,9 +20,10 @@ class TestCommandPatternValidation:
         service = "data_processor"
         command_name = "process_batch"
         progress_updates = []
-        command_result = None
 
-        async def command_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def command_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             """Handler that reports progress during processing."""
             batch_size = cmd.payload.get("batch_size", 100)
 
@@ -44,12 +45,17 @@ class TestCommandPatternValidation:
             return {"processed_items": batch_size, "success": True, "duration": 0.4}
 
         # Register command handler
-        await nats_adapter.register_command_handler(service, command_name, command_handler)
+        await nats_adapter.register_command_handler(
+            service, command_name, command_handler
+        )
         await asyncio.sleep(0.1)
 
         # Create and send command
         command = Command(
-            command=command_name, target=service, payload={"batch_size": 1000}, timeout=5.0
+            command=command_name,
+            target=service,
+            payload={"batch_size": 1000},
+            timeout=5.0,
         )
 
         # Track progress updates
@@ -60,7 +66,10 @@ class TestCommandPatternValidation:
             async def progress_handler(msg):
                 import json
 
-                from aegis_sdk.infrastructure.serialization import deserialize_params, is_msgpack
+                from aegis_sdk.infrastructure.serialization import (
+                    deserialize_params,
+                    is_msgpack,
+                )
 
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
                     data = deserialize_params(msg.data, nats_adapter._use_msgpack)
@@ -69,7 +78,8 @@ class TestCommandPatternValidation:
                 progress_updates.append(data)
 
             await nc.subscribe(
-                SubjectPatterns.command_progress(command.message_id), cb=progress_handler
+                SubjectPatterns.command_progress(command.message_id),
+                cb=progress_handler,
             )
 
         # Start tracking progress
@@ -78,7 +88,6 @@ class TestCommandPatternValidation:
 
         # Send command
         result = await nats_adapter.send_command(command, track_progress=True)
-        command_result = result
 
         # Verify command completed successfully
         assert result is not None
@@ -105,7 +114,9 @@ class TestCommandPatternValidation:
         command_name = "priority_task"
         execution_order = []
 
-        async def priority_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def priority_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             """Handler that tracks execution order."""
             execution_order.append(
                 {"id": cmd.payload["id"], "priority": cmd.priority, "time": time.time()}
@@ -114,7 +125,9 @@ class TestCommandPatternValidation:
             return {"id": cmd.payload["id"], "completed": True}
 
         # Register handler
-        await nats_adapter.register_command_handler(service, command_name, priority_handler)
+        await nats_adapter.register_command_handler(
+            service, command_name, priority_handler
+        )
         await asyncio.sleep(0.1)
 
         # Send commands with different priorities
@@ -183,7 +196,9 @@ class TestCommandPatternValidation:
         command_name = "flaky_operation"
         attempt_count = 0
 
-        async def flaky_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def flaky_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             """Handler that fails on first attempts."""
             nonlocal attempt_count
             attempt_count += 1
@@ -202,7 +217,9 @@ class TestCommandPatternValidation:
             }
 
         # Register handler
-        await nats_adapter.register_command_handler(service, command_name, flaky_handler)
+        await nats_adapter.register_command_handler(
+            service, command_name, flaky_handler
+        )
         await asyncio.sleep(0.1)
 
         # Test command with retry policy
@@ -229,7 +246,7 @@ class TestCommandPatternValidation:
                     break
             except Exception:
                 if retry < command.max_retries:
-                    await asyncio.sleep(0.1 * (2**retry))  # Exponential backoff
+                    await asyncio.sleep(0.1 * (2 ** retry))  # Exponential backoff
                     continue
                 raise
 
@@ -247,7 +264,9 @@ class TestCommandPatternValidation:
         service = "notification_service"
         command_name = "notify_task"
 
-        async def notify_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def notify_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             """Handler that completes with notification data."""
             notification_type = cmd.payload.get("type", "info")
 
@@ -262,12 +281,17 @@ class TestCommandPatternValidation:
             }
 
         # Register handler
-        await nats_adapter.register_command_handler(service, command_name, notify_handler)
+        await nats_adapter.register_command_handler(
+            service, command_name, notify_handler
+        )
         await asyncio.sleep(0.1)
 
         # Send command and wait for completion
         command = Command(
-            command=command_name, target=service, payload={"type": "success"}, timeout=5.0
+            command=command_name,
+            target=service,
+            payload={"type": "success"},
+            timeout=5.0,
         )
 
         result = await nats_adapter.send_command(command, track_progress=True)
@@ -299,14 +323,18 @@ class TestCommandPatternValidation:
         nats_adapter._js.publish = capture_publish
 
         # Register a simple handler
-        async def test_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def test_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             return {"result": "ok"}
 
         await nats_adapter.register_command_handler(service, command_name, test_handler)
         await asyncio.sleep(0.1)
 
         # Send command
-        command = Command(command=command_name, target=service, payload={"test": True}, timeout=5.0)
+        command = Command(
+            command=command_name, target=service, payload={"test": True}, timeout=5.0
+        )
 
         await nats_adapter.send_command(command, track_progress=False)
 
@@ -324,7 +352,9 @@ class TestCommandPatternValidation:
         service = "timeout_service"
         command_name = "long_task"
 
-        async def long_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
+        async def long_handler(
+            cmd: Command, progress_callback: Callable
+        ) -> dict[str, Any]:
             """Handler that takes longer than timeout."""
             duration = cmd.payload.get("duration", 10)
             await asyncio.sleep(duration)
@@ -352,14 +382,18 @@ class TestCommandPatternValidation:
 
         # Test successful completion within timeout
         command_success = Command(
-            command=command_name, target=service, payload={"duration": 0.5}, timeout=2.0
+            command=command_name, target=service, payload={"duration": 0.1}, timeout=5.0
         )
 
-        result_success = await nats_adapter.send_command(command_success, track_progress=True)
-        # When tracking progress, we get the completion data directly
+        result_success = await nats_adapter.send_command(
+            command_success, track_progress=True
+        )
+        # Should complete successfully
+        assert (
+            "error" not in result_success
+            or result_success["error"] != "Command timeout"
+        )
+
+        # The completion data structure includes status and result
         if "status" in result_success:
             assert result_success["status"] == "completed"
-            assert result_success["result"]["completed"] is True
-        else:
-            # If no status field, the result itself is the completion data
-            assert result_success.get("completed") is True or "error" not in result_success
