@@ -149,9 +149,9 @@ jobs:
     name: Deploy to Staging
     needs: build
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
+    # 暂时禁用 staging 部署，因为集群只能本地访问
+    # 要启用：设置可公网访问的 K8s 集群，并配置 KUBE_CONFIG secret
+    if: false
     environment: staging
 
     steps:
@@ -182,7 +182,7 @@ jobs:
           chmod 600 ~/.kube/config
 
           # Verify kubectl can connect
-          kubectl version --short || {
+          kubectl version || {
             echo "Error: Unable to connect to Kubernetes cluster"
             echo "Please verify KUBE_CONFIG secret is valid"
             exit 1
