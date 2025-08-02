@@ -63,7 +63,7 @@ jobs:
         
     - name: Run type checking (mypy)
       run: |
-        pip install mypy
+        pip install mypy types-PyYAML
         mypy .
         
     - name: Run tests with coverage
