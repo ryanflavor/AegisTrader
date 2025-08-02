@@ -166,3 +166,113 @@ class ServiceInfo(BaseModel):
         except ValueError as e:
             raise ValueError(f"Invalid ISO timestamp format: {v}") from e
         return v
+
+
+class KVEntry(BaseModel):
+    """Key-Value store entry with metadata."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        strict=True,
+        validate_assignment=True,
+        json_schema_extra={
+            "example": {
+                "key": "user:123",
+                "value": {"name": "John Doe", "email": "john@example.com"},
+                "revision": 42,
+                "created_at": "2025-01-01T00:00:00Z",
+                "updated_at": "2025-01-01T00:01:00Z",
+            }
+        },
+    )
+
+    key: str = Field(..., min_length=1, description="The key identifier")
+    value: Any = Field(..., description="The stored value (any JSON-serializable type)")
+    revision: int = Field(..., ge=1, description="The revision number")
+    created_at: str = Field(..., description="Creation timestamp in ISO format")
+    updated_at: str = Field(..., description="Last update timestamp in ISO format")
+    ttl: int | None = Field(None, ge=1, description="Time-to-live in seconds")
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_timestamps(cls, v: str) -> str:
+        """Validate timestamp is in ISO format."""
+        try:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO timestamp format: {v}") from e
+        return v
+
+    @model_validator(mode="after")
+    def validate_timestamp_order(self) -> "KVEntry":
+        """Ensure updated_at is not before created_at."""
+        created = datetime.fromisoformat(self.created_at.replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(self.updated_at.replace("Z", "+00:00"))
+        if updated < created:
+            raise ValueError("updated_at cannot be before created_at")
+        return self
+
+
+class KVOptions(BaseModel):
+    """Options for KV store operations."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    ttl: int | None = Field(None, ge=1, description="Time-to-live in seconds")
+    revision: int | None = Field(
+        None, ge=0, description="Expected revision for optimistic concurrency control"
+    )
+    create_only: bool = Field(
+        False, description="Only create if key doesn't exist (fail if exists)"
+    )
+    update_only: bool = Field(
+        False, description="Only update if key exists (fail if doesn't exist)"
+    )
+
+    @model_validator(mode="after")
+    def validate_exclusivity(self) -> "KVOptions":
+        """Ensure create_only and update_only are mutually exclusive."""
+        if self.create_only and self.update_only:
+            raise ValueError("create_only and update_only are mutually exclusive")
+        return self
+
+
+class KVWatchEvent(BaseModel):
+    """Event emitted when watching KV changes."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    operation: str = Field(..., pattern="^(PUT|DELETE|PURGE)$", description="The operation type")
+    entry: KVEntry | None = Field(None, description="The entry (None for DELETE/PURGE operations)")
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+        description="Event timestamp",
+    )
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, v: str) -> str:
+        """Validate timestamp is in ISO format."""
+        try:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO timestamp format: {v}") from e
+        return v
+
+    @model_validator(mode="after")
+    def validate_entry_consistency(self) -> "KVWatchEvent":
+        """Ensure entry is consistent with operation."""
+        if self.operation == "PUT" and self.entry is None:
+            raise ValueError("PUT operation requires an entry")
+        return self

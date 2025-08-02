@@ -96,7 +96,8 @@ class Metrics:
     def get_all(self) -> dict[str, Any]:
         """Get all metrics as a dictionary."""
         snapshot = self.get_snapshot()
-        return snapshot.model_dump()  # type: ignore[no-any-return]
+        result: dict[str, Any] = snapshot.model_dump()
+        return result
 
     def get_snapshot(self) -> MetricsSnapshot:
         """Get metrics snapshot as Pydantic model."""

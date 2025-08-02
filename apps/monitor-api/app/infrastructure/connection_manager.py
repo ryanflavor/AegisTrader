@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from ..domain.exceptions import KVStoreException
 from ..ports.kv_store import KVStorePort
-from .nats_kv_adapter import NATSKVStoreAdapter
 
 if TYPE_CHECKING:
     from ..domain.models import ServiceConfiguration
@@ -34,8 +33,10 @@ class ConnectionManager:
     async def startup(self) -> None:
         """Initialize all connections during application startup."""
         try:
-            # Initialize KV Store connection
-            self._kv_store = NATSKVStoreAdapter()
+            # Initialize KV Store connection using AegisSDK
+            from .aegis_kv_adapter import AegisKVStoreAdapter
+
+            self._kv_store = AegisKVStoreAdapter()
             await self._kv_store.connect(self.config.nats_url)
             logger.info("Successfully connected to NATS KV Store")
         except Exception as e:

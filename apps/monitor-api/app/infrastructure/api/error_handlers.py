@@ -7,9 +7,10 @@ mapping domain exceptions to appropriate HTTP responses.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -37,7 +38,7 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(..., description="Error code")
     message: str = Field(..., description="Error message")
-    details: dict[str, str] | None = Field(None, description="Additional error details")
+    details: dict[str, Any] | None = Field(None, description="Additional error details")
 
 
 class ErrorResponse(BaseModel):
@@ -127,7 +128,9 @@ async def domain_exception_handler(request: Request, exc: DomainException) -> JS
     return create_error_response(exc, status_code, details)
 
 
-async def validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: ValidationError | RequestValidationError
+) -> JSONResponse:
     """Handle Pydantic validation exceptions.
 
     Args:
@@ -137,12 +140,18 @@ async def validation_exception_handler(request: Request, exc: ValidationError) -
     Returns:
         JSONResponse with validation error details
     """
-    logger.warning(
-        f"Validation error on {request.method} {request.url.path}: {exc.error_count()} errors"
-    )
+    # Handle both ValidationError and RequestValidationError
+    if isinstance(exc, RequestValidationError):
+        errors = exc.errors()
+        error_count = len(errors)
+    else:
+        errors = exc.errors()
+        error_count = exc.error_count()
+
+    logger.warning(f"Validation error on {request.method} {request.url.path}: {error_count} errors")
 
     # Get the first error for the main message
-    first_error = exc.errors()[0] if exc.errors() else {}
+    first_error = errors[0] if errors else {}
 
     # Create a more user-friendly error message
     field = ".".join(str(loc) for loc in first_error.get("loc", []))
@@ -159,7 +168,7 @@ async def validation_exception_handler(request: Request, exc: ValidationError) -
                 "message": e.get("msg", ""),
                 "type": e.get("type", ""),
             }
-            for e in exc.errors()
+            for e in errors
         ],
     }
 
@@ -248,5 +257,8 @@ def register_error_handlers(app: FastAPI) -> None:
     """
     app.add_exception_handler(DomainException, domain_exception_handler)
     app.add_exception_handler(ValidationError, validation_exception_handler)
+    app.add_exception_handler(
+        RequestValidationError, validation_exception_handler
+    )  # Handle FastAPI request validation
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(Exception, general_exception_handler)

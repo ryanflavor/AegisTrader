@@ -7,10 +7,10 @@ coordinating between the domain layer and infrastructure adapters.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
 from ..domain.models import ServiceDefinition
 from ..ports.kv_store import KVStorePort
+from ..utils.timezone import now_utc8_iso
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class ServiceRegistryService:
             KVStoreException: If storage fails
         """
         # Generate timestamps
-        now = datetime.now(UTC).isoformat()
+        now = now_utc8_iso()
 
         # Create the service definition
         service = ServiceDefinition(
@@ -105,7 +105,7 @@ class ServiceRegistryService:
         # Update fields
         service_data = existing.model_dump()
         service_data.update(updates)
-        service_data["updated_at"] = datetime.now(UTC).isoformat()
+        service_data["updated_at"] = now_utc8_iso()
 
         # Create updated service
         updated_service = ServiceDefinition(**service_data)

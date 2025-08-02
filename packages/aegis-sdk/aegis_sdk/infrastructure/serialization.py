@@ -25,7 +25,8 @@ def deserialize_from_msgpack(data: bytes, model_class: type[T]) -> T:
     """Deserialize MessagePack bytes to a Pydantic model."""
     try:
         unpacked = msgpack.unpackb(data, raw=False)
-        return model_class(**unpacked)  # type: ignore[no-any-return]
+        result: T = model_class(**unpacked)
+        return result
     except Exception as e:
         raise SerializationError(f"Failed to deserialize from msgpack: {e}") from e
 
@@ -33,7 +34,8 @@ def deserialize_from_msgpack(data: bytes, model_class: type[T]) -> T:
 def serialize_to_json(obj: BaseModel) -> bytes:
     """Serialize a Pydantic model to JSON bytes."""
     try:
-        return obj.model_dump_json().encode()  # type: ignore[no-any-return]
+        result: bytes = obj.model_dump_json().encode()
+        return result
     except Exception as e:
         raise SerializationError(f"Failed to serialize to JSON: {e}") from e
 
@@ -44,7 +46,8 @@ def deserialize_from_json(data: bytes, model_class: type[T]) -> T:
         json_str = data.decode() if isinstance(data, bytes) else data
         if not json_str or json_str.isspace():
             raise SerializationError("Empty or whitespace-only JSON data")
-        return model_class(**json.loads(json_str))  # type: ignore[no-any-return]
+        result: T = model_class(**json.loads(json_str))
+        return result
     except json.JSONDecodeError as e:
         raise SerializationError(f"Invalid JSON format: {e}") from e
     except Exception as e:

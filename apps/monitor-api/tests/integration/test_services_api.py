@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
+import subprocess
 import time
 from typing import TYPE_CHECKING
 
 import httpx
 import pytest
-from testcontainers.compose import DockerCompose
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Generator
@@ -50,32 +51,67 @@ def event_loop():
     loop.close()
 
 
+def find_free_port():
+    """Find a free port to use for testing."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+    return port
+
+
 @pytest.fixture(scope="session")
-def docker_compose() -> Generator[DockerCompose]:
-    """Start NATS using docker-compose for integration tests."""
-    # Use the project's docker-compose.yaml
-    compose_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "..", "docker-compose.yaml"
-    )
-    compose = DockerCompose(compose_path)
+def nats_container() -> Generator[dict]:
+    """Start NATS container for integration tests."""
+    # Find free ports
+    nats_port = find_free_port()
+    monitor_port = find_free_port()
 
-    # Start only NATS service
-    compose.start()
+    # Container name
+    container_name = f"aegis-test-nats-{os.getpid()}"
 
-    # Wait for NATS to be ready
-    time.sleep(5)
+    # Start NATS container
+    cmd = [
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        container_name,
+        "-p",
+        f"{nats_port}:4222",
+        "-p",
+        f"{monitor_port}:8222",
+        "nats:2.10-alpine",
+        "-js",
+        "-m",
+        "8222",
+    ]
 
-    yield compose
+    try:
+        # Start container
+        subprocess.run(cmd, check=True, capture_output=True)
 
-    compose.stop()
+        # Wait for NATS to be ready
+        time.sleep(3)
+
+        yield {"port": nats_port, "monitor_port": monitor_port, "container": container_name}
+
+    finally:
+        # Cleanup: stop and remove container
+        subprocess.run(["docker", "stop", container_name], capture_output=True)
+        subprocess.run(["docker", "rm", container_name], capture_output=True)
 
 
 @pytest.fixture
-async def api_client(docker_compose) -> AsyncGenerator[httpx.AsyncClient]:
+async def api_client(nats_container: dict) -> AsyncGenerator[httpx.AsyncClient]:
     """Create an async HTTP client for testing the API."""
+    # Get NATS port from container
+    nats_port = nats_container["port"]
+    api_port = find_free_port()  # Find a free port for API
+
     # Set environment variables for the test
-    os.environ["NATS_URL"] = "nats://localhost:4222"
-    os.environ["API_PORT"] = "8001"
+    os.environ["NATS_URL"] = f"nats://localhost:{nats_port}"
+    os.environ["API_PORT"] = str(api_port)
     os.environ["LOG_LEVEL"] = "INFO"
     os.environ["ENVIRONMENT"] = "development"
 
@@ -83,7 +119,7 @@ async def api_client(docker_compose) -> AsyncGenerator[httpx.AsyncClient]:
     from app.main import app
     from uvicorn import Config, Server
 
-    config = Config(app=app, host="127.0.0.1", port=8001, log_level="info")
+    config = Config(app=app, host="127.0.0.1", port=api_port, log_level="info")
     server = Server(config)
 
     # Run server in background
@@ -93,7 +129,7 @@ async def api_client(docker_compose) -> AsyncGenerator[httpx.AsyncClient]:
     await asyncio.sleep(2)
 
     # Create client
-    async with httpx.AsyncClient(base_url="http://localhost:8001") as client:
+    async with httpx.AsyncClient(base_url=f"http://localhost:{api_port}") as client:
         yield client
 
     # Cleanup
@@ -165,7 +201,11 @@ class TestServiceRegistryAPI:
         response = await api_client.post("/api/services", json=service)
         assert response.status_code == 422
         error = response.json()
+
+        # Our custom error handler should format the response
+        assert "error" in error
         assert error["error"]["code"] == "VALIDATION_ERROR"
+        assert "service_name" in error["error"]["message"].lower()
 
     @pytest.mark.asyncio
     async def test_get_service_success(self, api_client: httpx.AsyncClient, clean_kv_store):

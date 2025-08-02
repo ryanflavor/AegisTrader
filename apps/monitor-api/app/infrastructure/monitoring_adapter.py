@@ -12,6 +12,7 @@ import psutil
 
 from ..domain.models import DetailedHealthStatus, HealthStatus, ServiceConfiguration, SystemStatus
 from ..ports.monitoring import MonitoringPort
+from ..utils.timezone import now_utc8
 
 
 class MonitoringAdapter(MonitoringPort):
@@ -24,7 +25,7 @@ class MonitoringAdapter(MonitoringPort):
             config: Service configuration
         """
         self._config = config
-        self._start_time = datetime.now()
+        self._start_time = now_utc8()
 
     async def check_health(self) -> HealthStatus:
         """Check the health status of the service.
@@ -39,7 +40,7 @@ class MonitoringAdapter(MonitoringPort):
             service_name="management-service",
             version="0.1.0",
             nats_url=self._config.nats_url,
-            timestamp=datetime.now(),
+            timestamp=now_utc8(),
         )
 
     async def get_system_status(self) -> SystemStatus:
@@ -48,7 +49,7 @@ class MonitoringAdapter(MonitoringPort):
         Returns:
             SystemStatus: Current system status
         """
-        current_time = datetime.now()
+        current_time = now_utc8()
         uptime_seconds = (current_time - self._start_time).total_seconds()
 
         return SystemStatus(
@@ -104,7 +105,7 @@ class MonitoringAdapter(MonitoringPort):
             disk_usage_percent=disk_info.percent,
             nats_status="healthy",
             nats_latency_ms=nats_latency,
-            timestamp=datetime.now(),
+            timestamp=now_utc8(),
         )
 
     async def _simulate_nats_check(self) -> None:
