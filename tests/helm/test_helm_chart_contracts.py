@@ -174,7 +174,7 @@ class HelmCliAdapter:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return result.stdout
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Helm template failed: {e.stderr}")
+            raise RuntimeError(f"Helm template failed: {e.stderr}") from e
 
     def validate_structure(self, chart_path: Path) -> bool:
         """Validate chart structure using helm lint."""
@@ -315,7 +315,8 @@ class TestHelmChartContracts(unittest.TestCase):
 
                 # Validate spec structure
                 spec = service["spec"]
-                # Type is optional (defaults to ClusterIP) and headless services use clusterIP: None
+                # Type is optional (defaults to ClusterIP)
+                # Headless services use clusterIP: None
                 if "type" in spec:
                     self.assertIn(
                         spec["type"],

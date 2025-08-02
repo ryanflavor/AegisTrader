@@ -86,11 +86,39 @@ monitor-api:
   service:
     type: ClusterIP
     port: 8100
-  # Resources already defined in subchart values.yaml
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  probes:
+    liveness:
+      enabled: true
+      httpGet:
+        path: /health
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readiness:
+      enabled: true
+      httpGet:
+        path: /ready
+        port: http
+      initialDelaySeconds: 30
+      periodSeconds: 5
+    startup:
+      enabled: true
+      httpGet:
+        path: /health
+        port: http
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      failureThreshold: 60
   env:
     # NATS_URL 将在部署模板中动态生成
     NATS_KV_BUCKET: "service-registry"
-  # Probes already defined in subchart values.yaml
 
 # Monitor UI (Next.js) Configuration  
 monitor-ui:
@@ -103,7 +131,28 @@ monitor-ui:
   service:
     type: ClusterIP
     port: 3100
-  # Resources already defined in subchart values.yaml
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  probes:
+    liveness:
+      enabled: true
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 10
+    readiness:
+      enabled: true
+      httpGet:
+        path: /
+        port: http
+      initialDelaySeconds: 10
+      periodSeconds: 5
   env:
     # NEXT_PUBLIC_API_URL will be set by values.deployment.yaml
   ingress:
