@@ -4,11 +4,15 @@ This module configures dependency injection for the FastAPI application,
 providing a clean separation between the framework and the application logic.
 """
 
+from __future__ import annotations
+
 from functools import lru_cache
 
 from ...application.monitoring_service import MonitoringService
+from ...application.service_registry_service import ServiceRegistryService
 from ...domain.models import ServiceConfiguration
 from ...ports.configuration import ConfigurationPort
+from ...ports.kv_store import KVStorePort
 from ...ports.monitoring import MonitoringPort
 from ..configuration_adapter import EnvironmentConfigurationAdapter
 from ..monitoring_adapter import MonitoringAdapter
@@ -56,3 +60,27 @@ def get_monitoring_service() -> MonitoringService:
     monitoring_port = get_monitoring_port()
     config_port = get_configuration_port()
     return MonitoringService(monitoring_port, config_port)
+
+
+def get_kv_store() -> KVStorePort:
+    """Get the KV Store port instance from the connection manager.
+
+    Returns:
+        KVStorePort: KV Store port implementation
+    """
+    from ..connection_manager import get_connection_manager
+
+    manager = get_connection_manager()
+    return manager.kv_store
+
+
+def get_service_registry() -> ServiceRegistryService:
+    """Get the service registry instance.
+
+    Returns:
+        ServiceRegistryService: Application service for service registry
+    """
+    from ...application.service_registry_service import ServiceRegistryService
+
+    kv_store = get_kv_store()
+    return ServiceRegistryService(kv_store)

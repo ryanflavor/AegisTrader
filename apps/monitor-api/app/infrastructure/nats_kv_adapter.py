@@ -1,0 +1,236 @@
+"""NATS KV Store adapter implementation.
+
+This module implements the KVStorePort interface using NATS JetStream KV Store.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import TYPE_CHECKING
+
+import nats
+from nats.js.api import KeyValueConfig
+from nats.js.errors import BucketNotFoundError, KeyNotFoundError, NoKeysError
+from nats.js.kv import KeyValue
+
+from ..domain.exceptions import (
+    ConcurrentUpdateException,
+    KVStoreException,
+    ServiceAlreadyExistsException,
+    ServiceNotFoundException,
+)
+from ..domain.models import ServiceDefinition
+from ..ports.kv_store import KVStorePort
+
+if TYPE_CHECKING:
+    from nats.aio.client import Client as NATSClient
+    from nats.js import JetStreamContext
+
+logger = logging.getLogger(__name__)
+
+
+class NATSKVStoreAdapter(KVStorePort):
+    """NATS KV Store adapter for service registry operations."""
+
+    def __init__(self, bucket_name: str = "service-registry"):
+        """Initialize the NATS KV Store adapter.
+
+        Args:
+            bucket_name: Name of the KV bucket (default: "service-registry")
+        """
+        self.bucket_name = bucket_name
+        self._nc: NATSClient | None = None
+        self._js: JetStreamContext | None = None
+        self._kv: KeyValue | None = None
+
+    async def connect(self, nats_url: str) -> None:
+        """Connect to NATS and initialize KV Store.
+
+        Args:
+            nats_url: NATS server URL
+
+        Raises:
+            KVStoreException: If connection fails
+        """
+        try:
+            self._nc = await nats.connect(nats_url)
+            self._js = self._nc.jetstream()
+
+            # Create or get the KV bucket
+            try:
+                self._kv = await self._js.key_value(self.bucket_name)
+                logger.info(f"Connected to existing KV bucket: {self.bucket_name}")
+            except BucketNotFoundError:
+                # Create the bucket if it doesn't exist
+                config = KeyValueConfig(
+                    bucket=self.bucket_name,
+                    description="Service registry definitions",
+                    max_value_size=1024 * 1024,  # 1MB max per value
+                    history=10,  # Keep 10 versions
+                )
+                self._kv = await self._js.create_key_value(config)
+                logger.info(f"Created new KV bucket: {self.bucket_name}")
+
+        except Exception as e:
+            logger.error(f"Failed to connect to NATS: {e}")
+            raise KVStoreException(f"Failed to connect to NATS: {e}") from e
+
+    async def disconnect(self) -> None:
+        """Disconnect from NATS."""
+        if self._nc:
+            await self._nc.close()
+            logger.info("Disconnected from NATS")
+
+    def _ensure_connected(self) -> None:
+        """Ensure we're connected to NATS."""
+        if not self._nc or not self._kv:
+            raise KVStoreException("Not connected to NATS KV Store")
+
+    async def get(self, key: str) -> ServiceDefinition | None:
+        """Retrieve a service definition by key."""
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            entry = await self._kv.get(key)
+            if entry and entry.value:
+                data = json.loads(entry.value.decode())
+                return ServiceDefinition(**data)
+            return None
+        except KeyNotFoundError:
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get key '{key}': {e}")
+            raise KVStoreException(f"Failed to get key '{key}': {e}") from e
+
+    async def put(self, key: str, value: ServiceDefinition) -> None:
+        """Store a service definition."""
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            # Check if key already exists
+            try:
+                existing = await self._kv.get(key)
+                if existing and existing.value:
+                    raise ServiceAlreadyExistsException(key)
+            except KeyNotFoundError:
+                # Key doesn't exist, which is what we want
+                pass
+
+            # Store the new value
+            data = value.model_dump_json()
+            await self._kv.put(key, data.encode())
+            logger.info(f"Stored service definition: {key}")
+
+        except ServiceAlreadyExistsException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to put key '{key}': {e}")
+            raise KVStoreException(f"Failed to put key '{key}': {e}") from e
+
+    async def update(self, key: str, value: ServiceDefinition, revision: int | None = None) -> None:
+        """Update an existing service definition."""
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            # Check if key exists
+            try:
+                existing = await self._kv.get(key)
+                if not existing or not existing.value:
+                    raise ServiceNotFoundException(key)
+            except KeyNotFoundError as e:
+                raise ServiceNotFoundException(key) from e
+
+            data = value.model_dump_json()
+
+            if revision is not None:
+                # Use optimistic locking with revision
+                await self._kv.update(key, data.encode(), revision)
+            else:
+                # Update without revision check
+                await self._kv.put(key, data.encode())
+
+            logger.info(f"Updated service definition: {key}")
+
+        except ServiceNotFoundException:
+            raise
+        except Exception as e:
+            if "wrong last sequence" in str(e):
+                raise ConcurrentUpdateException(key) from e
+            logger.error(f"Failed to update key '{key}': {e}")
+            raise KVStoreException(f"Failed to update key '{key}': {e}") from e
+
+    async def delete(self, key: str) -> None:
+        """Delete a service definition."""
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            # Check if key exists
+            try:
+                existing = await self._kv.get(key)
+                if not existing or not existing.value:
+                    raise ServiceNotFoundException(key)
+            except KeyNotFoundError as e:
+                raise ServiceNotFoundException(key) from e
+
+            await self._kv.delete(key)
+            logger.info(f"Deleted service definition: {key}")
+
+        except ServiceNotFoundException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete key '{key}': {e}")
+            raise KVStoreException(f"Failed to delete key '{key}': {e}") from e
+
+    async def list_all(self) -> list[ServiceDefinition]:
+        """List all service definitions."""
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            services = []
+            keys = await self._kv.keys()
+
+            for key in keys:
+                entry = await self._kv.get(key)
+                if entry and entry.value:
+                    data = json.loads(entry.value.decode())
+                    services.append(ServiceDefinition(**data))
+
+            logger.info(f"Listed {len(services)} service definitions")
+            return services
+
+        except NoKeysError:
+            # No keys in the bucket yet
+            return []
+        except Exception as e:
+            logger.error(f"Failed to list keys: {e}")
+            raise KVStoreException(f"Failed to list keys: {e}") from e
+
+    async def get_with_revision(self, key: str) -> tuple[ServiceDefinition | None, int | None]:
+        """Get a service definition with its revision number.
+
+        Args:
+            key: The service name
+
+        Returns:
+            Tuple of (ServiceDefinition, revision) or (None, None) if not found
+        """
+        self._ensure_connected()
+        assert self._kv is not None  # Type assertion
+
+        try:
+            entry = await self._kv.get(key)
+            if entry and entry.value:
+                data = json.loads(entry.value.decode())
+                return ServiceDefinition(**data), entry.revision
+            return None, None
+        except KeyNotFoundError:
+            return None, None
+        except Exception as e:
+            logger.error(f"Failed to get key '{key}' with revision: {e}")
+            raise KVStoreException(f"Failed to get key '{key}' with revision: {e}") from e

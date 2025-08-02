@@ -4,7 +4,7 @@ version = "1.0.1"
 description = "Minimal IPC SDK based on pure NATS with hexagonal architecture"
 authors = [{name = "AegisIPC Team"}]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "nats-py>=2.0.0",
     "pydantic>=2.0.0",

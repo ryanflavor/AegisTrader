@@ -11,12 +11,10 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
-from .domain.exceptions import DomainException
-from .domain.models import ServiceError
 from .infrastructure.api.dependencies import get_configuration_port
+from .infrastructure.api.error_handlers import register_error_handlers
 from .infrastructure.api.routes import router
 
 # Configure logging
@@ -46,6 +44,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.info(f"API Port: {config.api_port}")
         logger.info(f"Log Level: {config.log_level}")
 
+        # Initialize connection manager
+        from .infrastructure.connection_manager import ConnectionManager, set_connection_manager
+
+        connection_manager = ConnectionManager(config)
+        await connection_manager.startup()
+        set_connection_manager(connection_manager)
+
+        logger.info("All connections initialized successfully")
         logger.info("All routes registered successfully")
         logger.info("Service startup complete")
         logger.info("Service is ready to handle requests")
@@ -58,6 +64,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     finally:
         logger.info("Shutting down AegisTrader Management Service")
 
+        # Clean up connections
+        try:
+            from .infrastructure.connection_manager import get_connection_manager
+
+            manager = get_connection_manager()
+            await manager.shutdown()
+        except Exception:
+            pass  # Ignore errors during shutdown  # nosec B110
+
 
 app = FastAPI(
     title="AegisTrader Management Service",
@@ -66,49 +81,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-@app.exception_handler(DomainException)
-async def domain_exception_handler(request: Request, exc: DomainException) -> JSONResponse:
-    """Handle domain-specific exceptions."""
-    logger.warning(f"Domain exception: {exc.message} (code: {exc.error_code})")
-
-    # Map error codes to HTTP status codes
-    status_code_map = {
-        "SERVICE_UNAVAILABLE": 503,
-        "HEALTH_CHECK_FAILED": 503,
-        "CONFIGURATION_ERROR": 500,
-    }
-
-    status_code = status_code_map.get(exc.error_code, 500)
-
-    error = ServiceError(
-        detail=exc.message,
-        error_code=exc.error_code,
-        trace_id=None,
-    )
-
-    return JSONResponse(
-        status_code=status_code,
-        content=error.model_dump(exclude={"timestamp"}),
-    )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Global exception handler for unexpected errors."""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-
-    error = ServiceError(
-        detail="An internal server error occurred",
-        error_code="INTERNAL_ERROR",
-        trace_id=None,
-    )
-
-    return JSONResponse(
-        status_code=500,
-        content=error.model_dump(exclude={"timestamp"}),
-    )
-
+# Register error handlers
+register_error_handlers(app)
 
 # Include routes from the infrastructure layer
 app.include_router(router)

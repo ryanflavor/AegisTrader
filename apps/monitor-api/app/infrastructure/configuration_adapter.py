@@ -4,6 +4,8 @@ Concrete implementation of the ConfigurationPort interface.
 Loads configuration from environment variables.
 """
 
+from __future__ import annotations
+
 import os
 
 from ..domain.exceptions import ConfigurationException

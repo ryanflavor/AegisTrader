@@ -186,7 +186,7 @@ await service.publish_event("order", "created", {"order_id": "12345"})
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.13+
 - NATS server (2.9+ for JetStream)
 - Dependencies: `nats-py>=2.7`, `pydantic>=2.0`, `msgpack>=1.0`
 

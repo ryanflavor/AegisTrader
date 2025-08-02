@@ -121,3 +121,66 @@ class DetailedHealthStatus(BaseModel):
     nats_latency_ms: float = Field(..., ge=0, description="NATS latency in milliseconds")
 
     timestamp: datetime = Field(default_factory=datetime.now, description="Status timestamp")
+
+
+class ServiceDefinition(BaseModel):
+    """Domain model representing a service definition in the registry."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    service_name: str = Field(
+        ...,
+        description="Unique service identifier",
+        pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$",
+        min_length=3,
+        max_length=64,
+    )
+    owner: str = Field(
+        ...,
+        description="Service owner or team",
+        min_length=1,
+        max_length=100,
+    )
+    description: str = Field(
+        ...,
+        description="Service description",
+        min_length=1,
+        max_length=500,
+    )
+    version: str = Field(
+        ...,
+        description="Service version",
+        pattern=r"^\d+\.\d+\.\d+$",
+    )
+    created_at: str = Field(
+        ...,
+        description="Creation timestamp in ISO 8601 format",
+    )
+    updated_at: str = Field(
+        ...,
+        description="Last update timestamp in ISO 8601 format",
+    )
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_iso_timestamp(cls, v: str) -> str:
+        """Validate timestamp is in ISO 8601 format with time component."""
+        try:
+            # Ensure it has a time component (T separator)
+            if "T" not in v:
+                raise ValueError("Timestamp must include time component (T separator)")
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Timestamp must be in ISO 8601 format: {e}") from e
+        return v
+
+    @field_validator("updated_at")
+    @classmethod
+    def validate_updated_after_created(cls, v: str, info: Any) -> str:
+        """Validate updated_at is not before created_at."""
+        if hasattr(info, "data") and info.data and "created_at" in info.data:
+            created = datetime.fromisoformat(info.data["created_at"].replace("Z", "+00:00"))
+            updated = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            if updated < created:
+                raise ValueError("updated_at cannot be before created_at")
+        return v
