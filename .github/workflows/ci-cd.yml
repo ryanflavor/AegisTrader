@@ -179,14 +179,14 @@ jobs:
     - name: Generate Helm values for staging
       run: |
         cd helm
-        ./generate-helm-values.sh staging
+        ./generate-helm-values.sh
         
     - name: Deploy to staging with Helm
       run: |
         cd helm
         helm upgrade --install aegis-staging . \
           --namespace aegis-staging \
-          --values values.staging.yaml \
+          --values values.deployment.yaml \
           --set global.imageTag=${{ github.sha }} \
           --timeout 10m \
           --wait

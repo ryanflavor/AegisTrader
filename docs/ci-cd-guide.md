@@ -172,10 +172,10 @@ docker push ghcr.io/your-org/aegistrader/monitor-api:emergency-fix
 
 # 2. Deploy with Helm
 cd helm
-./generate-helm-values.sh staging
+./generate-helm-values.sh
 helm upgrade --install aegis-staging . \
   --namespace aegis-staging \
-  --values values.staging.yaml \
+  --values values.deployment.yaml \
   --set global.imageTag=emergency-fix \
   --timeout 10m \
   --wait

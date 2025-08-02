@@ -160,7 +160,7 @@ deploy_to_k8s() {
     
     # 生成并添加部署配置
     info "生成部署配置..."
-    ../generate-helm-values.sh
+    ./generate-helm-values.sh
     if [[ -f "values.deployment.yaml" ]]; then
         VALUES_FILES="$VALUES_FILES -f values.deployment.yaml"
         info "使用部署配置文件"

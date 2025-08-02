@@ -89,7 +89,7 @@ check-release:
 .PHONY: generate-deployment-values
 generate-deployment-values:
 	@echo "生成部署配置..."
-	@./generate-helm-values.sh
+	@cd helm && ./generate-helm-values.sh
 
 # 生成版本配置文件
 .PHONY: generate-version-values

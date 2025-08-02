@@ -2,10 +2,10 @@
 # Generate Helm values from environment variables
 
 # Load environment variables
-[ -f .deploy.env ] && source .deploy.env
+[ -f ../.deploy.env ] && source ../.deploy.env
 
 # Generate values file
-cat > helm/values.deployment.yaml << EOF
+cat > values.deployment.yaml << EOF
 # Auto-generated Helm values from environment variables
 # Generated at: $(date '+%Y-%m-%d %H:%M:%S')
 
@@ -50,4 +50,4 @@ nats:
           port: ${NATS_MONITOR_PORT:-8222}
 EOF
 
-echo "Generated helm/values.deployment.yaml with current environment configuration"
+echo "Generated values.deployment.yaml with current environment configuration"
