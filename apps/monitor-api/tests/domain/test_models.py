@@ -5,6 +5,7 @@ and follow Pydantic v2 strict mode requirements.
 """
 
 from datetime import datetime
+from typing import Any
 
 import pytest
 from app.domain.models import (
@@ -19,10 +20,10 @@ from pydantic import ValidationError
 class TestHealthStatus:
     """Test cases for HealthStatus model."""
 
-    def test_valid_health_status(self):
+    def test_valid_health_status(self) -> None:
         """Test creating a valid health status."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "status": "healthy",
             "service_name": "test-service",
             "version": "1.0.0",
@@ -39,10 +40,10 @@ class TestHealthStatus:
         assert health_status.nats_url == "nats://localhost:4222"
         assert isinstance(health_status.timestamp, datetime)
 
-    def test_invalid_status_value(self):
+    def test_invalid_status_value(self) -> None:
         """Test that invalid status values are rejected."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "status": "invalid",
             "service_name": "test-service",
             "version": "1.0.0",
@@ -56,10 +57,10 @@ class TestHealthStatus:
         errors = exc_info.value.errors()
         assert any("literal_error" in str(error) for error in errors)
 
-    def test_invalid_nats_url(self):
+    def test_invalid_nats_url(self) -> None:
         """Test that invalid NATS URLs are rejected."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "status": "healthy",
             "service_name": "test-service",
             "version": "1.0.0",
@@ -76,10 +77,10 @@ class TestHealthStatus:
             for error in errors
         )
 
-    def test_invalid_version_format(self):
+    def test_invalid_version_format(self) -> None:
         """Test that invalid version formats are rejected."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "status": "healthy",
             "service_name": "test-service",
             "version": "1.0",  # Missing patch version
@@ -93,7 +94,7 @@ class TestHealthStatus:
         errors = exc_info.value.errors()
         assert any("string_pattern_mismatch" in str(error) for error in errors)
 
-    def test_model_is_immutable(self):
+    def test_model_is_immutable(self) -> None:
         """Test that the model is frozen (immutable)."""
         # Arrange
         health_status = HealthStatus(
@@ -111,10 +112,10 @@ class TestHealthStatus:
 class TestServiceError:
     """Test cases for ServiceError model."""
 
-    def test_valid_service_error(self):
+    def test_valid_service_error(self) -> None:
         """Test creating a valid service error."""
         # Arrange
-        error_data = {
+        error_data: dict[str, Any] = {
             "detail": "Something went wrong",
             "error_code": "SERVICE_ERROR",
             "trace_id": "123e4567-e89b-12d3-a456-426614174000",
@@ -129,10 +130,10 @@ class TestServiceError:
         assert error.trace_id == "123e4567-e89b-12d3-a456-426614174000"
         assert isinstance(error.timestamp, datetime)
 
-    def test_invalid_error_code_format(self):
+    def test_invalid_error_code_format(self) -> None:
         """Test that invalid error code formats are rejected."""
         # Arrange
-        error_data = {
+        error_data: dict[str, Any] = {
             "detail": "Something went wrong",
             "error_code": "invalid-code",  # Should be UPPER_SNAKE_CASE
         }
@@ -144,10 +145,10 @@ class TestServiceError:
         errors = exc_info.value.errors()
         assert any("string_pattern_mismatch" in str(error) for error in errors)
 
-    def test_empty_detail_rejected(self):
+    def test_empty_detail_rejected(self) -> None:
         """Test that empty error details are rejected."""
         # Arrange
-        error_data = {
+        error_data: dict[str, Any] = {
             "detail": "",
             "error_code": "SERVICE_ERROR",
         }
@@ -163,14 +164,14 @@ class TestServiceError:
 class TestSystemStatus:
     """Test cases for SystemStatus model."""
 
-    def test_valid_system_status(self):
+    def test_valid_system_status(self) -> None:
         """Test creating a valid system status."""
         # Arrange
         now = datetime.now()
         start_time = datetime.now()
         uptime = 3600.0  # 1 hour
 
-        status_data = {
+        status_data: dict[str, Any] = {
             "timestamp": now,
             "uptime_seconds": uptime,
             "environment": "development",
@@ -189,10 +190,10 @@ class TestSystemStatus:
         assert status.connected_services == 5
         assert status.deployment_version == "v1.0.0-beta"
 
-    def test_negative_uptime_rejected(self):
+    def test_negative_uptime_rejected(self) -> None:
         """Test that negative uptime values are rejected."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "timestamp": datetime.now(),
             "uptime_seconds": -100.0,
             "environment": "development",
@@ -207,10 +208,10 @@ class TestSystemStatus:
         errors = exc_info.value.errors()
         assert any("greater_than_equal" in str(error) for error in errors)
 
-    def test_invalid_deployment_version_format(self):
+    def test_invalid_deployment_version_format(self) -> None:
         """Test that invalid deployment version formats are rejected."""
         # Arrange
-        status_data = {
+        status_data: dict[str, Any] = {
             "timestamp": datetime.now(),
             "uptime_seconds": 100.0,
             "environment": "development",
@@ -229,10 +230,10 @@ class TestSystemStatus:
 class TestServiceConfiguration:
     """Test cases for ServiceConfiguration model."""
 
-    def test_valid_configuration(self):
+    def test_valid_configuration(self) -> None:
         """Test creating a valid service configuration."""
         # Arrange
-        config_data = {
+        config_data: dict[str, Any] = {
             "nats_url": "nats://localhost:4222",
             "api_port": 8080,
             "log_level": "INFO",
@@ -248,10 +249,10 @@ class TestServiceConfiguration:
         assert config.log_level == "INFO"
         assert config.environment == "development"
 
-    def test_invalid_port_range(self):
+    def test_invalid_port_range(self) -> None:
         """Test that invalid port numbers are rejected."""
         # Arrange
-        config_data = {
+        config_data: dict[str, Any] = {
             "nats_url": "nats://localhost:4222",
             "api_port": 70000,  # Out of valid range
             "log_level": "INFO",
@@ -265,10 +266,10 @@ class TestServiceConfiguration:
         errors = exc_info.value.errors()
         assert any("less_than_equal" in str(error) for error in errors)
 
-    def test_tls_nats_url_accepted(self):
+    def test_tls_nats_url_accepted(self) -> None:
         """Test that TLS NATS URLs are accepted."""
         # Arrange
-        config_data = {
+        config_data: dict[str, Any] = {
             "nats_url": "tls://secure-nats:4222",
             "api_port": 8080,
             "log_level": "INFO",

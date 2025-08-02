@@ -19,19 +19,21 @@ from app.ports.monitoring import MonitoringPort
 
 
 @pytest.fixture
-def mock_monitoring_port():
+def mock_monitoring_port() -> AsyncMock:
     """Create a mock monitoring port for testing."""
     return AsyncMock(spec=MonitoringPort)
 
 
 @pytest.fixture
-def mock_configuration_port():
+def mock_configuration_port() -> Mock:
     """Create a mock configuration port for testing."""
     return Mock(spec=ConfigurationPort)
 
 
 @pytest.fixture
-def monitoring_service(mock_monitoring_port, mock_configuration_port):
+def monitoring_service(
+    mock_monitoring_port: AsyncMock, mock_configuration_port: Mock
+) -> MonitoringService:
     """Create a monitoring service with mocked dependencies."""
     return MonitoringService(mock_monitoring_port, mock_configuration_port)
 
@@ -159,7 +161,7 @@ class TestMonitoringService:
         assert "Readiness check failed: Connection timeout" in str(exc_info.value)
         assert exc_info.value.error_code == "SERVICE_UNAVAILABLE"
 
-    def test_get_welcome_message(self, monitoring_service):
+    def test_get_welcome_message(self, monitoring_service: MonitoringService) -> None:
         """Test getting the welcome message."""
         # Act
         result = monitoring_service.get_welcome_message()

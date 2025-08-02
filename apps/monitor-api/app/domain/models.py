@@ -1,11 +1,12 @@
 """Domain models for AegisTrader Monitor API.
 
-This module contains all domain entities and value objects with strict Pydantic v2 validation.
+This module contains all domain entities and value objects with strict Pydantic v2
+validation.
 Domain models are free from any infrastructure dependencies.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -67,15 +68,17 @@ class SystemStatus(BaseModel):
 
     @field_validator("uptime_seconds")
     @classmethod
-    def validate_uptime(cls, v: float, info) -> float:
+    def validate_uptime(cls, v: float, info: Any) -> float:
         """Validate uptime is consistent with timestamps."""
-        if "timestamp" in info.data and "start_time" in info.data:
-            expected_uptime = (
-                info.data["timestamp"] - info.data["start_time"]
-            ).total_seconds()
-            # Allow small discrepancy due to processing time
-            if abs(v - expected_uptime) > 1.0:
-                raise ValueError("Uptime inconsistent with timestamp difference")
+        # In Pydantic v2, use info.data to access other field values during validation
+        if hasattr(info, "data") and info.data:
+            timestamp = info.data.get("timestamp")
+            start_time = info.data.get("start_time")
+            if timestamp and start_time:
+                expected_uptime = (timestamp - start_time).total_seconds()
+                # Allow small discrepancy due to processing time
+                if abs(v - expected_uptime) > 1.0:
+                    raise ValueError("Uptime inconsistent with timestamp difference")
         return v
 
 

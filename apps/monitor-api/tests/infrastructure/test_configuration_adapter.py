@@ -5,7 +5,7 @@ loads and validates configuration from environment variables.
 """
 
 import os
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from app.domain.exceptions import ConfigurationException
@@ -17,11 +17,13 @@ class TestEnvironmentConfigurationAdapter:
     """Test cases for EnvironmentConfigurationAdapter."""
 
     @pytest.fixture
-    def adapter(self):
+    def adapter(self) -> EnvironmentConfigurationAdapter:
         """Create a configuration adapter instance."""
         return EnvironmentConfigurationAdapter()
 
-    def test_load_default_configuration(self, adapter):
+    def test_load_default_configuration(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test loading configuration with default values."""
         # Arrange - Use empty environment
         with patch.dict(os.environ, {}, clear=True):
@@ -34,7 +36,9 @@ class TestEnvironmentConfigurationAdapter:
             assert config.log_level == "INFO"
             assert config.environment == "development"
 
-    def test_load_configuration_from_environment(self, adapter):
+    def test_load_configuration_from_environment(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test loading configuration from environment variables."""
         # Arrange
         env_vars = {
@@ -54,7 +58,9 @@ class TestEnvironmentConfigurationAdapter:
             assert config.log_level == "DEBUG"
             assert config.environment == "production"
 
-    def test_invalid_log_level_raises_exception(self, adapter):
+    def test_invalid_log_level_raises_exception(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that invalid log levels raise ConfigurationException."""
         # Arrange
         with patch.dict(os.environ, {"LOG_LEVEL": "INVALID"}, clear=True):
@@ -64,7 +70,9 @@ class TestEnvironmentConfigurationAdapter:
 
             assert "Invalid log level: INVALID" in str(exc_info.value)
 
-    def test_invalid_environment_raises_exception(self, adapter):
+    def test_invalid_environment_raises_exception(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that invalid environments raise ConfigurationException."""
         # Arrange
         with patch.dict(os.environ, {"ENVIRONMENT": "testing"}, clear=True):
@@ -74,7 +82,9 @@ class TestEnvironmentConfigurationAdapter:
 
             assert "Invalid environment: testing" in str(exc_info.value)
 
-    def test_invalid_port_format_raises_exception(self, adapter):
+    def test_invalid_port_format_raises_exception(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that invalid port formats raise ConfigurationException."""
         # Arrange
         with patch.dict(os.environ, {"API_PORT": "not-a-number"}, clear=True):
@@ -84,7 +94,9 @@ class TestEnvironmentConfigurationAdapter:
 
             assert "Failed to load configuration" in str(exc_info.value)
 
-    def test_tls_nats_url_accepted(self, adapter):
+    def test_tls_nats_url_accepted(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that TLS NATS URLs are properly loaded."""
         # Arrange
         with patch.dict(os.environ, {"NATS_URL": "tls://secure-nats:4222"}, clear=True):
@@ -95,8 +107,10 @@ class TestEnvironmentConfigurationAdapter:
             assert config.nats_url == "tls://secure-nats:4222"
 
     @patch("os.getuid")
-    def test_privileged_port_without_root_raises_exception(self, mock_getuid, adapter):
-        """Test that privileged ports without root access raise ConfigurationException."""
+    def test_privileged_port_without_root_raises_exception(
+        self, mock_getuid: Mock, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
+        """Test that privileged ports without root access raise exception."""
         # Arrange
         mock_getuid.return_value = 1000  # Non-root user
 
@@ -108,7 +122,9 @@ class TestEnvironmentConfigurationAdapter:
             assert "Port 80 requires root privileges" in str(exc_info.value)
 
     @patch("os.getuid")
-    def test_privileged_port_with_root_allowed(self, mock_getuid, adapter):
+    def test_privileged_port_with_root_allowed(
+        self, mock_getuid: Mock, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that privileged ports are allowed for root user."""
         # Arrange
         mock_getuid.return_value = 0  # Root user
@@ -120,8 +136,10 @@ class TestEnvironmentConfigurationAdapter:
             # Assert
             assert config.api_port == 80
 
-    def test_production_with_localhost_nats_raises_exception(self, adapter):
-        """Test that production environment with localhost NATS raises ConfigurationException."""
+    def test_production_with_localhost_nats_raises_exception(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
+        """Test that production environment with localhost NATS raises exception."""
         # Arrange
         env_vars = {
             "ENVIRONMENT": "production",
@@ -137,7 +155,9 @@ class TestEnvironmentConfigurationAdapter:
                 exc_info.value
             )
 
-    def test_validate_configuration_valid(self, adapter):
+    def test_validate_configuration_valid(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test validating a valid configuration."""
         # Arrange
         config = ServiceConfiguration(
@@ -150,7 +170,9 @@ class TestEnvironmentConfigurationAdapter:
         # Act & Assert - Should not raise
         adapter.validate_configuration(config)
 
-    def test_validate_configuration_production_localhost(self, adapter):
+    def test_validate_configuration_production_localhost(
+        self, adapter: EnvironmentConfigurationAdapter
+    ) -> None:
         """Test that validation fails for production with localhost."""
         # Arrange
         config = ServiceConfiguration(

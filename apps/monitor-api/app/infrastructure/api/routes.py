@@ -45,7 +45,7 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> HealthResponse:
     """Health check endpoint with service status."""
     try:
@@ -63,12 +63,12 @@ async def health_check(
                 detail=e.message,
                 error_code=e.error_code,
             ).model_dump(),
-        )
+        ) from e
 
 
 @router.get("/")
 async def root(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> dict[str, str]:
     """Root endpoint with welcome message."""
     return monitoring_service.get_welcome_message()
@@ -76,7 +76,7 @@ async def root(
 
 @router.get("/ready")
 async def readiness_check(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> dict[str, str]:
     """Readiness check endpoint for Kubernetes."""
     try:
@@ -88,12 +88,12 @@ async def readiness_check(
                 detail=e.message,
                 error_code=e.error_code,
             ).model_dump(),
-        )
+        ) from e
 
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def system_status(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> SystemStatusResponse:
     """Get current system status with deployment information."""
     try:
@@ -112,4 +112,4 @@ async def system_status(
                 detail=e.message,
                 error_code=e.error_code,
             ).model_dump(),
-        )
+        ) from e

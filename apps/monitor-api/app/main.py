@@ -70,7 +70,9 @@ app = FastAPI(
 
 
 @app.exception_handler(DomainException)
-async def domain_exception_handler(request: Request, exc: DomainException):
+async def domain_exception_handler(
+    request: Request, exc: DomainException
+) -> JSONResponse:
     """Handle domain-specific exceptions."""
     logger.warning(f"Domain exception: {exc.message} (code: {exc.error_code})")
 
@@ -95,7 +97,7 @@ async def domain_exception_handler(request: Request, exc: DomainException):
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Global exception handler for unexpected errors."""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
 

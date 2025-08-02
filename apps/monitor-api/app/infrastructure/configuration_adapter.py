@@ -54,7 +54,9 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             return config
 
         except Exception as e:
-            raise ConfigurationException(f"Failed to load configuration: {str(e)}")
+            raise ConfigurationException(
+                f"Failed to load configuration: {str(e)}"
+            ) from e
 
     def validate_configuration(self, config: ServiceConfiguration) -> None:
         """Validate a configuration object.

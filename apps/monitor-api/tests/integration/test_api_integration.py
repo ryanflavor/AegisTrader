@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def client():
+def client() -> TestClient:
     """Create a test client for the FastAPI app."""
     return TestClient(app)
 
@@ -18,7 +18,7 @@ def client():
 class TestAPIIntegration:
     """Integration tests for API endpoints."""
 
-    def test_root_endpoint(self, client):
+    def test_root_endpoint(self, client: TestClient) -> None:
         """Test the root endpoint returns welcome message."""
         # Act
         response = client.get("/")
@@ -29,7 +29,7 @@ class TestAPIIntegration:
             "message": "Welcome to AegisTrader Management Service"
         }
 
-    def test_health_endpoint(self, client):
+    def test_health_endpoint(self, client: TestClient) -> None:
         """Test the health check endpoint."""
         # Act
         response = client.get("/health")
@@ -42,7 +42,7 @@ class TestAPIIntegration:
         assert data["version"] == "0.1.0"
         assert "nats_url" in data
 
-    def test_ready_endpoint(self, client):
+    def test_ready_endpoint(self, client: TestClient) -> None:
         """Test the readiness check endpoint."""
         # Act
         response = client.get("/ready")
@@ -51,7 +51,7 @@ class TestAPIIntegration:
         assert response.status_code == 200
         assert response.json() == {"status": "ready"}
 
-    def test_status_endpoint(self, client):
+    def test_status_endpoint(self, client: TestClient) -> None:
         """Test the system status endpoint."""
         # Act
         response = client.get("/status")
@@ -66,7 +66,7 @@ class TestAPIIntegration:
         assert "deployment_version" in data
         assert data["deployment_version"].startswith("v")
 
-    def test_nonexistent_endpoint_returns_404(self, client):
+    def test_nonexistent_endpoint_returns_404(self, client: TestClient) -> None:
         """Test that nonexistent endpoints return 404."""
         # Act
         response = client.get("/nonexistent")
@@ -75,7 +75,7 @@ class TestAPIIntegration:
         assert response.status_code == 404
 
     @pytest.mark.parametrize("endpoint", ["/health", "/ready", "/status", "/"])
-    def test_endpoints_accept_get_only(self, client, endpoint):
+    def test_endpoints_accept_get_only(self, client: TestClient, endpoint: str) -> None:
         """Test that endpoints only accept GET requests."""
         # Act & Assert
         # POST should not be allowed
