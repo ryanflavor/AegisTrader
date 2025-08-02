@@ -22,9 +22,7 @@ class HealthStatus(BaseModel):
     service_name: str = Field(..., description="Service name", min_length=1)
     version: str = Field(..., description="Service version", pattern=r"^\d+\.\d+\.\d+$")
     nats_url: str = Field(..., description="NATS connection URL")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Status timestamp"
-    )
+    timestamp: datetime = Field(default_factory=datetime.now, description="Status timestamp")
 
     @field_validator("nats_url")
     @classmethod
@@ -42,9 +40,7 @@ class ServiceError(BaseModel):
 
     detail: str = Field(..., description="Error message", min_length=1)
     error_code: str = Field(..., description="Error code", pattern=r"^[A-Z][A-Z0-9_]+$")
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Error timestamp"
-    )
+    timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")
     trace_id: str | None = Field(None, description="Trace ID for debugging")
 
 
@@ -58,9 +54,7 @@ class SystemStatus(BaseModel):
     environment: Literal["development", "staging", "production"] = Field(
         ..., description="Current environment"
     )
-    connected_services: int = Field(
-        default=0, ge=0, description="Number of connected services"
-    )
+    connected_services: int = Field(default=0, ge=0, description="Number of connected services")
     deployment_version: str = Field(
         ..., description="Deployment version", pattern=r"^v\d+\.\d+\.\d+(-\w+)?$"
     )
@@ -119,21 +113,11 @@ class DetailedHealthStatus(BaseModel):
 
     # System metrics
     cpu_percent: float = Field(..., ge=0, le=100, description="CPU usage percentage")
-    memory_percent: float = Field(
-        ..., ge=0, le=100, description="Memory usage percentage"
-    )
-    disk_usage_percent: float = Field(
-        ..., ge=0, le=100, description="Disk usage percentage"
-    )
+    memory_percent: float = Field(..., ge=0, le=100, description="Memory usage percentage")
+    disk_usage_percent: float = Field(..., ge=0, le=100, description="Disk usage percentage")
 
     # Dependencies status
-    nats_status: Literal["healthy", "unhealthy"] = Field(
-        ..., description="NATS connection status"
-    )
-    nats_latency_ms: float = Field(
-        ..., ge=0, description="NATS latency in milliseconds"
-    )
+    nats_status: Literal["healthy", "unhealthy"] = Field(..., description="NATS connection status")
+    nats_latency_ms: float = Field(..., ge=0, description="NATS latency in milliseconds")
 
-    timestamp: datetime = Field(
-        default_factory=datetime.now, description="Status timestamp"
-    )
+    timestamp: datetime = Field(default_factory=datetime.now, description="Status timestamp")

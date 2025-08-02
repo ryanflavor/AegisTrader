@@ -57,20 +57,14 @@ jobs:
           pip install -r packages/aegis-sdk/requirements-dev.txt
         fi
         
-    - name: Run linting (ruff)
+    - name: Set up pre-commit
       run: |
-        pip install ruff
-        ruff check .
+        pip install pre-commit
+        pre-commit install --install-hooks
         
-    - name: Run formatting check (black)
+    - name: Run pre-commit checks
       run: |
-        pip install black
-        black --check .
-        
-    - name: Run type checking (mypy)
-      run: |
-        pip install mypy types-PyYAML
-        mypy .
+        pre-commit run --all-files --show-diff-on-failure
         
     - name: Run tests with coverage
       run: |

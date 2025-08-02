@@ -89,16 +89,11 @@ class MessageBusContractTest(ABC):
         async def error_handler(params: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Test error")
 
-        await message_bus.register_rpc_handler(
-            "test_service", "error_method", error_handler
-        )
+        await message_bus.register_rpc_handler("test_service", "error_method", error_handler)
 
         # Make RPC call
         request = (
-            RPCRequestBuilder()
-            .with_method("error_method")
-            .with_target("test_service")
-            .build()
+            RPCRequestBuilder().with_method("error_method").with_target("test_service").build()
         )
 
         response = await message_bus.call_rpc(request)
@@ -117,9 +112,7 @@ class MessageBusContractTest(ABC):
             await asyncio.sleep(2)
             return {"result": "too late"}
 
-        await message_bus.register_rpc_handler(
-            "test_service", "slow_method", slow_handler
-        )
+        await message_bus.register_rpc_handler("test_service", "slow_method", slow_handler)
 
         # Make RPC call with short timeout
         request = (
@@ -174,9 +167,7 @@ class MessageBusContractTest(ABC):
         command_received = None
 
         # Register command handler
-        async def command_handler(
-            cmd: Command, progress_callback: Any
-        ) -> dict[str, Any]:
+        async def command_handler(cmd: Command, progress_callback: Any) -> dict[str, Any]:
             nonlocal command_received
             command_received = cmd
 
@@ -186,9 +177,7 @@ class MessageBusContractTest(ABC):
 
             return {"result": "command processed"}
 
-        await message_bus.register_command_handler(
-            "test_service", "process_data", command_handler
-        )
+        await message_bus.register_command_handler("test_service", "process_data", command_handler)
 
         # Send command
         command = (

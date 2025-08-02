@@ -29,9 +29,7 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             default_nats_port = os.getenv("NATS_CLIENT_PORT", "4222")
             default_api_port = os.getenv("API_CONTAINER_PORT", "8100")
 
-            nats_url = os.getenv(
-                "NATS_URL", f"nats://{default_nats_host}:{default_nats_port}"
-            )
+            nats_url = os.getenv("NATS_URL", f"nats://{default_nats_host}:{default_nats_port}")
             api_port = int(os.getenv("API_PORT", default_api_port))
             log_level = os.getenv("LOG_LEVEL", "INFO").upper()
             environment = os.getenv("ENVIRONMENT", "development").lower()
@@ -54,9 +52,7 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             return config
 
         except Exception as e:
-            raise ConfigurationException(
-                f"Failed to load configuration: {str(e)}"
-            ) from e
+            raise ConfigurationException(f"Failed to load configuration: {str(e)}") from e
 
     def validate_configuration(self, config: ServiceConfiguration) -> None:
         """Validate a configuration object.
@@ -69,15 +65,13 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
         """
         # Additional validation beyond Pydantic
         if config.api_port < 1024 and os.getuid() != 0:
-            raise ConfigurationException(
-                f"Port {config.api_port} requires root privileges"
-            )
+            raise ConfigurationException(f"Port {config.api_port} requires root privileges")
 
         # In production, ensure we're not using blacklisted NATS hosts
         if config.environment == "production":
-            blacklist = os.getenv(
-                "PRODUCTION_NATS_HOST_BLACKLIST", "localhost,127.0.0.1"
-            ).split(",")
+            blacklist = os.getenv("PRODUCTION_NATS_HOST_BLACKLIST", "localhost,127.0.0.1").split(
+                ","
+            )
             for host in blacklist:
                 if host.strip() in config.nats_url:
                     raise ConfigurationException(

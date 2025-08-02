@@ -253,9 +253,7 @@ class TestPerformanceBenchmarksK8s:
         print(f"Total memory used: {total_memory_used:.1f}MB")
         print(f"Number of services: {num_instances}")
         print(f"Average memory per service: {avg_memory_per_service:.1f}MB")
-        print(
-            f"Memory per service breakdown: {[f'{m:.1f}MB' for m in metrics.memory_usage_mb]}"
-        )
+        print(f"Memory per service breakdown: {[f'{m:.1f}MB' for m in metrics.memory_usage_mb]}")
 
         # Cleanup
         for service in services:
@@ -393,7 +391,9 @@ All critical performance targets have been validated in a realistic Kubernetes e
         report_path.write_text(report_content)
 
         # Also write to the aegis-sdk directory
-        sdk_report_path = "/home/ryan/workspace/github/AegisTrader/packages/aegis-sdk/performance_k8s_report.md"
+        sdk_report_path = (
+            "/home/ryan/workspace/github/AegisTrader/packages/aegis-sdk/performance_k8s_report.md"
+        )
         with open(sdk_report_path, "w") as f:
             f.write(report_content)
 

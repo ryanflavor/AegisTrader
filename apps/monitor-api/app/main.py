@@ -70,9 +70,7 @@ app = FastAPI(
 
 
 @app.exception_handler(DomainException)
-async def domain_exception_handler(
-    request: Request, exc: DomainException
-) -> JSONResponse:
+async def domain_exception_handler(request: Request, exc: DomainException) -> JSONResponse:
     """Handle domain-specific exceptions."""
     logger.warning(f"Domain exception: {exc.message} (code: {exc.error_code})")
 

@@ -21,9 +21,7 @@ class TestEnvironmentConfigurationAdapter:
         """Create a configuration adapter instance."""
         return EnvironmentConfigurationAdapter()
 
-    def test_load_default_configuration(
-        self, adapter: EnvironmentConfigurationAdapter
-    ) -> None:
+    def test_load_default_configuration(self, adapter: EnvironmentConfigurationAdapter) -> None:
         """Test loading configuration with default values."""
         # Arrange - Use empty environment
         with patch.dict(os.environ, {}, clear=True):
@@ -94,9 +92,7 @@ class TestEnvironmentConfigurationAdapter:
 
             assert "Failed to load configuration" in str(exc_info.value)
 
-    def test_tls_nats_url_accepted(
-        self, adapter: EnvironmentConfigurationAdapter
-    ) -> None:
+    def test_tls_nats_url_accepted(self, adapter: EnvironmentConfigurationAdapter) -> None:
         """Test that TLS NATS URLs are properly loaded."""
         # Arrange
         with patch.dict(os.environ, {"NATS_URL": "tls://secure-nats:4222"}, clear=True):
@@ -155,9 +151,7 @@ class TestEnvironmentConfigurationAdapter:
                 exc_info.value
             )
 
-    def test_validate_configuration_valid(
-        self, adapter: EnvironmentConfigurationAdapter
-    ) -> None:
+    def test_validate_configuration_valid(self, adapter: EnvironmentConfigurationAdapter) -> None:
         """Test validating a valid configuration."""
         # Arrange
         config = ServiceConfiguration(
@@ -186,6 +180,4 @@ class TestEnvironmentConfigurationAdapter:
         with pytest.raises(ConfigurationException) as exc_info:
             adapter.validate_configuration(config)
 
-        assert "Production environment should not use localhost in NATS URL" in str(
-            exc_info.value
-        )
+        assert "Production environment should not use localhost in NATS URL" in str(exc_info.value)

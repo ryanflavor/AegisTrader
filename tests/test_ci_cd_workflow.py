@@ -62,9 +62,7 @@ def test_ci_cd_workflow_triggers() -> None:
     # Check PR trigger
     assert "pull_request" in triggers, "PR trigger is required"
     assert "branches" in triggers["pull_request"], "PR must specify branches"
-    assert (
-        "main" in triggers["pull_request"]["branches"]
-    ), "PR must trigger for main branch"
+    assert "main" in triggers["pull_request"]["branches"], "PR must trigger for main branch"
 
 
 def test_ci_cd_workflow_environment_variables() -> None:
@@ -92,10 +90,6 @@ def test_ci_cd_documentation_exists() -> None:
 
     # Check for required sections
     assert "## Pipeline Architecture" in content, "Must document pipeline architecture"
-    assert (
-        "## Environment Variables and Secrets" in content
-    ), "Must document env vars and secrets"
+    assert "## Environment Variables and Secrets" in content, "Must document env vars and secrets"
     assert "## Troubleshooting Guide" in content, "Must include troubleshooting guide"
-    assert (
-        "## Manual Deployment Override Procedures" in content
-    ), "Must document manual procedures"
+    assert "## Manual Deployment Override Procedures" in content, "Must document manual procedures"

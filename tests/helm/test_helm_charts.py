@@ -103,9 +103,7 @@ class TestHelmTemplateRendering(unittest.TestCase):
         ]
 
         if values_override:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 yaml.dump(values_override, f)
                 temp_values = f.name
             cmd.extend(["-f", temp_values])
@@ -133,9 +131,7 @@ class TestHelmTemplateRendering(unittest.TestCase):
         docs = list(yaml.safe_load_all(output))
 
         # Find NATS-related resources
-        nats_resources = [
-            d for d in docs if d and "nats" in d.get("metadata", {}).get("name", "")
-        ]
+        nats_resources = [d for d in docs if d and "nats" in d.get("metadata", {}).get("name", "")]
         self.assertGreater(len(nats_resources), 0, "No NATS resources found")
 
     def test_monitor_api_deployment(self) -> None:
@@ -159,9 +155,7 @@ class TestHelmTemplateRendering(unittest.TestCase):
         self.assertEqual(containers[0]["image"], "aegistrader-monitor-api:latest")
 
         # Check init containers
-        init_containers = deployment["spec"]["template"]["spec"].get(
-            "initContainers", []
-        )
+        init_containers = deployment["spec"]["template"]["spec"].get("initContainers", [])
         self.assertEqual(len(init_containers), 1)
         self.assertEqual(init_containers[0]["name"], "wait-for-nats")
 
@@ -299,9 +293,7 @@ class TestHelmChartDependencies(unittest.TestCase):
         self.assertIsNotNone(nats_dep, "NATS dependency not found")
         assert nats_dep is not None  # Type guard for mypy
         self.assertEqual(nats_dep["version"], "~1.3.0")
-        self.assertEqual(
-            nats_dep["repository"], "https://nats-io.github.io/k8s/helm/charts/"
-        )
+        self.assertEqual(nats_dep["repository"], "https://nats-io.github.io/k8s/helm/charts/")
 
     def test_subchart_dependencies(self) -> None:
         """Test subchart dependencies are properly configured."""
@@ -310,9 +302,7 @@ class TestHelmChartDependencies(unittest.TestCase):
 
         subcharts = ["monitor-api", "monitor-ui"]
         for subchart in subcharts:
-            dep = next(
-                (d for d in chart["dependencies"] if d["name"] == subchart), None
-            )
+            dep = next((d for d in chart["dependencies"] if d["name"] == subchart), None)
             self.assertIsNotNone(dep, f"{subchart} dependency not found")
             assert dep is not None  # Type guard for mypy
             self.assertEqual(dep["repository"], f"file://./charts/{subchart}")

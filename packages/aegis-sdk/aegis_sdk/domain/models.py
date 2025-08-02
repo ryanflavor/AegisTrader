@@ -48,9 +48,7 @@ class RPCRequest(Message):
     """RPC request model."""
 
     method: str = Field(..., min_length=1, description="RPC method name")
-    params: dict[str, Any] = Field(
-        default_factory=dict, description="Method parameters"
-    )
+    params: dict[str, Any] = Field(default_factory=dict, description="Method parameters")
     timeout: float = Field(default=5.0, gt=0, description="Request timeout in seconds")
 
     @field_validator("method", mode="before")
@@ -96,9 +94,7 @@ class Event(Message):
         import re
 
         if not re.match(r"^\d+\.\d+(\.\d+)?$", v):
-            raise ValueError(
-                f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)"
-            )
+            raise ValueError(f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)")
         return v
 
 
@@ -113,9 +109,7 @@ class Command(Message):
         description="Command priority",
     )
     max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts")
-    timeout: float = Field(
-        default=300.0, gt=0, description="Command timeout in seconds"
-    )
+    timeout: float = Field(default=300.0, gt=0, description="Command timeout in seconds")
 
     @field_validator("command", mode="before")
     @classmethod
@@ -143,9 +137,7 @@ class ServiceInfo(BaseModel):
         pattern="^(ACTIVE|STANDBY|UNHEALTHY|SHUTDOWN)$",
         description="Service status",
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Service metadata"
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Service metadata")
     registered_at: str = Field(
         default_factory=lambda: datetime.now(UTC).isoformat(),
         description="Registration timestamp",
@@ -162,9 +154,7 @@ class ServiceInfo(BaseModel):
         import re
 
         if not re.match(r"^\d+\.\d+\.\d+$", v):
-            raise ValueError(
-                f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)"
-            )
+            raise ValueError(f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)")
         return v
 
     @field_validator("registered_at", "last_heartbeat")

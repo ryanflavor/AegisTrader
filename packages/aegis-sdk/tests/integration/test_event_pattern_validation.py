@@ -13,9 +13,7 @@ class TestEventPatternValidation:
     """Test suite for comprehensive Event pattern validation."""
 
     @pytest.mark.asyncio
-    async def test_jetstream_event_publishing_durable(
-        self, nats_adapter, nats_container
-    ):
+    async def test_jetstream_event_publishing_durable(self, nats_adapter, nats_container):
         """Test JetStream event publishing with durable subscriptions."""
         domain = "order"
         event_type = "created"
@@ -263,9 +261,7 @@ class TestEventPatternValidation:
         nats_adapter._js.publish = capture_publish
 
         # Publish event
-        event = Event(
-            domain=domain, event_type=event_type, payload={"test": True}, version="1.0"
-        )
+        event = Event(domain=domain, event_type=event_type, payload={"test": True}, version="1.0")
         await nats_adapter.publish_event(event)
 
         # Verify correct subject pattern used
@@ -277,9 +273,7 @@ class TestEventPatternValidation:
         nats_adapter._js.publish = original_publish
 
     @pytest.mark.asyncio
-    async def test_event_serialization_formats(
-        self, nats_adapter, nats_adapter_msgpack
-    ):
+    async def test_event_serialization_formats(self, nats_adapter, nats_adapter_msgpack):
         """Test both JSON and MessagePack serialization for events."""
         domain = "format"
         event_type = "test"
@@ -311,9 +305,7 @@ class TestEventPatternValidation:
             msgpack_events.append(event)
 
         # Subscribe with JSON adapter
-        await nats_adapter.subscribe_event(
-            SubjectPatterns.event(domain, event_type), json_handler
-        )
+        await nats_adapter.subscribe_event(SubjectPatterns.event(domain, event_type), json_handler)
 
         # Subscribe with MessagePack adapter
         await nats_adapter_msgpack.subscribe_event(
@@ -324,9 +316,7 @@ class TestEventPatternValidation:
 
         # Publish with both formats
         json_event = Event(domain=domain, event_type=event_type, payload=test_data)
-        msgpack_event = Event(
-            domain=domain, event_type=f"{event_type}_msgpack", payload=test_data
-        )
+        msgpack_event = Event(domain=domain, event_type=f"{event_type}_msgpack", payload=test_data)
 
         await nats_adapter.publish_event(json_event)
         await nats_adapter_msgpack.publish_event(msgpack_event)

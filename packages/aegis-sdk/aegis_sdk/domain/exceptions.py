@@ -49,9 +49,7 @@ class ValidationError(AegisError):
 class RPCError(AegisError):
     """RPC-specific errors."""
 
-    def __init__(
-        self, message: str, service: str | None = None, method: str | None = None
-    ):
+    def __init__(self, message: str, service: str | None = None, method: str | None = None):
         super().__init__(message)
         self.service = service
         self.method = method

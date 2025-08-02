@@ -74,9 +74,7 @@ class TestDeploymentIntegration(unittest.TestCase):
         ]
 
         for target in required_targets:
-            self.assertIn(
-                target, makefile_content, f"Required target {target} not found"
-            )
+            self.assertIn(target, makefile_content, f"Required target {target} not found")
 
     def test_service_connectivity_matrix(self) -> None:
         """Test that service connectivity requirements are properly defined."""
@@ -105,9 +103,7 @@ class TestDeploymentIntegration(unittest.TestCase):
                 continue  # NATS has no dependencies
 
             # Read the deployment template
-            deployment_file = (
-                self.helm_dir / f"charts/{service}/templates/deployment.yaml"
-            )
+            deployment_file = self.helm_dir / f"charts/{service}/templates/deployment.yaml"
             if deployment_file.exists():
                 with open(deployment_file) as f:
                     content = f.read()
@@ -165,9 +161,7 @@ class TestDeploymentIntegration(unittest.TestCase):
         services = ["monitor-api", "monitor-ui"]
 
         for service in services:
-            with open(
-                self.helm_dir / f"charts/{service}/templates/deployment.yaml"
-            ) as f:
+            with open(self.helm_dir / f"charts/{service}/templates/deployment.yaml") as f:
                 content = f.read()
 
             # Check for all three probe types

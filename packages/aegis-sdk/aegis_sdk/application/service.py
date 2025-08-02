@@ -71,14 +71,14 @@ class Service:
         # Register all event handlers
         for pattern, handlers in self._event_handlers.items():
             for handler in handlers:
-                durable_name = f"{self.service_name}-{pattern.replace('*', 'star').replace('.', '-')}"
+                durable_name = (
+                    f"{self.service_name}-{pattern.replace('*', 'star').replace('.', '-')}"
+                )
                 await self._bus.subscribe_event(pattern, handler, durable_name)
 
         # Register all command handlers
         for command_name, handler in self._command_handlers.items():
-            await self._bus.register_command_handler(
-                self.service_name, command_name, handler
-            )
+            await self._bus.register_command_handler(self.service_name, command_name, handler)
 
         # Start heartbeat
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
@@ -139,9 +139,7 @@ class Service:
         return response.result
 
     # Event Methods
-    def subscribe(
-        self, pattern: str, durable: bool = True
-    ) -> Callable[[Callable], Callable]:
+    def subscribe(self, pattern: str, durable: bool = True) -> Callable[[Callable], Callable]:
         """Decorator to subscribe to events.
 
         Example:
@@ -257,9 +255,7 @@ class Service:
             raise ValueError(f"Invalid method name: {method}")
         self._rpc_handlers[method] = handler
 
-    async def register_command_handler(
-        self, command_name: str, handler: Callable
-    ) -> None:
+    async def register_command_handler(self, command_name: str, handler: Callable) -> None:
         """Register a command handler.
 
         Args:
@@ -268,9 +264,7 @@ class Service:
         """
         self._command_handlers[command_name] = handler
 
-    async def subscribe_event(
-        self, domain: str, event_type: str, handler: Callable
-    ) -> None:
+    async def subscribe_event(self, domain: str, event_type: str, handler: Callable) -> None:
         """Subscribe to an event pattern.
 
         Args:
@@ -284,9 +278,7 @@ class Service:
             self._event_handlers[pattern] = []
         self._event_handlers[pattern].append(handler)
 
-    async def emit_event(
-        self, domain: str, event_type: str, payload: dict[str, Any]
-    ) -> None:
+    async def emit_event(self, domain: str, event_type: str, payload: dict[str, Any]) -> None:
         """Emit an event.
 
         Args:

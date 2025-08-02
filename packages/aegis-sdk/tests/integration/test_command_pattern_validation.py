@@ -21,9 +21,7 @@ class TestCommandPatternValidation:
         command_name = "process_batch"
         progress_updates = []
 
-        async def command_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def command_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             """Handler that reports progress during processing."""
             batch_size = cmd.payload.get("batch_size", 100)
 
@@ -45,9 +43,7 @@ class TestCommandPatternValidation:
             return {"processed_items": batch_size, "success": True, "duration": 0.4}
 
         # Register command handler
-        await nats_adapter.register_command_handler(
-            service, command_name, command_handler
-        )
+        await nats_adapter.register_command_handler(service, command_name, command_handler)
         await asyncio.sleep(0.1)
 
         # Create and send command
@@ -114,9 +110,7 @@ class TestCommandPatternValidation:
         command_name = "priority_task"
         execution_order = []
 
-        async def priority_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def priority_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             """Handler that tracks execution order."""
             execution_order.append(
                 {"id": cmd.payload["id"], "priority": cmd.priority, "time": time.time()}
@@ -125,9 +119,7 @@ class TestCommandPatternValidation:
             return {"id": cmd.payload["id"], "completed": True}
 
         # Register handler
-        await nats_adapter.register_command_handler(
-            service, command_name, priority_handler
-        )
+        await nats_adapter.register_command_handler(service, command_name, priority_handler)
         await asyncio.sleep(0.1)
 
         # Send commands with different priorities
@@ -196,9 +188,7 @@ class TestCommandPatternValidation:
         command_name = "flaky_operation"
         attempt_count = 0
 
-        async def flaky_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def flaky_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             """Handler that fails on first attempts."""
             nonlocal attempt_count
             attempt_count += 1
@@ -217,9 +207,7 @@ class TestCommandPatternValidation:
             }
 
         # Register handler
-        await nats_adapter.register_command_handler(
-            service, command_name, flaky_handler
-        )
+        await nats_adapter.register_command_handler(service, command_name, flaky_handler)
         await asyncio.sleep(0.1)
 
         # Test command with retry policy
@@ -264,9 +252,7 @@ class TestCommandPatternValidation:
         service = "notification_service"
         command_name = "notify_task"
 
-        async def notify_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def notify_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             """Handler that completes with notification data."""
             notification_type = cmd.payload.get("type", "info")
 
@@ -281,9 +267,7 @@ class TestCommandPatternValidation:
             }
 
         # Register handler
-        await nats_adapter.register_command_handler(
-            service, command_name, notify_handler
-        )
+        await nats_adapter.register_command_handler(service, command_name, notify_handler)
         await asyncio.sleep(0.1)
 
         # Send command and wait for completion
@@ -323,18 +307,14 @@ class TestCommandPatternValidation:
         nats_adapter._js.publish = capture_publish
 
         # Register a simple handler
-        async def test_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def test_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             return {"result": "ok"}
 
         await nats_adapter.register_command_handler(service, command_name, test_handler)
         await asyncio.sleep(0.1)
 
         # Send command
-        command = Command(
-            command=command_name, target=service, payload={"test": True}, timeout=5.0
-        )
+        command = Command(command=command_name, target=service, payload={"test": True}, timeout=5.0)
 
         await nats_adapter.send_command(command, track_progress=False)
 
@@ -352,9 +332,7 @@ class TestCommandPatternValidation:
         service = "timeout_service"
         command_name = "long_task"
 
-        async def long_handler(
-            cmd: Command, progress_callback: Callable
-        ) -> dict[str, Any]:
+        async def long_handler(cmd: Command, progress_callback: Callable) -> dict[str, Any]:
             """Handler that takes longer than timeout."""
             duration = cmd.payload.get("duration", 10)
             await asyncio.sleep(duration)
@@ -385,14 +363,9 @@ class TestCommandPatternValidation:
             command=command_name, target=service, payload={"duration": 0.1}, timeout=5.0
         )
 
-        result_success = await nats_adapter.send_command(
-            command_success, track_progress=True
-        )
+        result_success = await nats_adapter.send_command(command_success, track_progress=True)
         # Should complete successfully
-        assert (
-            "error" not in result_success
-            or result_success["error"] != "Command timeout"
-        )
+        assert "error" not in result_success or result_success["error"] != "Command timeout"
 
         # The completion data structure includes status and result
         if "status" in result_success:

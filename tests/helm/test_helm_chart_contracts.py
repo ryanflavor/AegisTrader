@@ -130,9 +130,7 @@ class HelmChartValidationService:
 
         return ServiceConfiguration(**service_config)
 
-    def validate_resource_limits(
-        self, values: dict[str, Any], service_name: str
-    ) -> Resources:
+    def validate_resource_limits(self, values: dict[str, Any], service_name: str) -> Resources:
         """Validate resource limits configuration."""
         resources = values.get(service_name, {}).get("resources", {})
         if not resources:
@@ -163,9 +161,7 @@ class HelmCliAdapter:
         ]
 
         if values:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
                 yaml.dump(values, f)
                 temp_values = f.name
             cmd.extend(["-f", temp_values])
@@ -329,9 +325,7 @@ class TestHelmChartContracts(unittest.TestCase):
         """Test all chart dependencies are properly resolved."""
         # Check Chart.lock exists
         chart_lock = self.helm_dir / "Chart.lock"
-        self.assertTrue(
-            chart_lock.exists(), "Chart.lock not found - dependencies not resolved"
-        )
+        self.assertTrue(chart_lock.exists(), "Chart.lock not found - dependencies not resolved")
 
         # Validate dependency resolution
         with open(chart_lock) as f:
@@ -345,9 +339,7 @@ class TestHelmChartContracts(unittest.TestCase):
         resolved_deps = [dep["name"] for dep in dependencies]
 
         for expected in expected_deps:
-            self.assertIn(
-                expected, resolved_deps, f"Dependency {expected} not resolved"
-            )
+            self.assertIn(expected, resolved_deps, f"Dependency {expected} not resolved")
 
     def test_values_override_inheritance(self) -> None:
         """Test values properly override from parent to subcharts."""

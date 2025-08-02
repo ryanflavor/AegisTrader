@@ -271,9 +271,7 @@ class HybridNATSDemo:
         if self.nc:
             await self.nc.publish(
                 SubjectPatterns.registry_register(),
-                json.dumps(
-                    {"instance_id": self.instance_id, "status": "SHUTDOWN"}
-                ).encode(),
+                json.dumps({"instance_id": self.instance_id, "status": "SHUTDOWN"}).encode(),
             )
 
         if self.nc:
@@ -332,9 +330,7 @@ class HybridNATSDemo:
 
             except Exception as e:
                 error_response = RPCResponse(
-                    correlation_id=(
-                        request.message_id if "request" in locals() else None
-                    ),
+                    correlation_id=(request.message_id if "request" in locals() else None),
                     source=self.instance_id,
                     success=False,
                     error=str(e),
@@ -599,9 +595,7 @@ async def demo_enhanced_features():
         # 1. Service Registration & Discovery
         print("\n🔍 Service Registry:")
         for _, instance in service1.service_registry.items():
-            print(
-                f"  - {instance.service_name}/{instance.instance_id}: {instance.status}"
-            )
+            print(f"  - {instance.service_name}/{instance.instance_id}: {instance.status}")
 
         # 2. RPC with Routing & Metrics
         print("\n🔵 RPC with Enhanced Features:")
@@ -647,9 +641,7 @@ async def demo_enhanced_features():
             total = data.get("count", 5)
 
             for i in range(total):
-                await report_progress(
-                    (i + 1) / total * 100, f"Processing payment {i + 1}/{total}"
-                )
+                await report_progress((i + 1) / total * 100, f"Processing payment {i + 1}/{total}")
                 await asyncio.sleep(0.1)
 
             return {"processed": total, "status": "success"}

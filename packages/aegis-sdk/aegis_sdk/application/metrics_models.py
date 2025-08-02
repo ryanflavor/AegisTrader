@@ -23,9 +23,7 @@ class MetricsSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
     uptime_seconds: float = Field(ge=0, description="Service uptime in seconds")
-    counters: dict[str, int] = Field(
-        default_factory=dict, description="Counter metrics"
-    )
+    counters: dict[str, int] = Field(default_factory=dict, description="Counter metrics")
     gauges: dict[str, float] = Field(default_factory=dict, description="Gauge metrics")
     summaries: dict[str, MetricsSummaryData] = Field(
         default_factory=dict, description="Summary statistics"

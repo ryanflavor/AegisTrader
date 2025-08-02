@@ -17,12 +17,31 @@ AegisTrader is an automated trading system built with modern microservices archi
 
 This project uses [uv](https://github.com/astral-sh/uv) for Python dependency management.
 
+### Setup
+
 ```bash
 # Sync dependencies
 uv sync
 
+# Set up pre-commit hooks
+./scripts/setup-pre-commit.sh
+
 # Run tests
 uv run pytest
+```
+
+### Pre-commit Hooks
+
+This project uses pre-commit hooks to ensure code quality. The hooks will automatically run on every commit to:
+- Format code with Black and isort
+- Lint with Ruff and MyPy
+- Check for security issues
+- Validate file formats (YAML, JSON, etc.)
+- Ensure proper commit messages
+
+To run hooks manually:
+```bash
+pre-commit run --all-files
 ```
 
 ## Deployment

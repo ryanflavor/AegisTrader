@@ -172,9 +172,7 @@ class TestNATSAdapterFailoverAndHealthChecks:
         mock_conn2 = Mock(spec=NATSClient)
         mock_conn2.is_connected = True
         mock_response = Mock()
-        mock_response.data = (
-            b'{"correlation_id":"123","success":true,"result":{"test":"data"}}'
-        )
+        mock_response.data = b'{"correlation_id":"123","success":true,"result":{"test":"data"}}'
         mock_conn2.request = AsyncMock(return_value=mock_response)
 
         adapter._connections = [mock_conn1, mock_conn2]
@@ -292,9 +290,7 @@ class TestNATSAdapterReconnection:
         adapter._js = mock_js
 
         # Always fail with JSON decode error
-        mock_js.publish = AsyncMock(
-            side_effect=json.JSONDecodeError("Empty response", "", 0)
-        )
+        mock_js.publish = AsyncMock(side_effect=json.JSONDecodeError("Empty response", "", 0))
 
         event = Event(
             domain="test",
@@ -302,9 +298,7 @@ class TestNATSAdapterReconnection:
             payload={"data": "test"},
         )
 
-        with pytest.raises(
-            Exception, match="JetStream publish failed after 3 attempts"
-        ):
+        with pytest.raises(Exception, match="JetStream publish failed after 3 attempts"):
             await adapter.publish_event(event)
 
         # Should have tried 3 times
@@ -421,9 +415,7 @@ class TestMessageBusPortCompliance:
         mock_nc.subscribe.assert_called_once()
 
         # Test specific subscription (uses JetStream)
-        await adapter.subscribe_event(
-            "events.order.created", event_handler, "test-durable"
-        )
+        await adapter.subscribe_event("events.order.created", event_handler, "test-durable")
         mock_js.subscribe.assert_called_once()
 
     async def test_command_interface_compliance(self):
@@ -441,9 +433,7 @@ class TestMessageBusPortCompliance:
             await progress(50, "Processing")
             return {"status": "completed"}
 
-        await adapter.register_command_handler(
-            "test_service", "test_command", command_handler
-        )
+        await adapter.register_command_handler("test_service", "test_command", command_handler)
 
         # Verify subscription was created
         mock_js.subscribe.assert_called_once()
@@ -510,9 +500,7 @@ class TestServiceLifecycle:
         assert service._start_time is not None
 
         # Verify service registration
-        mock_bus.register_service.assert_called_once_with(
-            "test_service", service.instance_id
-        )
+        mock_bus.register_service.assert_called_once_with("test_service", service.instance_id)
 
         # Verify handler registrations
         mock_bus.register_rpc_handler.assert_called_once_with(
@@ -559,9 +547,7 @@ class TestServiceLifecycle:
         assert heartbeat_task.cancelled()
 
         # Verify service unregistration
-        mock_bus.unregister_service.assert_called_once_with(
-            "test_service", service.instance_id
-        )
+        mock_bus.unregister_service.assert_called_once_with("test_service", service.instance_id)
 
     async def test_service_heartbeat_loop(self):
         """Test service heartbeat loop operation."""

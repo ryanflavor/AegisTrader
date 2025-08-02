@@ -74,9 +74,7 @@ class TestSingleActiveService:
 
         # Run one iteration of election
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            mock_sleep.side_effect = (
-                asyncio.CancelledError()
-            )  # Stop after first iteration
+            mock_sleep.side_effect = asyncio.CancelledError()  # Stop after first iteration
             with contextlib.suppress(asyncio.CancelledError):
                 await service._run_election()
 

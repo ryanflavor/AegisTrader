@@ -195,9 +195,7 @@ class TestEvent:
     def test_event_with_payload(self):
         """Test Event with payload."""
         payload = {"order_id": "123", "amount": 99.99}
-        event = Event(
-            domain="order", event_type="created", payload=payload, version="2.0"
-        )
+        event = Event(domain="order", event_type="created", payload=payload, version="2.0")
 
         assert event.domain == "order"
         assert event.event_type == "created"

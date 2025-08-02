@@ -153,9 +153,7 @@ class TestEventPatterns:
 
         class EventEmitter(Service):
             async def on_start(self):
-                await self.register_command_handler(
-                    "create_user", self.handle_create_user
-                )
+                await self.register_command_handler("create_user", self.handle_create_user)
 
             async def handle_create_user(self, command, progress):
                 user_id = command.payload.get("user_id")
@@ -292,9 +290,7 @@ class TestCommandPatterns:
 
         class WorkerService(Service):
             async def on_start(self):
-                await self.register_command_handler(
-                    "process_batch", self.handle_process_batch
-                )
+                await self.register_command_handler("process_batch", self.handle_process_batch)
 
             async def handle_process_batch(self, command, progress_reporter):
                 batch_size = command.payload.get("size", 100)
@@ -323,9 +319,7 @@ class TestCommandPatterns:
             await asyncio.sleep(0.2)
 
             # Execute command
-            command = Command(
-                target="worker", command="process_batch", payload={"size": 50}
-            )
+            command = Command(target="worker", command="process_batch", payload={"size": 50})
 
             result = await nats_adapter.send_command(command, track_progress=True)
 
@@ -353,9 +347,7 @@ class TestCommandPatterns:
 
         class RetryService(Service):
             async def on_start(self):
-                await self.register_command_handler(
-                    "flaky_operation", self.handle_flaky
-                )
+                await self.register_command_handler("flaky_operation", self.handle_flaky)
 
             async def handle_flaky(self, command, progress):
                 nonlocal attempt_count
@@ -387,9 +379,7 @@ class TestCommandPatterns:
             result = None
             for i in range(3):
                 try:
-                    result = await nats_adapter.send_command(
-                        command, track_progress=True
-                    )
+                    result = await nats_adapter.send_command(command, track_progress=True)
                     if result and result.get("result"):
                         break
                 except Exception:

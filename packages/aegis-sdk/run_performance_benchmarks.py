@@ -37,9 +37,7 @@ class PerformanceBenchmark:
 
         # Warmup
         for i in range(100):
-            await service.call_rpc(
-                "benchmark_service", "echo", {"message": f"warmup-{i}"}
-            )
+            await service.call_rpc("benchmark_service", "echo", {"message": f"warmup-{i}"})
 
         # Benchmark
         latencies = []
@@ -47,9 +45,7 @@ class PerformanceBenchmark:
 
         for i in range(test_calls):
             start = time.perf_counter()
-            result = await service.call_rpc(
-                "benchmark_service", "echo", {"message": f"test-{i}"}
-            )
+            result = await service.call_rpc("benchmark_service", "echo", {"message": f"test-{i}"})
             end = time.perf_counter()
             latencies.append((end - start) * 1000)
             assert result["echo"] == f"test-{i}"
@@ -99,9 +95,7 @@ class PerformanceBenchmark:
             tasks = []
             for i in range(batch_size):
                 event_num = batch * batch_size + i
-                task = service.publish_event(
-                    "benchmark", "test_event", {"index": event_num}
-                )
+                task = service.publish_event("benchmark", "test_event", {"index": event_num})
                 tasks.append(task)
             await asyncio.gather(*tasks)
 

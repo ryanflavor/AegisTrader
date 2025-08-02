@@ -72,10 +72,7 @@ class TestHealthStatus:
             HealthStatus(**status_data)
 
         errors = exc_info.value.errors()
-        assert any(
-            "NATS URL must start with nats:// or tls://" in str(error)
-            for error in errors
-        )
+        assert any("NATS URL must start with nats:// or tls://" in str(error) for error in errors)
 
     def test_invalid_version_format(self) -> None:
         """Test that invalid version formats are rejected."""

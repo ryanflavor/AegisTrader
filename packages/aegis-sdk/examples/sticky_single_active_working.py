@@ -49,9 +49,7 @@ class StickySingleActiveService:
     async def start(self):
         """Start service and election."""
         # Subscribe to heartbeats
-        await self.nc.subscribe(
-            f"{self.service_name}.heartbeat", cb=self._handle_heartbeat
-        )
+        await self.nc.subscribe(f"{self.service_name}.heartbeat", cb=self._handle_heartbeat)
 
         # Start election loop
         election_task = asyncio.create_task(self._election_loop())
@@ -213,9 +211,7 @@ async def send_commands(service_name: str, servers: list[str], count: int = 20):
 async def demo():
     """Run the demo."""
     servers = ["nats://localhost:4222"]
-    service_name = (
-        "sticky-order-service"  # Use different service name to avoid conflicts
-    )
+    service_name = "sticky-order-service"  # Use different service name to avoid conflicts
 
     # Clean up old streams
     try:
@@ -269,9 +265,7 @@ async def demo():
     print("\n=== Intermediate statistics ===")
     for instance in instances:
         if instance.processed_count > 0:
-            print(
-                f"{instance.instance_id}: Processed {instance.processed_count} commands"
-            )
+            print(f"{instance.instance_id}: Processed {instance.processed_count} commands")
 
     # Simulate active instance failure
     print("\n=== Simulating active instance failure ===")

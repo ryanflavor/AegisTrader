@@ -53,9 +53,7 @@ class MonitoringService:
         try:
             return await self._monitoring_port.get_system_status()
         except Exception as e:
-            raise ServiceUnavailableException(
-                f"Failed to get system status: {str(e)}"
-            ) from e
+            raise ServiceUnavailableException(f"Failed to get system status: {str(e)}") from e
 
     async def check_readiness(self) -> dict[str, str]:
         """Check if the service is ready to handle requests.
@@ -72,9 +70,7 @@ class MonitoringService:
                 raise ServiceUnavailableException("Service is not ready")
             return {"status": "ready"}
         except Exception as e:
-            raise ServiceUnavailableException(
-                f"Readiness check failed: {str(e)}"
-            ) from e
+            raise ServiceUnavailableException(f"Readiness check failed: {str(e)}") from e
 
     def get_welcome_message(self) -> dict[str, str]:
         """Get the welcome message for the root endpoint.
@@ -96,6 +92,4 @@ class MonitoringService:
         try:
             return await self._monitoring_port.get_detailed_health()
         except Exception as e:
-            raise HealthCheckFailedException(
-                f"Failed to get detailed health: {str(e)}"
-            ) from e
+            raise HealthCheckFailedException(f"Failed to get detailed health: {str(e)}") from e

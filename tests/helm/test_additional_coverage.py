@@ -76,9 +76,7 @@ class TestConfigMapTemplates:
 
     def test_monitor_api_configmap_structure(self, helm_dir: Path) -> None:
         """Test that monitor-api ConfigMap has correct structure."""
-        api_configmap = (
-            helm_dir / "charts" / "monitor-api" / "templates" / "configmap.yaml"
-        )
+        api_configmap = helm_dir / "charts" / "monitor-api" / "templates" / "configmap.yaml"
         assert api_configmap.exists(), "monitor-api ConfigMap not found"
 
         content = api_configmap.read_text()
@@ -90,9 +88,7 @@ class TestConfigMapTemplates:
 
     def test_environment_variable_templating(self, helm_dir: Path) -> None:
         """Test environment variables are properly templated."""
-        api_configmap = (
-            helm_dir / "charts" / "monitor-api" / "templates" / "configmap.yaml"
-        )
+        api_configmap = helm_dir / "charts" / "monitor-api" / "templates" / "configmap.yaml"
         content = api_configmap.read_text()
 
         # Check for proper templating
@@ -193,9 +189,7 @@ class TestDeploymentAdvanced:
         self, helm_dir: Path, service: str, init_container: str, wait_for: str
     ) -> None:
         """Test init containers have proper wait logic."""
-        deployment_file = (
-            helm_dir / "charts" / service / "templates" / "deployment.yaml"
-        )
+        deployment_file = helm_dir / "charts" / service / "templates" / "deployment.yaml"
         content = deployment_file.read_text()
 
         # Check init container configuration
@@ -235,9 +229,7 @@ class TestNATSConfiguration:
         assert values["nats"]["container"]["env"]["GOMEMLIMIT"] == "7GiB"
 
         # Verify it's ~90% of memory limit
-        memory_limit = values["nats"]["container"]["merge"]["resources"]["limits"][
-            "memory"
-        ]
+        memory_limit = values["nats"]["container"]["merge"]["resources"]["limits"]["memory"]
         assert memory_limit == "8Gi"
 
     def test_nats_topology_constraints(self, helm_dir: Path) -> None:
@@ -249,10 +241,7 @@ class TestNATSConfiguration:
         constraints = values["nats"]["podTemplate"]["topologySpreadConstraints"]
         assert "kubernetes.io/hostname" in constraints
         assert constraints["kubernetes.io/hostname"]["maxSkew"] == 1
-        assert (
-            constraints["kubernetes.io/hostname"]["whenUnsatisfiable"]
-            == "DoNotSchedule"
-        )
+        assert constraints["kubernetes.io/hostname"]["whenUnsatisfiable"] == "DoNotSchedule"
 
 
 class TestServiceRegistry:

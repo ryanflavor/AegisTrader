@@ -153,9 +153,7 @@ class TestPerformanceMetrics:
         print(f"Throughput: {events_per_second:,.0f} events/s")
 
         # Verify throughput is reasonable for mocked environment
-        assert (
-            events_per_second > 5000
-        ), f"Throughput {events_per_second:,.0f} below threshold"
+        assert events_per_second > 5000, f"Throughput {events_per_second:,.0f} below threshold"
 
     async def test_memory_footprint_estimation(self):
         """Estimate memory usage per service instance."""
@@ -223,9 +221,7 @@ class TestPerformanceMetrics:
             await service.stop()
 
         # Verify memory usage is reasonable
-        assert (
-            avg_per_service < 50
-        ), f"Memory usage {avg_per_service:.1f}MB exceeds threshold"
+        assert avg_per_service < 50, f"Memory usage {avg_per_service:.1f}MB exceeds threshold"
 
     async def test_concurrent_operations_performance(self):
         """Test performance under concurrent load."""
@@ -238,9 +234,7 @@ class TestPerformanceMetrics:
             mock_nc = Mock()
             mock_nc.is_connected = True
             mock_nc.request = AsyncMock(
-                return_value=Mock(
-                    data=b'{"correlation_id":"test","success":true,"result":{}}'
-                )
+                return_value=Mock(data=b'{"correlation_id":"test","success":true,"result":{}}')
             )
             mock_connections.append(mock_nc)
 
@@ -251,17 +245,13 @@ class TestPerformanceMetrics:
 
         async def make_rpc_call(index: int) -> float:
             start = time.perf_counter()
-            request = RPCRequest(
-                method="test", params={"index": index}, target="service"
-            )
+            request = RPCRequest(method="test", params={"index": index}, target="service")
             await adapter.call_rpc(request)
             return (time.perf_counter() - start) * 1000
 
         # Execute concurrent calls
         start_time = time.perf_counter()
-        latencies = await asyncio.gather(
-            *[make_rpc_call(i) for i in range(concurrent_calls)]
-        )
+        latencies = await asyncio.gather(*[make_rpc_call(i) for i in range(concurrent_calls)])
         total_duration = (time.perf_counter() - start_time) * 1000
 
         # Calculate metrics
@@ -277,12 +267,8 @@ class TestPerformanceMetrics:
         print(f"Throughput: {calls_per_second:.0f} calls/s")
 
         # Verify performance under load
-        assert (
-            mean_latency < 50
-        ), f"Mean latency {mean_latency:.3f}ms too high under load"
-        assert (
-            calls_per_second > 100
-        ), f"Throughput {calls_per_second:.0f} calls/s too low"
+        assert mean_latency < 50, f"Mean latency {mean_latency:.3f}ms too high under load"
+        assert calls_per_second > 100, f"Throughput {calls_per_second:.0f} calls/s too low"
 
     def test_generate_performance_summary(self):
         """Generate a summary of performance characteristics."""
@@ -336,7 +322,9 @@ Based on unit test simulations, the AegisSDK demonstrates the following performa
 """
 
         # Write summary to file
-        summary_path = "/home/ryan/workspace/github/AegisTrader/packages/aegis-sdk/performance_summary.md"
+        summary_path = (
+            "/home/ryan/workspace/github/AegisTrader/packages/aegis-sdk/performance_summary.md"
+        )
         with open(summary_path, "w") as f:
             f.write(summary)
 

@@ -14,9 +14,9 @@ from nats.js import JetStreamContext
 from ..domain.models import Command, Event, RPCRequest, RPCResponse
 from ..domain.patterns import SubjectPatterns
 from ..domain.value_objects import InstanceId, ServiceName
-from ..infrastructure.metrics_adapter import MetricsAdapter
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
+from .in_memory_metrics import InMemoryMetrics
 from .serialization import (
     SerializationError,
     deserialize_params,
@@ -47,7 +47,7 @@ class NATSAdapter(MessageBusPort):
         self._connections: list[NATSClient] = []
         self._js: JetStreamContext | None = None
         self._current_conn = 0
-        self._metrics = metrics or MetricsAdapter()
+        self._metrics = metrics or InMemoryMetrics()
         self._use_msgpack = use_msgpack
 
     async def connect(self, servers: list[str]) -> None:

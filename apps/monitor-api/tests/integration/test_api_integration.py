@@ -25,9 +25,7 @@ class TestAPIIntegration:
 
         # Assert
         assert response.status_code == 200
-        assert response.json() == {
-            "message": "Welcome to AegisTrader Management Service"
-        }
+        assert response.json() == {"message": "Welcome to AegisTrader Management Service"}
 
     def test_health_endpoint(self, client: TestClient) -> None:
         """Test the health check endpoint."""

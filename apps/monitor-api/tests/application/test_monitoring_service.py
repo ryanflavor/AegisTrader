@@ -42,9 +42,7 @@ class TestMonitoringService:
     """Test cases for MonitoringService."""
 
     @pytest.mark.asyncio
-    async def test_get_health_status_success(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_get_health_status_success(self, monitoring_service, mock_monitoring_port):
         """Test successfully getting health status."""
         # Arrange
         expected_health = HealthStatus(
@@ -63,9 +61,7 @@ class TestMonitoringService:
         mock_monitoring_port.check_health.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_health_status_failure(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_get_health_status_failure(self, monitoring_service, mock_monitoring_port):
         """Test handling health check failures."""
         # Arrange
         mock_monitoring_port.check_health.side_effect = Exception("Connection failed")
@@ -78,9 +74,7 @@ class TestMonitoringService:
         assert exc_info.value.error_code == "HEALTH_CHECK_FAILED"
 
     @pytest.mark.asyncio
-    async def test_get_system_status_success(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_get_system_status_success(self, monitoring_service, mock_monitoring_port):
         """Test successfully getting system status."""
         # Arrange
         now = datetime.now()
@@ -102,9 +96,7 @@ class TestMonitoringService:
         mock_monitoring_port.get_system_status.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_system_status_failure(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_get_system_status_failure(self, monitoring_service, mock_monitoring_port):
         """Test handling system status retrieval failures."""
         # Arrange
         mock_monitoring_port.get_system_status.side_effect = Exception("Database error")
@@ -117,9 +109,7 @@ class TestMonitoringService:
         assert exc_info.value.error_code == "SERVICE_UNAVAILABLE"
 
     @pytest.mark.asyncio
-    async def test_check_readiness_when_ready(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_check_readiness_when_ready(self, monitoring_service, mock_monitoring_port):
         """Test readiness check when service is ready."""
         # Arrange
         mock_monitoring_port.is_ready.return_value = True
@@ -132,9 +122,7 @@ class TestMonitoringService:
         mock_monitoring_port.is_ready.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_check_readiness_when_not_ready(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_check_readiness_when_not_ready(self, monitoring_service, mock_monitoring_port):
         """Test readiness check when service is not ready."""
         # Arrange
         mock_monitoring_port.is_ready.return_value = False
@@ -147,9 +135,7 @@ class TestMonitoringService:
         assert exc_info.value.error_code == "SERVICE_UNAVAILABLE"
 
     @pytest.mark.asyncio
-    async def test_check_readiness_failure(
-        self, monitoring_service, mock_monitoring_port
-    ):
+    async def test_check_readiness_failure(self, monitoring_service, mock_monitoring_port):
         """Test handling readiness check failures."""
         # Arrange
         mock_monitoring_port.is_ready.side_effect = Exception("Connection timeout")

@@ -62,9 +62,7 @@ class SingleActiveProcessor:
                     data = json.loads(msg.data.decode())
                     self.order_count += 1
 
-                    print(
-                        f"📦 {self.instance_id} processing order #{self.order_count}: {data}"
-                    )
+                    print(f"📦 {self.instance_id} processing order #{self.order_count}: {data}")
 
                     # Simulate processing time
                     await asyncio.sleep(2)

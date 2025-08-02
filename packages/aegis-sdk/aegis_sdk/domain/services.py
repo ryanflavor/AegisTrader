@@ -96,9 +96,7 @@ class MetricsNamingService:
         return f"rpc.{service.value}.{method.value}.{suffix}"
 
     @staticmethod
-    def rpc_client_metric_name(
-        service: ServiceName, method: MethodName, suffix: str
-    ) -> str:
+    def rpc_client_metric_name(service: ServiceName, method: MethodName, suffix: str) -> str:
         """Generate RPC client metric name.
 
         Args:
