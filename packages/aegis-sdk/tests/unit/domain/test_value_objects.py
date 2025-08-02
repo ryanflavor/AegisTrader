@@ -1,15 +1,8 @@
 """Comprehensive tests for domain value objects following TDD principles."""
 
 import pytest
+from aegis_sdk.domain.value_objects import EventType, InstanceId, MethodName, Priority, ServiceName
 from pydantic import ValidationError
-
-from aegis_sdk.domain.value_objects import (
-    EventType,
-    InstanceId,
-    MethodName,
-    Priority,
-    ServiceName,
-)
 
 
 class TestServiceName:
@@ -84,7 +77,7 @@ class TestServiceName:
         assert service1 != service3
         assert service1 != "other-service"
         assert service1 != 123
-        assert service1 != None
+        assert service1 is not None
 
     def test_service_name_hashable(self):
         """Test that ServiceName can be used in sets and dicts."""
@@ -380,7 +373,7 @@ class TestPriority:
 
         # Invalid comparison
         with pytest.raises(TypeError):
-            low < "string"
+            assert low < "string"
 
     def test_priority_immutability(self):
         """Test that Priority is immutable."""

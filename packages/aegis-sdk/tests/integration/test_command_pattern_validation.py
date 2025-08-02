@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-
 from aegis_sdk.domain.models import Command
 from aegis_sdk.domain.patterns import SubjectPatterns
 
@@ -62,10 +61,7 @@ class TestCommandPatternValidation:
             async def progress_handler(msg):
                 import json
 
-                from aegis_sdk.infrastructure.serialization import (
-                    deserialize_params,
-                    is_msgpack,
-                )
+                from aegis_sdk.infrastructure.serialization import deserialize_params, is_msgpack
 
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
                     data = deserialize_params(msg.data, nats_adapter._use_msgpack)

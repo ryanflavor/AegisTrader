@@ -109,6 +109,6 @@ output: JSON encoded map with 1 key:
       {{- end -}}
     {{- end -}}
   {{- end -}}
-  
+
   {{- toJson (dict "patch" $patch) -}}
 {{- end -}}

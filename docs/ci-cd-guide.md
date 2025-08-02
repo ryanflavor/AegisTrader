@@ -56,7 +56,7 @@ These are configured in the workflow file:
 
 Images are tagged using the following convention:
 
-- **Main branch**: 
+- **Main branch**:
   - `latest` (always points to the most recent main build)
   - `main-{sha}` (first 7 characters of commit SHA)
 - **Pull requests**: `pr-{number}-{sha}`

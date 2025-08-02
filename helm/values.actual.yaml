@@ -1,6 +1,6 @@
 # Override ALL image settings to use actual images from Story 0.1
 
-# Override the default aegis-trader/monitor-api 
+# Override the default aegis-trader/monitor-api
 monitor-api:
   image:
     repository: aegistrader-monitor-api

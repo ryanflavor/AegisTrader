@@ -6,7 +6,6 @@ import contextlib
 from datetime import datetime
 
 import pytest
-
 from aegis_sdk.application.service import Service
 from aegis_sdk.application.single_active_service import SingleActiveService
 from aegis_sdk.domain.models import Command, Event

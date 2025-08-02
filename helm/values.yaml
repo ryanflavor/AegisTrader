@@ -120,7 +120,7 @@ monitor-api:
     # NATS_URL 将在部署模板中动态生成
     NATS_KV_BUCKET: "service-registry"
 
-# Monitor UI (Next.js) Configuration  
+# Monitor UI (Next.js) Configuration
 monitor-ui:
   enabled: true
   replicaCount: 1

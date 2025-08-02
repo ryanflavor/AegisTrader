@@ -10,12 +10,7 @@ from datetime import datetime
 
 import psutil
 
-from ..domain.models import (
-    DetailedHealthStatus,
-    HealthStatus,
-    ServiceConfiguration,
-    SystemStatus,
-)
+from ..domain.models import DetailedHealthStatus, HealthStatus, ServiceConfiguration, SystemStatus
 from ..ports.monitoring import MonitoringPort
 
 

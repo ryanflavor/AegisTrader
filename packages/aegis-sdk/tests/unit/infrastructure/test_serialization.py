@@ -4,7 +4,6 @@ import json
 
 import msgpack
 import pytest
-
 from aegis_sdk.domain.exceptions import SerializationError
 from aegis_sdk.domain.models import Event, Message, RPCRequest
 from aegis_sdk.infrastructure.serialization import (

@@ -11,13 +11,13 @@ echo ""
 if command -v kubectl &> /dev/null && kubectl cluster-info &> /dev/null 2>&1; then
     echo "Real Kubernetes cluster detected!"
     echo "Running actual deployment test..."
-    
+
     # Use the real validation script
     exec ./scripts/validate-deployment.sh "$@"
 else
     echo "No Kubernetes cluster available - running in simulation mode"
     echo ""
-    
+
     # Simulate deployment steps
     echo "1. Checking prerequisites..."
     for tool in helm kubectl; do
@@ -27,7 +27,7 @@ else
             echo "   ✗ $tool not found (would fail in real deployment)"
         fi
     done
-    
+
     echo ""
     echo "2. Validating Helm charts..."
     if command -v helm &> /dev/null; then
@@ -35,7 +35,7 @@ else
     else
         echo "   ⚠ Helm not available - skipping lint"
     fi
-    
+
     echo ""
     echo "3. Simulating deployment sequence..."
     echo "   → Creating namespace: aegis-trader"
@@ -46,7 +46,7 @@ else
     echo "   → Waiting for API pod to be ready..."
     echo "   → Installing Monitor UI"
     echo "   → Waiting for UI pod to be ready..."
-    
+
     echo ""
     echo "4. Expected deployment state:"
     echo "   Pods:"
@@ -56,19 +56,19 @@ else
     echo "   - aegis-trader-monitor-api-xxxxx         Running"
     echo "   - aegis-trader-monitor-ui-xxxxx          Running"
     echo "   - aegis-trader-create-kv-bucket-xxxxx    Completed"
-    
+
     echo ""
     echo "   Services:"
     echo "   - aegis-trader-nats         ClusterIP   10.x.x.x   4222/TCP"
     echo "   - aegis-trader-monitor-api  ClusterIP   10.x.x.x   8100/TCP"
     echo "   - aegis-trader-monitor-ui   ClusterIP   10.x.x.x   3100/TCP"
-    
+
     echo ""
     echo "   PVCs:"
     echo "   - aegis-trader-nats-js-aegis-trader-nats-0   Bound   10Gi"
     echo "   - aegis-trader-nats-js-aegis-trader-nats-1   Bound   10Gi"
     echo "   - aegis-trader-nats-js-aegis-trader-nats-2   Bound   10Gi"
-    
+
     echo ""
     echo "5. Connectivity tests (simulated):"
     echo "   ✓ NATS cluster formed successfully"
@@ -76,7 +76,7 @@ else
     echo "   ✓ KV bucket 'service-registry' created"
     echo "   ✓ Management API connected to NATS"
     echo "   ✓ Monitor UI connected to Management API"
-    
+
     echo ""
     echo "=== Simulation Summary ==="
     echo "All deployment steps would execute successfully in a real K8s environment."
@@ -86,7 +86,7 @@ else
     echo "  2. Run: make install"
     echo "  3. Validate: ./scripts/validate-deployment.sh"
     echo ""
-    
+
     # Exit successfully to indicate tests "passed"
     exit 0
 fi

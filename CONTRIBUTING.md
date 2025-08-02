@@ -152,18 +152,18 @@ async def process_trade_signal(
     confidence: float
 ) -> Optional[dict[str, Any]]:
     """Process incoming trade signal and return action if applicable.
-    
+
     Args:
         symbol: Trading symbol (e.g., "BTCUSDT")
         signal_type: Type of signal ("buy", "sell", "hold")
         confidence: Confidence level (0.0 to 1.0)
-        
+
     Returns:
         Action dict if trade should be executed, None otherwise
     """
     if confidence < 0.7:
         return None
-        
+
     return {
         "action": signal_type,
         "symbol": symbol,

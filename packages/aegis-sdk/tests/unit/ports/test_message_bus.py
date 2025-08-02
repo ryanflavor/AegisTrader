@@ -4,7 +4,6 @@ from abc import ABC
 from unittest.mock import AsyncMock
 
 import pytest
-
 from aegis_sdk.domain.models import Command, Event, RPCRequest, RPCResponse
 from aegis_sdk.ports.message_bus import MessageBusPort
 

@@ -11,7 +11,7 @@
 - **Lines 138-141**: SerializationError handling fallback in RPC handler
   - Edge case where auto-detection of message format fails
   - Falls back to JSON parsing after msgpack detection fails
-  
+
 - **Lines 189-190**: RPC target parsing edge case
   - Handles targets without proper service.method format
   - Currently not covered by tests

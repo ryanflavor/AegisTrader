@@ -16,18 +16,12 @@ import json
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from nats.aio.client import Client as NATSClient
-from nats.errors import TimeoutError as NATSTimeoutError
-
 from aegis_sdk.application.service import Service
-from aegis_sdk.domain.models import (
-    Command,
-    Event,
-    RPCRequest,
-    ServiceInfo,
-)
+from aegis_sdk.domain.models import Command, Event, RPCRequest, ServiceInfo
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.ports.message_bus import MessageBusPort
+from nats.aio.client import Client as NATSClient
+from nats.errors import TimeoutError as NATSTimeoutError
 
 
 @pytest.mark.asyncio

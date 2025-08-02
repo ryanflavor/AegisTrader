@@ -22,16 +22,16 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Cache Python dependencies
       uses: actions/cache@v3
       with:
@@ -39,7 +39,7 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
-          
+
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
@@ -56,34 +56,34 @@ jobs:
         if [ -f packages/aegis-sdk/requirements-dev.txt ]; then
           pip install -r packages/aegis-sdk/requirements-dev.txt
         fi
-        
+
     - name: Set up pre-commit
       run: |
         pip install pre-commit
         pre-commit install --install-hooks
-        
+
     - name: Run pre-commit checks
       run: |
         pre-commit run --all-files --show-diff-on-failure
-        
+
     - name: Run tests with coverage
       run: |
         pip install pytest pytest-cov pytest-asyncio
         pytest --cov=. --cov-report=xml --cov-report=term --cov-fail-under=80
-        
+
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
-        
+
   build:
     name: Build Docker Images
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    
+
     strategy:
       matrix:
         include:
@@ -93,14 +93,14 @@ jobs:
           - service: monitor-ui
             context: .
             dockerfile: ./apps/monitor-ui/Dockerfile
-            
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
+
     - name: Log in to GitHub Container Registry
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: docker/login-action@v3
@@ -108,7 +108,7 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-        
+
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
@@ -119,7 +119,7 @@ jobs:
           type=ref,event=pr
           type=sha,prefix={{branch}}-,format=short
           type=raw,value=latest,enable={{is_default_branch}}
-          
+
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
@@ -131,41 +131,41 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        
+
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
         image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ steps.meta.outputs.version }}
         format: 'sarif'
         output: 'trivy-results-${{ matrix.service }}.sarif'
-        
+
     - name: Upload Trivy scan results
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
-        
+
   deploy-staging:
     name: Deploy to Staging
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'realAnthony/AegisTrader'
     environment: staging
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Install kubectl
       uses: azure/setup-kubectl@v3
       with:
         version: 'v1.28.0'
-        
+
     - name: Install Helm
       uses: azure/setup-helm@v3
       with:
         version: 'v3.13.0'
-        
+
     - name: Configure kubectl
       run: |
         # Check if KUBE_CONFIG secret is set
@@ -174,27 +174,27 @@ jobs:
           echo "Please add KUBE_CONFIG secret in GitHub repository settings"
           exit 1
         fi
-        
+
         mkdir -p ~/.kube
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
         chmod 600 ~/.kube/config
-        
+
         # Verify kubectl can connect
         kubectl version --short || {
           echo "Error: Unable to connect to Kubernetes cluster"
           echo "Please verify KUBE_CONFIG secret is valid"
           exit 1
         }
-        
+
     - name: Create staging namespace
       run: |
         kubectl create namespace aegis-staging --dry-run=client -o yaml | kubectl apply -f -
-        
+
     - name: Generate Helm values for staging
       run: |
         cd helm
         ./generate-helm-values.sh
-        
+
     - name: Deploy to staging with Helm
       run: |
         cd helm
@@ -204,33 +204,33 @@ jobs:
           --set global.imageTag=${{ github.sha }} \
           --timeout 10m \
           --wait
-          
+
     - name: Verify deployment
       run: |
         # Wait for all deployments to be ready
         kubectl -n aegis-staging wait --for=condition=available --timeout=300s deployment --all
-        
+
         # Check NATS cluster health
         kubectl -n aegis-staging exec -it deployment/nats-box -- nats server ping
-        
+
         # Check service endpoints
         kubectl -n aegis-staging get endpoints
-        
+
         # Check pod status
         kubectl -n aegis-staging get pods
-        
+
     - name: Run smoke tests
       run: |
         # Get service URLs
         MONITOR_API_URL=$(kubectl -n aegis-staging get svc monitor-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}'):8100
         MONITOR_UI_URL=$(kubectl -n aegis-staging get svc monitor-ui -o jsonpath='{.status.loadBalancer.ingress[0].ip}'):3100
-        
+
         # Test API health endpoint
         curl -f http://${MONITOR_API_URL}/health || exit 1
-        
+
         # Test UI is responding
         curl -f http://${MONITOR_UI_URL} || exit 1
-        
+
     - name: Rollback on failure
       if: failure()
       run: |

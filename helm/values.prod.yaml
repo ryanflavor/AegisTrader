@@ -7,7 +7,7 @@ monitor-api:
     tag: latest
     pullPolicy: IfNotPresent
 
-# Use actual monitor-ui image  
+# Use actual monitor-ui image
 monitor-ui:
   image:
     repository: aegistrader-monitor-ui

@@ -50,7 +50,8 @@ exclude = [
     "packages/.*/tests/.*",
     "apps/.*/tests/.*",
     "packages/aegis-sdk/reference/.*",
-    "packages/aegis-sdk/examples/.*"
+    "packages/aegis-sdk/examples/.*",
+    "tests/"
 ]
 
 [tool.ruff]

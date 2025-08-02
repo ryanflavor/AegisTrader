@@ -22,7 +22,7 @@ monitor-api:
         path: /
         port: http
 
-# Override monitor-ui image  
+# Override monitor-ui image
 monitor-ui:
   image:
     repository: nginx

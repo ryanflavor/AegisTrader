@@ -11,10 +11,10 @@ To learn more about the release, try:
 
 NATS Cluster:
   The NATS cluster has been deployed with {{ .Values.nats.replicas }} replicas.
-  
+
   To connect to NATS from within the cluster:
     URL: {{ include "aegis-trader.natsUrl" . }}
-  
+
   To check NATS cluster status:
     $ kubectl exec -it {{ .Release.Name }}-nats-0 -- nats server check jetstream
 {{- end }}
@@ -23,9 +23,9 @@ NATS Cluster:
 
 Management Service (FastAPI):
   The Management Service is running on port {{ index .Values "monitor-api" "service" "port" }}.
-  
+
   Internal URL: {{ include "aegis-trader.monitorApiUrl" . }}
-  
+
   To check service health:
     $ kubectl exec -it deploy/{{ .Release.Name }}-monitor-api -- curl http://localhost:{{ index .Values "monitor-api" "service" "port" }}/health
 {{- end }}
@@ -34,17 +34,17 @@ Management Service (FastAPI):
 
 Monitor UI (Next.js):
   The Monitor UI is running on port {{ index .Values "monitor-ui" "service" "port" }}.
-  
+
   {{- if index .Values "monitor-ui" "ingress" "enabled" }}
   External Access:
     {{- range $host := index .Values "monitor-ui" "ingress" "hosts" }}
     http{{ if index $.Values "monitor-ui" "ingress" "tls" }}s{{ end }}://{{ $host.host }}{{ range $path := $host.paths }}{{ $path.path }}{{ end }}
     {{- end }}
   {{- else }}
-  
+
   To access the UI locally:
     $ kubectl port-forward svc/{{ .Release.Name }}-monitor-ui {{ index .Values "monitor-ui" "service" "port" }}:{{ index .Values "monitor-ui" "service" "port" }}
-    
+
   Then visit http://localhost:{{ index .Values "monitor-ui" "service" "port" }} in your browser.
   {{- end }}
 {{- end }}

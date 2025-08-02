@@ -4,7 +4,6 @@ import asyncio
 import time
 
 import pytest
-
 from aegis_sdk.domain.models import Event
 from aegis_sdk.domain.patterns import SubjectPatterns
 

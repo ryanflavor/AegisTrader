@@ -9,10 +9,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from app.application.monitoring_service import MonitoringService
-from app.domain.exceptions import (
-    HealthCheckFailedException,
-    ServiceUnavailableException,
-)
+from app.domain.exceptions import HealthCheckFailedException, ServiceUnavailableException
 from app.domain.models import HealthStatus, SystemStatus
 from app.ports.configuration import ConfigurationPort
 from app.ports.monitoring import MonitoringPort

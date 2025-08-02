@@ -21,7 +21,7 @@ spec:
     - |
       set -e
       echo "Testing Management API connectivity..."
-      
+
       # Wait for API to be ready
       for i in $(seq 1 30); do
         if nc -z {{ .Release.Name }}-monitor-api {{ index .Values "monitor-api" "service" "port" }}; then
@@ -31,7 +31,7 @@ spec:
         echo "Waiting for API... ($i/30)"
         sleep 2
       done
-      
+
       # Test health endpoint
       if wget -qO- http://{{ .Release.Name }}-monitor-api:{{ index .Values "monitor-api" "service" "port" }}/health; then
         echo "✓ Health endpoint responding"
@@ -39,6 +39,6 @@ spec:
         echo "✗ Health endpoint failed"
         exit 1
       fi
-      
+
       echo "All API tests passed!"
 {{- end }}

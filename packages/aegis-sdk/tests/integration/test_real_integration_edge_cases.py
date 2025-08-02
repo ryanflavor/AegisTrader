@@ -3,7 +3,6 @@
 import asyncio
 
 import pytest
-
 from aegis_sdk.domain.models import Command, Event, RPCRequest
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 

@@ -47,24 +47,24 @@ spec:
           set -eo pipefail
           NATS_URL="{{ include "aegis-trader.natsUrl" . }}"
           BUCKET="{{ .Values.serviceRegistry.bucketName }}"
-          
+
           # Wait a bit for NATS to be fully ready
           echo "Waiting for NATS to be ready..."
           sleep 10
-          
+
           # Try to create bucket with retries
           MAX_RETRIES=10
           RETRY_COUNT=0
-          
+
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to check/create KV bucket..."
-            
+
             # Check if bucket exists
             if nats kv ls --server="$NATS_URL" 2>/dev/null | grep -q "^${BUCKET}$"; then
               echo "KV bucket '$BUCKET' already exists"
               exit 0
             fi
-            
+
             # Try to create bucket
             if nats kv add "$BUCKET" --server="$NATS_URL" \
               --replicas={{ .Values.serviceRegistry.bucket.replicas }} \
@@ -77,14 +77,14 @@ spec:
               echo "KV bucket '$BUCKET' created successfully"
               exit 0
             fi
-            
+
             RETRY_COUNT=$((RETRY_COUNT + 1))
             if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
               echo "Failed to create bucket, retrying in 5 seconds..."
               sleep 5
             fi
           done
-          
+
           echo "Failed to create KV bucket after $MAX_RETRIES attempts"
           exit 1
 {{- end }}

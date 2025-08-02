@@ -221,10 +221,10 @@ async def demo():
             await js.delete_stream(f"{service_name}_COMMANDS")
             print("🧹 Cleaned old stream")
         except Exception:
-            pass
+            pass  # nosec B110 - Stream cleanup is optional
         await nc.close()
     except Exception:
-        pass
+        pass  # nosec B110 - Connection cleanup is optional
 
     # Start 2 instances (simplified demo)
     instances = []

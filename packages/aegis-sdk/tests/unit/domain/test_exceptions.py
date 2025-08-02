@@ -1,7 +1,6 @@
 """Tests for domain exceptions."""
 
 import pytest
-
 from aegis_sdk.domain.exceptions import (
     AegisError,
     CommandError,

@@ -6,11 +6,7 @@ import time
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-
-from aegis_sdk.application.single_active_service import (
-    SingleActiveService,
-    exclusive_rpc,
-)
+from aegis_sdk.application.single_active_service import SingleActiveService, exclusive_rpc
 from aegis_sdk.domain.models import Event
 
 

@@ -9,9 +9,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import pytest
-
 from aegis_sdk.domain.models import Command, Event
 from aegis_sdk.ports.message_bus import MessageBusPort
+
 from tests.builders import CommandBuilder, EventBuilder, RPCRequestBuilder
 
 

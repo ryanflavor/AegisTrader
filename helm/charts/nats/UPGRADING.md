@@ -33,7 +33,7 @@ statefulSet:
   - op: remove
     path: /spec/selector/matchLabels/app.kubernetes.io~1component
   - $tplYamlSpread: |-
-      {{- if and 
+      {{- if and
         .Values.config.jetstream.enabled
         .Values.config.jetstream.fileStore.enabled
         .Values.config.jetstream.fileStore.pvc.enabled

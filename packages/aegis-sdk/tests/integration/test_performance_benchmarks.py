@@ -17,12 +17,11 @@ from typing import Any
 
 import psutil
 import pytest
-from testcontainers.compose import DockerCompose
-
 from aegis_sdk.application.service import Service
 from aegis_sdk.domain.models import Event
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.ports.message_bus import MessageBusPort
+from testcontainers.compose import DockerCompose
 
 
 class BenchmarkMetrics:
@@ -265,9 +264,7 @@ class TestPerformanceBenchmarks:
         print(f"Total memory used: {total_memory_used:.1f}MB")
         print(f"Number of services: {num_instances}")
         print(f"Average memory per service: {avg_memory_per_service:.1f}MB")
-        print(
-            f"Memory per service breakdown: {[f'{m:.1f}MB' for m in metrics.memory_usage_mb]}"
-        )
+        print(f"Memory per service breakdown: {[f'{m:.1f}MB' for m in metrics.memory_usage_mb]}")
 
         # Cleanup
         for service in services:

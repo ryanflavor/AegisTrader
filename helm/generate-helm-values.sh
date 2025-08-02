@@ -19,7 +19,7 @@ monitor-api:
     API_PORT: "${API_PORT:-8100}"
   waitForNatsPort: ${NATS_PORT:-4222}
 
-# Monitor UI configuration  
+# Monitor UI configuration
 monitor-ui:
   service:
     port: ${UI_PORT:-3100}

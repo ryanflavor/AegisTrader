@@ -7,13 +7,7 @@ making tests more readable and maintainable.
 from typing import Any
 
 from aegis_sdk.domain.models import Command, Event, RPCRequest, RPCResponse, ServiceInfo
-from aegis_sdk.domain.value_objects import (
-    EventType,
-    InstanceId,
-    MethodName,
-    Priority,
-    ServiceName,
-)
+from aegis_sdk.domain.value_objects import EventType, InstanceId, MethodName, Priority, ServiceName
 
 
 class RPCRequestBuilder:

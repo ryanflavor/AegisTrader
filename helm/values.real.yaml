@@ -7,7 +7,7 @@ monitor-api:
     tag: latest
     pullPolicy: Never  # Never pull since we loaded locally
 
-# Use actual monitor-ui image  
+# Use actual monitor-ui image
 monitor-ui:
   image:
     repository: aegistrader-monitor-ui

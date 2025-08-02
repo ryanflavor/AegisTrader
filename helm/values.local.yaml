@@ -7,7 +7,7 @@ monitor-api:
     pullPolicy: IfNotPresent
 
 monitor-ui:
-  enabled: true  
+  enabled: true
   image:
     repository: nginx
     tag: alpine

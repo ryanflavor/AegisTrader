@@ -9,7 +9,7 @@ aegis-sdk/
 ├── domain/              # Core business logic
 │   ├── models.py       # Pydantic models (Message, RPCRequest, Event, Command)
 │   └── patterns.py     # Subject pattern management
-├── application/        # Use cases and service orchestration  
+├── application/        # Use cases and service orchestration
 │   ├── service.py      # Service base class with decorators
 │   └── metrics.py      # Simple metrics collection
 ├── ports/              # Abstract interfaces

@@ -175,7 +175,7 @@ Create your own values file:
 # my-values.yaml
 nats:
   replicas: 5
-  
+
 monitor-api:
   replicaCount: 3
   resources:
@@ -198,7 +198,7 @@ monitor-api:
     repository: myregistry.io/aegis-trader/monitor-api
     tag: "v1.0.0"
     pullPolicy: Always
-    
+
 monitor-ui:
   image:
     repository: myregistry.io/aegis-trader/monitor-ui

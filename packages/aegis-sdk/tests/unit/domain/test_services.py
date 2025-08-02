@@ -1,13 +1,13 @@
 """Comprehensive tests for domain services following TDD principles."""
 
 import pytest
-
 from aegis_sdk.domain.services import (
     HealthCheckService,
     MessageRoutingService,
     MetricsNamingService,
 )
 from aegis_sdk.domain.value_objects import MethodName, ServiceName
+
 from tests.builders import CommandBuilder, EventBuilder, RPCRequestBuilder
 
 
@@ -223,9 +223,7 @@ class TestHealthCheckService:
                 "events.processed": 50,
                 "events.errors": 0,
             },
-            "summaries": {
-                "rpc.latency": {"p99": 100}  # Low latency
-            },
+            "summaries": {"rpc.latency": {"p99": 100}},  # Low latency
         }
 
         score = service.calculate_health_score(metrics)
@@ -271,9 +269,7 @@ class TestHealthCheckService:
 
         metrics = {
             "counters": {},
-            "summaries": {
-                "rpc.service.method": {"p99": 1500}  # Very high latency
-            },
+            "summaries": {"rpc.service.method": {"p99": 1500}},  # Very high latency
         }
 
         score = service.calculate_health_score(metrics)
@@ -286,9 +282,7 @@ class TestHealthCheckService:
 
         metrics = {
             "counters": {},
-            "summaries": {
-                "rpc.service.method": {"p99": 750}  # Moderate latency
-            },
+            "summaries": {"rpc.service.method": {"p99": 750}},  # Moderate latency
         }
 
         score = service.calculate_health_score(metrics)
@@ -306,9 +300,7 @@ class TestHealthCheckService:
                 "events.processed": 90,
                 "events.errors": 10,  # 10% error rate
             },
-            "summaries": {
-                "rpc.service.method": {"p99": 1200}  # High latency
-            },
+            "summaries": {"rpc.service.method": {"p99": 1200}},  # High latency
         }
 
         score = service.calculate_health_score(metrics)

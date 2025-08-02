@@ -3,7 +3,6 @@
 import asyncio
 
 import pytest
-
 from aegis_sdk.domain.models import Command, Event
 
 

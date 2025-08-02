@@ -16,9 +16,7 @@ from fastapi.responses import JSONResponse
 
 from .domain.exceptions import DomainException
 from .domain.models import ServiceError
-from .infrastructure.api.dependencies import (
-    get_configuration_port,
-)
+from .infrastructure.api.dependencies import get_configuration_port
 from .infrastructure.api.routes import router
 
 # Configure logging

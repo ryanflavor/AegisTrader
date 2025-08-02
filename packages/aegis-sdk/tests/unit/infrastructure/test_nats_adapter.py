@@ -5,12 +5,11 @@ import json
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from nats.aio.client import Client as NATSClient
-from nats.js import JetStreamContext
-
 from aegis_sdk.domain.models import Command, Event, RPCRequest, RPCResponse
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.infrastructure.serialization import serialize_to_msgpack
+from nats.aio.client import Client as NATSClient
+from nats.js import JetStreamContext
 
 
 class TestNATSAdapterInitialization:

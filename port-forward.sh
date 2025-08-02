@@ -19,14 +19,14 @@ case "$1" in
         # 先停止已有的
         pkill -f "kubectl port-forward" 2>/dev/null || true
         sleep 1
-        
+
         # 启动新的端口转发
         kubectl port-forward svc/${UI_SERVICE_NAME} ${UI_PORT}:${UI_PORT} -n ${K8S_NAMESPACE} > /tmp/ui-port-forward.log 2>&1 &
         kubectl port-forward svc/${API_SERVICE_NAME} ${API_PORT}:${API_PORT} -n ${K8S_NAMESPACE} > /tmp/api-port-forward.log 2>&1 &
         kubectl port-forward svc/${NATS_SERVICE_NAME} ${NATS_PORT}:${NATS_PORT} -n ${K8S_NAMESPACE} > /tmp/nats-port-forward.log 2>&1 &
-        
+
         sleep 2
-        
+
         # 检查状态
         if pgrep -f "kubectl port-forward" > /dev/null 2>&1; then
             echo "✅ 端口转发已启动"
@@ -40,19 +40,19 @@ case "$1" in
             exit 1
         fi
         ;;
-        
+
     stop)
         echo "🛑 停止端口转发..."
         pkill -f "kubectl port-forward" 2>/dev/null || true
         sleep 1
-        
+
         if pgrep -f "kubectl port-forward" > /dev/null 2>&1; then
             echo "⚠️  仍有端口转发进程在运行"
         else
             echo "✅ 所有端口转发已停止"
         fi
         ;;
-        
+
     status)
         echo "📊 端口转发状态:"
         if pgrep -f "kubectl port-forward" > /dev/null 2>&1; then
@@ -61,7 +61,7 @@ case "$1" in
             echo "   无活动的端口转发进程"
         fi
         ;;
-        
+
     *)
         echo "用法: $0 {start|stop|status}"
         exit 1

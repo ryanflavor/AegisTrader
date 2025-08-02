@@ -22,14 +22,14 @@ spec:
       echo "Testing NATS connectivity..."
       nats server check connection --server={{ include "aegis-trader.natsUrl" . }}
       echo "✓ NATS connection successful"
-      
+
       echo "Testing JetStream..."
       nats server check jetstream --server={{ include "aegis-trader.natsUrl" . }}
       echo "✓ JetStream is enabled"
-      
+
       echo "Checking KV bucket..."
       nats kv ls --server={{ include "aegis-trader.natsUrl" . }} | grep -q "{{ .Values.serviceRegistry.bucketName }}"
       echo "✓ KV bucket '{{ .Values.serviceRegistry.bucketName }}' exists"
-      
+
       echo "All NATS tests passed!"
 {{- end }}

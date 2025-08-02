@@ -14,7 +14,7 @@ This secret contains the base64-encoded kubeconfig file for accessing your Kuber
    ```bash
    # If using a local cluster
    cat ~/.kube/config
-   
+
    # If using a specific kubeconfig
    cat /path/to/your/kubeconfig
    ```
@@ -23,7 +23,7 @@ This secret contains the base64-encoded kubeconfig file for accessing your Kuber
    ```bash
    # On Linux/Mac
    base64 -w 0 ~/.kube/config > kubeconfig.b64
-   
+
    # On Mac (alternative)
    base64 -i ~/.kube/config -o kubeconfig.b64
    ```

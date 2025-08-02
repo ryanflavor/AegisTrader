@@ -8,12 +8,7 @@ from datetime import datetime
 from typing import Any
 
 import pytest
-from app.domain.models import (
-    HealthStatus,
-    ServiceConfiguration,
-    ServiceError,
-    SystemStatus,
-)
+from app.domain.models import HealthStatus, ServiceConfiguration, ServiceError, SystemStatus
 from pydantic import ValidationError
 
 
