@@ -88,10 +88,10 @@ jobs:
       matrix:
         include:
           - service: monitor-api
-            context: ./apps/monitor-api
+            context: .
             dockerfile: ./apps/monitor-api/Dockerfile
           - service: monitor-ui
-            context: ./apps/monitor-ui
+            context: .
             dockerfile: ./apps/monitor-ui/Dockerfile
             
     steps:
@@ -140,7 +140,7 @@ jobs:
         output: 'trivy-results-${{ matrix.service }}.sarif'
         
     - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
