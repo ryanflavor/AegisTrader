@@ -5,7 +5,7 @@ It contains the business logic for health checks and system status.
 """
 
 from ..domain.exceptions import HealthCheckFailedException, ServiceUnavailableException
-from ..domain.models import HealthStatus, SystemStatus
+from ..domain.models import DetailedHealthStatus, HealthStatus, SystemStatus
 from ..ports.configuration import ConfigurationPort
 from ..ports.monitoring import MonitoringPort
 
@@ -83,3 +83,19 @@ class MonitoringService:
             dict: Welcome message
         """
         return {"message": "Welcome to AegisTrader Management Service"}
+
+    async def get_detailed_health_status(self) -> DetailedHealthStatus:
+        """Get detailed health status with system metrics.
+
+        Returns:
+            DetailedHealthStatus: Detailed health information
+
+        Raises:
+            HealthCheckFailedException: If unable to get detailed health
+        """
+        try:
+            return await self._monitoring_port.get_detailed_health()
+        except Exception as e:
+            raise HealthCheckFailedException(
+                f"Failed to get detailed health: {str(e)}"
+            ) from e

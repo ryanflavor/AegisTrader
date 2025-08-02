@@ -88,6 +88,7 @@ async def domain_exception_handler(
     error = ServiceError(
         detail=exc.message,
         error_code=exc.error_code,
+        trace_id=None,
     )
 
     return JSONResponse(
@@ -104,6 +105,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     error = ServiceError(
         detail="An internal server error occurred",
         error_code="INTERNAL_ERROR",
+        trace_id=None,
     )
 
     return JSONResponse(

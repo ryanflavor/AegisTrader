@@ -39,13 +39,40 @@ class SystemStatusResponse(BaseModel):
     deployment_version: str
 
 
+class SystemMetrics(BaseModel):
+    """System resource metrics."""
+
+    cpu_percent: float
+    memory_percent: float
+    disk_usage_percent: float
+
+
+class DependencyStatus(BaseModel):
+    """Status of a dependency."""
+
+    status: str
+    latency_ms: float
+
+
+class DetailedHealthResponse(BaseModel):
+    """API response model for detailed health endpoint."""
+
+    status: str
+    service: str
+    version: str
+    system_metrics: SystemMetrics
+    dependencies: dict[str, DependencyStatus]
+
+
 # Create router
 router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(
+        get_monitoring_service
+    ),  # noqa: B008
 ) -> HealthResponse:
     """Health check endpoint with service status."""
     try:
@@ -68,7 +95,9 @@ async def health_check(
 
 @router.get("/")
 async def root(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(
+        get_monitoring_service
+    ),  # noqa: B008
 ) -> dict[str, str]:
     """Root endpoint with welcome message."""
     return monitoring_service.get_welcome_message()
@@ -76,7 +105,9 @@ async def root(
 
 @router.get("/ready")
 async def readiness_check(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(
+        get_monitoring_service
+    ),  # noqa: B008
 ) -> dict[str, str]:
     """Readiness check endpoint for Kubernetes."""
     try:
@@ -93,7 +124,9 @@ async def readiness_check(
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def system_status(
-    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(
+        get_monitoring_service
+    ),  # noqa: B008
 ) -> SystemStatusResponse:
     """Get current system status with deployment information."""
     try:
@@ -108,6 +141,41 @@ async def system_status(
     except DomainException as e:
         raise HTTPException(
             status_code=500,
+            detail=ErrorResponse(
+                detail=e.message,
+                error_code=e.error_code,
+            ).model_dump(),
+        ) from e
+
+
+@router.get("/health/detailed", response_model=DetailedHealthResponse)
+async def detailed_health_check(
+    monitoring_service: MonitoringService = Depends(
+        get_monitoring_service
+    ),  # noqa: B008
+) -> DetailedHealthResponse:
+    """Detailed health check endpoint with system metrics and dependencies."""
+    try:
+        detailed_health = await monitoring_service.get_detailed_health_status()
+        return DetailedHealthResponse(
+            status=detailed_health.status,
+            service=detailed_health.service_name,
+            version=detailed_health.version,
+            system_metrics=SystemMetrics(
+                cpu_percent=detailed_health.cpu_percent,
+                memory_percent=detailed_health.memory_percent,
+                disk_usage_percent=detailed_health.disk_usage_percent,
+            ),
+            dependencies={
+                "nats": DependencyStatus(
+                    status=detailed_health.nats_status,
+                    latency_ms=detailed_health.nats_latency_ms,
+                )
+            },
+        )
+    except DomainException as e:
+        raise HTTPException(
+            status_code=503,
             detail=ErrorResponse(
                 detail=e.message,
                 error_code=e.error_code,

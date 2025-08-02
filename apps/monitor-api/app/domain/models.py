@@ -103,3 +103,37 @@ class ServiceConfiguration(BaseModel):
         if not v.startswith(("nats://", "tls://")):
             raise ValueError("NATS URL must start with nats:// or tls://")
         return v
+
+
+class DetailedHealthStatus(BaseModel):
+    """Domain model for detailed health status with system metrics."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    # Basic health info
+    status: Literal["healthy", "unhealthy", "degraded"] = Field(
+        ..., description="Health status of the service"
+    )
+    service_name: str = Field(..., description="Service name", min_length=1)
+    version: str = Field(..., description="Service version", pattern=r"^\d+\.\d+\.\d+$")
+
+    # System metrics
+    cpu_percent: float = Field(..., ge=0, le=100, description="CPU usage percentage")
+    memory_percent: float = Field(
+        ..., ge=0, le=100, description="Memory usage percentage"
+    )
+    disk_usage_percent: float = Field(
+        ..., ge=0, le=100, description="Disk usage percentage"
+    )
+
+    # Dependencies status
+    nats_status: Literal["healthy", "unhealthy"] = Field(
+        ..., description="NATS connection status"
+    )
+    nats_latency_ms: float = Field(
+        ..., ge=0, description="NATS latency in milliseconds"
+    )
+
+    timestamp: datetime = Field(
+        default_factory=datetime.now, description="Status timestamp"
+    )

@@ -89,3 +89,33 @@ class TestAPIIntegration:
         # DELETE should not be allowed
         response = client.delete(endpoint)
         assert response.status_code == 405
+
+    def test_health_check_detailed_endpoint(self, client: TestClient) -> None:
+        """Test the detailed health check endpoint with comprehensive system info."""
+        # Act
+        response = client.get("/health/detailed")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check basic health status
+        assert data["status"] == "healthy"
+        assert data["service"] == "management-service"
+
+        # Check system metrics
+        assert "system_metrics" in data
+        metrics = data["system_metrics"]
+        assert "cpu_percent" in metrics
+        assert "memory_percent" in metrics
+        assert "disk_usage_percent" in metrics
+        assert 0 <= metrics["cpu_percent"] <= 100
+        assert 0 <= metrics["memory_percent"] <= 100
+        assert 0 <= metrics["disk_usage_percent"] <= 100
+
+        # Check dependencies status
+        assert "dependencies" in data
+        deps = data["dependencies"]
+        assert "nats" in deps
+        assert deps["nats"]["status"] in ["healthy", "unhealthy"]
+        assert "latency_ms" in deps["nats"]

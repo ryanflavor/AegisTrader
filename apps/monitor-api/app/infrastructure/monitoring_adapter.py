@@ -3,10 +3,19 @@
 Concrete implementation of the MonitoringPort interface.
 """
 
+import asyncio
 import os
+import time
 from datetime import datetime
 
-from ..domain.models import HealthStatus, ServiceConfiguration, SystemStatus
+import psutil
+
+from ..domain.models import (
+    DetailedHealthStatus,
+    HealthStatus,
+    ServiceConfiguration,
+    SystemStatus,
+)
 from ..ports.monitoring import MonitoringPort
 
 
@@ -73,3 +82,37 @@ class MonitoringAdapter(MonitoringPort):
         # In a real implementation, this would check if all dependencies are ready
         # For now, we'll return True after a basic check
         return self._start_time is not None
+
+    async def get_detailed_health(self) -> DetailedHealthStatus:
+        """Get detailed health status with system metrics.
+
+        Returns:
+            DetailedHealthStatus: Detailed health information
+        """
+        # Get system metrics
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory_info = psutil.virtual_memory()
+        disk_info = psutil.disk_usage("/")
+
+        # Check NATS connection (simulated)
+        nats_start = time.time()
+        # In real implementation, this would ping NATS
+        await self._simulate_nats_check()
+        nats_latency = (time.time() - nats_start) * 1000  # Convert to ms
+
+        return DetailedHealthStatus(
+            status="healthy",
+            service_name="management-service",
+            version="0.1.0",
+            cpu_percent=cpu_percent,
+            memory_percent=memory_info.percent,
+            disk_usage_percent=disk_info.percent,
+            nats_status="healthy",
+            nats_latency_ms=nats_latency,
+            timestamp=datetime.now(),
+        )
+
+    async def _simulate_nats_check(self) -> None:
+        """Simulate NATS connection check."""
+        # Simulate network latency
+        await asyncio.sleep(0.01)  # 10ms simulated latency

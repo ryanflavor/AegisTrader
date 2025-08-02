@@ -8,7 +8,7 @@ by infrastructure adapters.
 from abc import ABC, abstractmethod
 from datetime import datetime
 
-from ..domain.models import HealthStatus, SystemStatus
+from ..domain.models import DetailedHealthStatus, HealthStatus, SystemStatus
 
 
 class MonitoringPort(ABC):
@@ -53,5 +53,17 @@ class MonitoringPort(ABC):
 
         Returns:
             bool: True if service is ready, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def get_detailed_health(self) -> DetailedHealthStatus:
+        """Get detailed health status with system metrics.
+
+        Returns:
+            DetailedHealthStatus: Detailed health information including metrics
+
+        Raises:
+            HealthCheckFailedException: If unable to get detailed health
         """
         pass
