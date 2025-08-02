@@ -70,9 +70,7 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    monitoring_service: MonitoringService = Depends(
-        get_monitoring_service
-    ),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> HealthResponse:
     """Health check endpoint with service status."""
     try:
@@ -95,9 +93,7 @@ async def health_check(
 
 @router.get("/")
 async def root(
-    monitoring_service: MonitoringService = Depends(
-        get_monitoring_service
-    ),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> dict[str, str]:
     """Root endpoint with welcome message."""
     return monitoring_service.get_welcome_message()
@@ -105,9 +101,7 @@ async def root(
 
 @router.get("/ready")
 async def readiness_check(
-    monitoring_service: MonitoringService = Depends(
-        get_monitoring_service
-    ),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> dict[str, str]:
     """Readiness check endpoint for Kubernetes."""
     try:
@@ -124,9 +118,7 @@ async def readiness_check(
 
 @router.get("/status", response_model=SystemStatusResponse)
 async def system_status(
-    monitoring_service: MonitoringService = Depends(
-        get_monitoring_service
-    ),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> SystemStatusResponse:
     """Get current system status with deployment information."""
     try:
@@ -150,9 +142,7 @@ async def system_status(
 
 @router.get("/health/detailed", response_model=DetailedHealthResponse)
 async def detailed_health_check(
-    monitoring_service: MonitoringService = Depends(
-        get_monitoring_service
-    ),  # noqa: B008
+    monitoring_service: MonitoringService = Depends(get_monitoring_service),  # noqa: B008
 ) -> DetailedHealthResponse:
     """Detailed health check endpoint with system metrics and dependencies."""
     try:
