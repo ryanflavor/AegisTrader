@@ -246,7 +246,7 @@ class TestCommandPatternValidation:
                     break
             except Exception:
                 if retry < command.max_retries:
-                    await asyncio.sleep(0.1 * (2 ** retry))  # Exponential backoff
+                    await asyncio.sleep(0.1 * (2**retry))  # Exponential backoff
                     continue
                 raise
 

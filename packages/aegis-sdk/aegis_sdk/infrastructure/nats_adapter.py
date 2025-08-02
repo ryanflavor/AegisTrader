@@ -164,9 +164,9 @@ class NATSAdapter(MessageBusPort):
                 except Exception as e:
                     # Error response
                     response = RPCResponse(
-                        correlation_id=request.message_id
-                        if "request" in locals()
-                        else None,
+                        correlation_id=(
+                            request.message_id if "request" in locals() else None
+                        ),
                         success=False,
                         error=str(e),
                     )
@@ -323,7 +323,7 @@ class NATSAdapter(MessageBusPort):
                     # This is the empty response issue from NATS server
                     if attempt < max_retries - 1:
                         # Retry with exponential backoff
-                        await asyncio.sleep(retry_delay * (2 ** attempt))
+                        await asyncio.sleep(retry_delay * (2**attempt))
                         continue
                     else:
                         # Final attempt failed, raise the error
@@ -462,7 +462,7 @@ class NATSAdapter(MessageBusPort):
                     break  # Success
                 except json.JSONDecodeError as e:
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(retry_delay * (2 ** attempt))
+                        await asyncio.sleep(retry_delay * (2**attempt))
                         continue
                     else:
                         self._metrics.increment("commands.send.json_errors")

@@ -332,9 +332,9 @@ class HybridNATSDemo:
 
             except Exception as e:
                 error_response = RPCResponse(
-                    correlation_id=request.message_id
-                    if "request" in locals()
-                    else None,
+                    correlation_id=(
+                        request.message_id if "request" in locals() else None
+                    ),
                     source=self.instance_id,
                     success=False,
                     error=str(e),
