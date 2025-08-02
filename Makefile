@@ -220,6 +220,9 @@ nats-logs: ## 查看 NATS 日志
 port-forward: ## 设置端口转发
 	@./port-forward.sh start
 
+.PHONY: dev-forward
+dev-forward: port-forward ## 启动端口转发访问服务 (别名)
+
 .PHONY: stop-forward
 stop-forward: ## 停止端口转发
 	@./port-forward.sh stop
