@@ -33,19 +33,19 @@ class TestNATSAdapterInitialization:
         assert adapter._connections == []
         assert adapter._js is None
 
-    @patch("aegis_sdk.infrastructure.nats_adapter.get_metrics")
-    def test_init_creates_metrics(self, mock_get_metrics):
+    @patch("aegis_sdk.infrastructure.nats_adapter.MetricsAdapter")
+    def test_init_creates_metrics(self, mock_metrics_adapter):
         """Test that initialization gets metrics instance."""
         mock_metrics = Mock()
         mock_metrics.gauge = Mock()
         mock_metrics.increment = Mock()
         mock_metrics.timer = Mock()
         mock_metrics.get_all = Mock()
-        mock_get_metrics.return_value = mock_metrics
+        mock_metrics_adapter.return_value = mock_metrics
 
         adapter = NATSAdapter()
         assert adapter._metrics == mock_metrics
-        mock_get_metrics.assert_called_once()
+        mock_metrics_adapter.assert_called_once()
 
 
 class TestNATSAdapterConnection:

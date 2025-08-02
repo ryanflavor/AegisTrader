@@ -11,10 +11,12 @@ from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
 
-from ..application.metrics import get_metrics
 from ..domain.models import Command, Event, RPCRequest, RPCResponse
 from ..domain.patterns import SubjectPatterns
+from ..domain.value_objects import InstanceId, ServiceName
+from ..infrastructure.metrics_adapter import MetricsAdapter
 from ..ports.message_bus import MessageBusPort
+from ..ports.metrics import MetricsPort
 from .serialization import (
     SerializationError,
     deserialize_params,
@@ -28,18 +30,24 @@ from .serialization import (
 class NATSAdapter(MessageBusPort):
     """NATS implementation of the message bus port."""
 
-    def __init__(self, pool_size: int = 1, use_msgpack: bool = True):
+    def __init__(
+        self,
+        pool_size: int = 1,
+        use_msgpack: bool = True,
+        metrics: MetricsPort | None = None,
+    ):
         """Initialize NATS adapter.
 
         Args:
             pool_size: Number of connections to maintain (default: 1)
             use_msgpack: Whether to use MessagePack for serialization (default: True)
+            metrics: Optional metrics port. If not provided, uses default adapter.
         """
         self._pool_size = pool_size
         self._connections: list[NATSClient] = []
         self._js: JetStreamContext | None = None
         self._current_conn = 0
-        self._metrics = get_metrics()
+        self._metrics = metrics or MetricsAdapter()
         self._use_msgpack = use_msgpack
 
     async def connect(self, servers: list[str]) -> None:
@@ -132,16 +140,12 @@ class NATSAdapter(MessageBusPort):
         async def wrapper(msg: Msg) -> None:
             with self._metrics.timer(f"rpc.{service}.{method}"):
                 try:
-                    # Parse request
-                    if isinstance(msg.data, bytes):
-                        try:
-                            request = detect_and_deserialize(msg.data, RPCRequest)
-                        except SerializationError:
-                            # Try the other format if auto-detection fails
-                            data = msg.data.decode()
-                            request = RPCRequest(**json.loads(data))
-                    else:
-                        data = msg.data
+                    # Parse request - msg.data is always bytes in NATS
+                    try:
+                        request = detect_and_deserialize(msg.data, RPCRequest)
+                    except SerializationError:
+                        # Try the other format if auto-detection fails
+                        data = msg.data.decode()
                         request = RPCRequest(**json.loads(data))
 
                     # Call handler
@@ -164,9 +168,7 @@ class NATSAdapter(MessageBusPort):
                 except Exception as e:
                     # Error response
                     response = RPCResponse(
-                        correlation_id=(
-                            request.message_id if "request" in locals() else None
-                        ),
+                        correlation_id=(request.message_id if "request" in locals() else None),
                         success=False,
                         error=str(e),
                     )
@@ -216,12 +218,8 @@ class NATSAdapter(MessageBusPort):
                     timeout=request.timeout,
                 )
 
-                # Parse response
-                if isinstance(response_msg.data, bytes):
-                    response = detect_and_deserialize(response_msg.data, RPCResponse)
-                else:
-                    data = response_msg.data
-                    response = RPCResponse(**json.loads(data))
+                # Parse response - response_msg.data is always bytes in NATS
+                response = detect_and_deserialize(response_msg.data, RPCResponse)
                 self._metrics.increment(f"rpc.client.{service}.{method}.success")
                 return response
 
@@ -254,11 +252,8 @@ class NATSAdapter(MessageBusPort):
         async def wrapper(msg: Msg) -> None:
             try:
                 # Parse event
-                if isinstance(msg.data, bytes):
-                    event = detect_and_deserialize(msg.data, Event)
-                else:
-                    data = msg.data
-                    event = Event(**json.loads(data))
+                # Parse event - msg.data is always bytes in NATS
+                event = detect_and_deserialize(msg.data, Event)
 
                 # Call handler
                 await handler(event)
@@ -266,9 +261,7 @@ class NATSAdapter(MessageBusPort):
                 # Acknowledge only if JetStream message
                 if hasattr(msg, "ack"):
                     await msg.ack()
-                self._metrics.increment(
-                    f"events.processed.{event.domain}.{event.event_type}"
-                )
+                self._metrics.increment(f"events.processed.{event.domain}.{event.event_type}")
 
             except Exception as e:
                 print(f"Event handler error: {e}")
@@ -315,9 +308,7 @@ class NATSAdapter(MessageBusPort):
                         subject,
                         event_data,
                     )
-                    self._metrics.increment(
-                        f"events.published.{event.domain}.{event.event_type}"
-                    )
+                    self._metrics.increment(f"events.published.{event.domain}.{event.event_type}")
                     return  # Success
                 except json.JSONDecodeError as e:
                     # This is the empty response issue from NATS server
@@ -346,11 +337,8 @@ class NATSAdapter(MessageBusPort):
         async def wrapper(msg: Msg) -> None:
             try:
                 # Parse command
-                if isinstance(msg.data, bytes):
-                    cmd = detect_and_deserialize(msg.data, Command)
-                else:
-                    data = msg.data
-                    cmd = Command(**json.loads(data))
+                # Parse command - msg.data is always bytes in NATS
+                cmd = detect_and_deserialize(msg.data, Command)
 
                 # Progress reporter
                 async def report_progress(percent: float, status: str = "processing"):
@@ -401,9 +389,7 @@ class NATSAdapter(MessageBusPort):
             manual_ack=True,
         )
 
-    async def send_command(
-        self, command: Command, track_progress: bool = True
-    ) -> dict[str, Any]:
+    async def send_command(self, command: Command, track_progress: bool = True) -> dict[str, Any]:
         """Send a command."""
         if not self._js:
             raise Exception("JetStream not initialized")
@@ -418,9 +404,7 @@ class NATSAdapter(MessageBusPort):
 
             async def progress_handler(msg: Msg) -> None:
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
-                    progress_updates.append(
-                        deserialize_params(msg.data, self._use_msgpack)
-                    )
+                    progress_updates.append(deserialize_params(msg.data, self._use_msgpack))
                 else:
                     progress_updates.append(json.loads(msg.data.decode()))
 
@@ -473,9 +457,7 @@ class NATSAdapter(MessageBusPort):
         if track_progress:
             # Wait for completion
             start_time = time.time()
-            while (
-                completion_data is None and (time.time() - start_time) < command.timeout
-            ):
+            while completion_data is None and (time.time() - start_time) < command.timeout:
                 await asyncio.sleep(0.1)
 
             # Cleanup
@@ -493,10 +475,14 @@ class NATSAdapter(MessageBusPort):
     # Service Registration
     async def register_service(self, service_name: str, instance_id: str) -> None:
         """Register service instance."""
+        # Validate inputs using value objects
+        service = ServiceName(value=service_name)
+        instance = InstanceId(value=instance_id)
+
         nc = self._get_connection()
         registration_data = {
-            "service_name": service_name,
-            "instance_id": instance_id,
+            "service_name": str(service),
+            "instance_id": str(instance),
             "timestamp": time.time(),
         }
         await nc.publish(
@@ -507,10 +493,14 @@ class NATSAdapter(MessageBusPort):
 
     async def unregister_service(self, service_name: str, instance_id: str) -> None:
         """Unregister service instance."""
+        # Validate inputs using value objects
+        service = ServiceName(value=service_name)
+        instance = InstanceId(value=instance_id)
+
         nc = self._get_connection()
         unregistration_data = {
-            "service_name": service_name,
-            "instance_id": instance_id,
+            "service_name": str(service),
+            "instance_id": str(instance),
             "timestamp": time.time(),
         }
         await nc.publish(
@@ -521,14 +511,18 @@ class NATSAdapter(MessageBusPort):
 
     async def send_heartbeat(self, service_name: str, instance_id: str) -> None:
         """Send service heartbeat."""
+        # Validate inputs using value objects
+        service = ServiceName(value=service_name)
+        instance = InstanceId(value=instance_id)
+
         nc = self._get_connection()
         heartbeat_data = {
-            "instance_id": instance_id,
+            "instance_id": str(instance),
             "timestamp": time.time(),
             "metrics": self._metrics.get_all(),
         }
         await nc.publish(
-            SubjectPatterns.heartbeat(service_name),
+            SubjectPatterns.heartbeat(str(service)),
             json.dumps(heartbeat_data).encode(),
         )
         self._metrics.increment("heartbeats.sent")

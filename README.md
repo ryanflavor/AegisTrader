@@ -28,3 +28,25 @@ uv run pytest
 ## Deployment
 
 See `helm/README.md` for Kubernetes deployment instructions.
+
+## CI/CD Setup
+
+The project includes GitHub Actions CI/CD pipeline for automated testing and deployment.
+
+### Quick Setup
+
+1. **Configure Kubernetes access for CI/CD:**
+   ```bash
+   ./scripts/setup-ci-cd.sh
+   ```
+
+2. **Add the KUBE_CONFIG secret to GitHub:**
+   - Go to Settings → Secrets and variables → Actions
+   - Add `KUBE_CONFIG` secret with the content from `scripts/ci-kubeconfig.b64`
+
+3. **Pipeline will automatically:**
+   - Run tests on all pull requests
+   - Build and push Docker images on main branch
+   - Deploy to staging environment
+
+For detailed setup instructions, see [docs/github-actions-setup.md](docs/github-actions-setup.md).

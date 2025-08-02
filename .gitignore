@@ -170,6 +170,12 @@ helm/values.deployment.yaml
 secrets/
 .secrets/
 
+# CI/CD generated files
+ci-kubeconfig
+ci-kubeconfig.b64
+*-kubeconfig
+*-kubeconfig.b64
+
 # Package lock files (optional - uncomment if you want to ignore)
 # package-lock.json
 # yarn.lock

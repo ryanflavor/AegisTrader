@@ -155,7 +155,7 @@ jobs:
     name: Deploy to Staging
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'realAnthony/AegisTrader'
     environment: staging
     
     steps:
@@ -174,9 +174,23 @@ jobs:
         
     - name: Configure kubectl
       run: |
+        # Check if KUBE_CONFIG secret is set
+        if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+          echo "Error: KUBE_CONFIG secret is not set"
+          echo "Please add KUBE_CONFIG secret in GitHub repository settings"
+          exit 1
+        fi
+        
         mkdir -p ~/.kube
         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
         chmod 600 ~/.kube/config
+        
+        # Verify kubectl can connect
+        kubectl version --short || {
+          echo "Error: Unable to connect to Kubernetes cluster"
+          echo "Please verify KUBE_CONFIG secret is valid"
+          exit 1
+        }
         
     - name: Create staging namespace
       run: |
