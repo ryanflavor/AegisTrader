@@ -172,7 +172,7 @@ class HybridNATSDemo:
         try:
             await self.js.stream_info("EVENTS")
             print("✅ Using existing EVENTS stream")
-        except:
+        except Exception:
             await self.js.add_stream(
                 name="EVENTS",
                 subjects=["events.>"],
@@ -187,7 +187,7 @@ class HybridNATSDemo:
         try:
             await self.js.stream_info("COMMANDS")
             print("✅ Using existing COMMANDS stream")
-        except:
+        except Exception:
             await self.js.add_stream(
                 name="COMMANDS",
                 subjects=["commands.>"],
@@ -648,7 +648,7 @@ async def demo_enhanced_features():
 
             for i in range(total):
                 await report_progress(
-                    (i + 1) / total * 100, f"Processing payment {i+1}/{total}"
+                    (i + 1) / total * 100, f"Processing payment {i + 1}/{total}"
                 )
                 await asyncio.sleep(0.1)
 

@@ -16,7 +16,7 @@ def serialize_to_msgpack(obj: BaseModel) -> bytes:
     try:
         # Convert to dict first, handling datetime objects
         data = obj.model_dump(mode="json")
-        return msgpack.packb(data, use_bin_type=True)
+        return bytes(msgpack.packb(data, use_bin_type=True))
     except Exception as e:
         raise SerializationError(f"Failed to serialize to msgpack: {e}") from e
 
@@ -86,7 +86,7 @@ def serialize_dict(data: dict[str, Any], use_msgpack: bool = True) -> bytes:
     try:
         if use_msgpack:
             # Use default=str to handle datetime and other non-serializable objects
-            return msgpack.packb(data, use_bin_type=True, default=str)
+            return bytes(msgpack.packb(data, use_bin_type=True, default=str))
         else:
             # For JSON, we need to handle non-serializable objects
             return json.dumps(data, default=str).encode()
@@ -98,8 +98,8 @@ def deserialize_params(data: bytes, use_msgpack: bool = True) -> dict[str, Any]:
     """Deserialize method parameters."""
     try:
         if use_msgpack:
-            return msgpack.unpackb(data, raw=False)
+            return dict(msgpack.unpackb(data, raw=False))
         else:
-            return json.loads(data.decode())
+            return dict(json.loads(data.decode()))
     except Exception as e:
         raise SerializationError(f"Failed to deserialize params: {e}") from e

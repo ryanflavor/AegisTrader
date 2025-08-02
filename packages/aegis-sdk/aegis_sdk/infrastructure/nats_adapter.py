@@ -8,6 +8,7 @@ from typing import Any
 
 import nats
 from nats.aio.client import Client as NATSClient
+from nats.aio.msg import Msg
 from nats.js import JetStreamContext
 
 from ..application.metrics import get_metrics
@@ -128,7 +129,7 @@ class NATSAdapter(MessageBusPort):
     ) -> None:
         """Register an RPC handler."""
 
-        async def wrapper(msg):
+        async def wrapper(msg: Msg) -> None:
             with self._metrics.timer(f"rpc.{service}.{method}"):
                 try:
                     # Parse request
@@ -184,12 +185,17 @@ class NATSAdapter(MessageBusPort):
         nc = self._get_connection()
 
         # Extract service and method from request
-        parts = request.target.split(".")
-        if len(parts) >= 2:
-            service = parts[0]
-            method = request.method
+        if request.target:
+            parts = request.target.split(".")
+            if len(parts) >= 2:
+                service = parts[0]
+                method = request.method
+            else:
+                service = request.target
+                method = request.method
         else:
-            service = request.target
+            # Default to using method name if no target specified
+            service = "unknown"
             method = request.method
 
         subject = SubjectPatterns.rpc(service, method)
@@ -240,7 +246,7 @@ class NATSAdapter(MessageBusPort):
         if not self._js:
             raise Exception("JetStream not initialized")
 
-        async def wrapper(msg):
+        async def wrapper(msg: Msg) -> None:
             try:
                 # Parse event
                 if isinstance(msg.data, bytes):
@@ -328,7 +334,7 @@ class NATSAdapter(MessageBusPort):
         if not self._js:
             raise Exception("JetStream not initialized")
 
-        async def wrapper(msg):
+        async def wrapper(msg: Msg) -> None:
             try:
                 # Parse command
                 if isinstance(msg.data, bytes):
@@ -399,13 +405,13 @@ class NATSAdapter(MessageBusPort):
             progress_updates = []
             completion_data = None
 
-            async def progress_handler(msg):
+            async def progress_handler(msg: Msg) -> None:
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
                     progress_updates.append(deserialize_params(msg.data, self._use_msgpack))
                 else:
                     progress_updates.append(json.loads(msg.data.decode()))
 
-            async def completion_handler(msg):
+            async def completion_handler(msg: Msg) -> None:
                 nonlocal completion_data
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
                     completion_data = deserialize_params(msg.data, self._use_msgpack)

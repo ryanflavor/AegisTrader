@@ -24,7 +24,7 @@ class SingleActiveProcessor:
         # Create stream if not exists
         try:
             await self.js.stream_info("ORDERS")
-        except:
+        except Exception:
             await self.js.add_stream(
                 name="ORDERS",
                 subjects=["orders.>"],
@@ -34,7 +34,7 @@ class SingleActiveProcessor:
         # This ensures only one message is processed at a time across all instances
         try:
             await self.js.consumer_info("ORDERS", "order-processor")
-        except:
+        except Exception:
             await self.js.add_consumer(
                 "ORDERS",
                 name="order-processor",

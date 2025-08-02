@@ -148,13 +148,17 @@ class TestMessageBusIntegration:
             return {"status": "completed", "result": "success"}
 
         # Register command handler
-        await nats_adapter.register_command_handler("worker", "process", command_handler)
+        await nats_adapter.register_command_handler(
+            "worker", "process", command_handler
+        )
 
         # Allow handler to be registered
         await asyncio.sleep(0.1)
 
         # Create and send command
-        command = Command(target="worker", command="process", payload={"task": "test_task"})
+        command = Command(
+            target="worker", command="process", payload={"task": "test_task"}
+        )
 
         # Track progress updates
         progress_callback_called = False
@@ -219,7 +223,9 @@ class TestMessageBusIntegration:
 
         await nats_adapter.register_rpc_handler("test_service", "fail", failing_handler)
 
-        request = RPCRequest(target="test_service", method="fail", params={}, timeout=2.0)
+        request = RPCRequest(
+            target="test_service", method="fail", params={}, timeout=2.0
+        )
 
         response = await nats_adapter.call_rpc(request)
         assert not response.success
@@ -305,7 +311,9 @@ class TestMessageBusIntegration:
         await nats_adapter.register_rpc_handler("test", "concurrent", rpc_handler)
         # Use proper event pattern
         await nats_adapter.subscribe_event("events.test.concurrent", event_handler)
-        await nats_adapter.register_command_handler("test", "concurrent", command_handler)
+        await nats_adapter.register_command_handler(
+            "test", "concurrent", command_handler
+        )
 
         # Allow handlers to be registered
         await asyncio.sleep(0.1)
@@ -315,7 +323,9 @@ class TestMessageBusIntegration:
 
         # RPC calls
         for i in range(5):
-            request = RPCRequest(target="test", method="concurrent", params={"i": i}, timeout=2.0)
+            request = RPCRequest(
+                target="test", method="concurrent", params={"i": i}, timeout=2.0
+            )
             tasks.append(nats_adapter.call_rpc(request))
 
         # Event publishes
@@ -355,7 +365,9 @@ class TestEdgeCases:
 
         # Should handle invalid URLs gracefully
         with pytest.raises((OSError, ValueError, Exception)):
-            await adapter.connect(["nats://nonexistent1:4222", "nats://nonexistent2:4222"])
+            await adapter.connect(
+                ["nats://nonexistent1:4222", "nats://nonexistent2:4222"]
+            )
 
     @pytest.mark.asyncio
     async def test_operations_without_connection(self):
@@ -364,7 +376,9 @@ class TestEdgeCases:
 
         # Should raise when not connected
         with pytest.raises(Exception, match="not initialized"):
-            await adapter.publish_event(Event(domain="test", event_type="test", payload={}))
+            await adapter.publish_event(
+                Event(domain="test", event_type="test", payload={})
+            )
 
         with pytest.raises(Exception, match="Not connected"):
             await adapter.call_rpc(RPCRequest(target="test", method="test", params={}))
@@ -384,7 +398,9 @@ class TestEdgeCases:
         await nats_adapter.register_rpc_handler("test", "method", handler)
 
         # Send a specially crafted request that will trigger the fallback
-        request = RPCRequest(target="test", method="method", params={"data": "test"}, timeout=2.0)
+        request = RPCRequest(
+            target="test", method="method", params={"data": "test"}, timeout=2.0
+        )
 
         response = await nats_adapter.call_rpc(request)
         assert response.success
@@ -425,14 +441,19 @@ class TestEdgeCases:
             # Ensure we're using JSON serialization
             assert not json_adapter._use_msgpack
 
-            event = Event(domain="test", event_type="json_event", payload={"data": "test"})
+            event = Event(
+                domain="test", event_type="json_event", payload={"data": "test"}
+            )
 
             # Should not raise any exception
             try:
                 await json_adapter.publish_event(event)
             except Exception as e:
                 # JetStream stream might not exist, which is OK for this test
-                assert "stream not found" in str(e).lower() or "no stream" in str(e).lower()
+                assert (
+                    "stream not found" in str(e).lower()
+                    or "no stream" in str(e).lower()
+                )
                 # Create the stream and retry
                 await json_adapter._ensure_streams()
                 await json_adapter.publish_event(event)
@@ -451,7 +472,9 @@ class TestEdgeCases:
             command_executed.set()
             return {"done": True}
 
-        await nats_adapter_msgpack.register_command_handler("test", "cmd", command_handler)
+        await nats_adapter_msgpack.register_command_handler(
+            "test", "cmd", command_handler
+        )
         await asyncio.sleep(0.1)
 
         command = Command(target="test", command="cmd", payload={})

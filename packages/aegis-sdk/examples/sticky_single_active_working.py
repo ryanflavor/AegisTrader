@@ -10,7 +10,7 @@ from nats.errors import TimeoutError as NATSTimeoutError
 
 
 class StickySingleActiveService:
-    """粘性单活跃服务 - 确保同一个实例持续处理直到失效."""
+    """Sticky single active service - ensures one instance processes continuously until failure."""
 
     def __init__(self, service_name: str, instance_id: str):
         self.service_name = service_name
@@ -28,15 +28,15 @@ class StickySingleActiveService:
         self.running = True
 
     async def connect(self, servers: list[str]):
-        """连接 NATS."""
+        """Connect to NATS."""
         self.nc = await nats.connect(servers=servers)
         self.js = self.nc.jetstream()
 
-        # 创建命令流
+        # Create command stream
         try:
             await self.js.stream_info(f"{self.service_name}_COMMANDS")
             print(f"✅ Stream {self.service_name}_COMMANDS already exists")
-        except:
+        except Exception:
             await self.js.add_stream(
                 name=f"{self.service_name}_COMMANDS",
                 subjects=[f"{self.service_name}.commands.>"],
@@ -47,16 +47,16 @@ class StickySingleActiveService:
         print(f"✅ {self.instance_id} connected")
 
     async def start(self):
-        """启动服务和选举."""
-        # 订阅心跳
+        """Start service and election."""
+        # Subscribe to heartbeats
         await self.nc.subscribe(
             f"{self.service_name}.heartbeat", cb=self._handle_heartbeat
         )
 
-        # 启动选举循环
+        # Start election loop
         election_task = asyncio.create_task(self._election_loop())
 
-        # 启动处理循环
+        # Start processing loop
         process_task = asyncio.create_task(self._process_loop())
 
         try:
@@ -65,50 +65,54 @@ class StickySingleActiveService:
             print(f"🛑 {self.instance_id} stopped")
 
     async def stop(self):
-        """停止服务."""
+        """Stop the service."""
         self.running = False
         if self.nc:
             await self.nc.close()
 
     async def _handle_heartbeat(self, msg):
-        """处理心跳消息."""
+        """Handle heartbeat messages."""
         try:
             data = json.loads(msg.data.decode())
 
             if data["instance_id"] != self.instance_id:
-                # 其他实例是活跃的
+                # Another instance is active
                 self.active_instance = data["instance_id"]
                 self.last_heartbeat = time.time()
 
-                # 如果我们之前是活跃的，现在让位
+                # If we were active before, yield now
                 if self.is_active:
-                    print(f"🔄 {self.instance_id} 检测到 {data['instance_id']} 是活跃的，让位")
+                    print(
+                        f"🔄 {self.instance_id} detected {data['instance_id']} is active, yielding"
+                    )
                     self.is_active = False
         except Exception as e:
             print(f"❌ Heartbeat error: {e}")
 
     async def _election_loop(self):
-        """选举循环 - 决定谁是活跃实例."""
-        await asyncio.sleep(2)  # 初始等待
+        """Election loop - decide who is the active instance."""
+        await asyncio.sleep(2)  # Initial wait
 
         while self.running:
             try:
                 current_time = time.time()
 
-                # 如果超过 5 秒没有心跳，尝试成为活跃
+                # If no heartbeat for 5 seconds, try to become active
                 if not self.is_active and (current_time - self.last_heartbeat > 5):
-                    print(f"🗳️ {self.instance_id} 未检测到活跃实例，尝试成为活跃")
+                    print(
+                        f"🗳️ {self.instance_id} no active instance detected, attempting to become active"
+                    )
 
-                    # 等待随机时间避免竞争
+                    # Wait random time to avoid race conditions
                     await asyncio.sleep(0.1 * hash(self.instance_id) % 10 / 10)
 
-                    # 再次检查是否有其他实例已经活跃
+                    # Check again if another instance became active
                     if current_time - self.last_heartbeat > 5:
                         self.is_active = True
                         self.active_instance = self.instance_id
-                        print(f"👑 {self.instance_id} 成为活跃实例!")
+                        print(f"👑 {self.instance_id} became active instance!")
 
-                # 如果是活跃的，发送心跳
+                # If active, send heartbeat
                 if self.is_active:
                     heartbeat = {
                         "instance_id": self.instance_id,
@@ -126,51 +130,51 @@ class StickySingleActiveService:
                 await asyncio.sleep(1)
 
     async def _process_loop(self):
-        """处理循环 - 只有活跃实例才处理消息."""
-        # 使用 pull_subscribe 而不是 pull_subscribe_bind
-        # 这会自动创建消费者如果不存在
+        """Processing loop - only active instance processes messages."""
+        # Use pull_subscribe instead of pull_subscribe_bind
+        # This will automatically create consumer if it doesn't exist
         consumer = await self.js.pull_subscribe(
             f"{self.service_name}.commands.>",
             durable=f"{self.service_name}-processor",
             stream=f"{self.service_name}_COMMANDS",
         )
 
-        print(f"🎯 {self.instance_id} 准备处理命令")
+        print(f"🎯 {self.instance_id} ready to process commands")
 
         while self.running:
             try:
-                # 只有活跃实例才拉取消息
+                # Only active instance pulls messages
                 if self.is_active:
-                    # 拉取单个消息
+                    # Pull single message
                     try:
                         msgs = await consumer.fetch(1, timeout=1)
 
                         for msg in msgs:
-                            # 双重检查还是不是活跃的
+                            # Double check if still active
                             if not self.is_active:
-                                # 不再是活跃的，拒绝消息让其他实例处理
+                                # No longer active, reject message for other instances to handle
                                 await msg.nak()
                                 break
 
-                            # 处理消息
+                            # Process message
                             data = json.loads(msg.data.decode())
                             self.processed_count += 1
 
                             print(
-                                f"📦 {self.instance_id} 处理命令 #{self.processed_count}: {data}"
+                                f"📦 {self.instance_id} processing command #{self.processed_count}: {data}"
                             )
 
-                            # 模拟处理时间
+                            # Simulate processing time
                             await asyncio.sleep(0.5)
 
-                            # 确认消息
+                            # Acknowledge message
                             await msg.ack()
 
                     except NATSTimeoutError:
-                        # 没有消息，正常情况
+                        # No messages, normal case
                         pass
                 else:
-                    # 非活跃状态，等待
+                    # Inactive state, wait
                     await asyncio.sleep(1)
 
             except Exception as e:
@@ -182,11 +186,11 @@ class StickySingleActiveService:
 
 
 async def send_commands(service_name: str, servers: list[str], count: int = 20):
-    """发送测试命令."""
+    """Send test commands."""
     nc = await nats.connect(servers=servers)
     js = nc.jetstream()
 
-    print(f"\n📤 发送 {count} 个测试命令...")
+    print(f"\n📤 Sending {count} test commands...")
 
     for i in range(count):
         command = {
@@ -198,33 +202,35 @@ async def send_commands(service_name: str, servers: list[str], count: int = 20):
         await js.publish(f"{service_name}.commands.new", json.dumps(command).encode())
 
         if i < 5 or i % 5 == 0:
-            print(f"  → 发送命令 {i + 1}/{count}")
+            print(f"  → Sent command {i + 1}/{count}")
 
         await asyncio.sleep(0.1)
 
     await nc.close()
-    print("📤 所有命令已发送\n")
+    print("📤 All commands sent\n")
 
 
 async def demo():
-    """运行演示."""
+    """Run the demo."""
     servers = ["nats://localhost:4222"]
-    service_name = "sticky-order-service"  # 使用不同的服务名避免冲突
+    service_name = (
+        "sticky-order-service"  # Use different service name to avoid conflicts
+    )
 
-    # 清理旧的流
+    # Clean up old streams
     try:
         nc = await nats.connect(servers=servers)
         js = nc.jetstream()
         try:
             await js.delete_stream(f"{service_name}_COMMANDS")
             print("🧹 Cleaned old stream")
-        except:
+        except Exception:
             pass
         await nc.close()
-    except:
+    except Exception:
         pass
 
-    # 启动 2 个实例（简化演示）
+    # Start 2 instances (simplified demo)
     instances = []
     tasks = []
 
@@ -233,72 +239,74 @@ async def demo():
         await instance.connect(servers)
         instances.append(instance)
 
-        # 启动实例
+        # Start instance
         task = asyncio.create_task(instance.start())
         tasks.append(task)
 
-    print("\n=== 等待选举完成 ===")
+    print("\n=== Waiting for election to complete ===")
     await asyncio.sleep(8)
 
-    # 显示当前活跃实例
+    # Show current active instance
     active_count = 0
     for instance in instances:
         if instance.is_active:
-            print(f"📍 当前活跃实例: {instance.instance_id}")
+            print(f"📍 Current active instance: {instance.instance_id}")
             active_count += 1
 
     if active_count == 0:
-        print("❌ 没有活跃实例!")
+        print("❌ No active instance!")
     elif active_count > 1:
-        print(f"⚠️  有 {active_count} 个活跃实例!")
+        print(f"⚠️  There are {active_count} active instances!")
 
-    # 发送命令
+    # Send commands
     await send_commands(service_name, servers, 15)
 
-    # 运行一段时间
-    print("\n=== 处理命令中... ===")
+    # Run for a while
+    print("\n=== Processing commands... ===")
     await asyncio.sleep(10)
 
-    # 显示中间统计
-    print("\n=== 中间统计 ===")
+    # Show intermediate statistics
+    print("\n=== Intermediate statistics ===")
     for instance in instances:
         if instance.processed_count > 0:
-            print(f"{instance.instance_id}: 已处理 {instance.processed_count} 个命令")
+            print(
+                f"{instance.instance_id}: Processed {instance.processed_count} commands"
+            )
 
-    # 模拟活跃实例故障
-    print("\n=== 模拟活跃实例故障 ===")
+    # Simulate active instance failure
+    print("\n=== Simulating active instance failure ===")
     for instance in instances:
         if instance.is_active:
-            print(f"💥 停止活跃实例: {instance.instance_id}")
+            print(f"💥 Stopping active instance: {instance.instance_id}")
             instance.is_active = False
             instance.running = False
             break
 
-    # 等待重新选举
+    # Wait for re-election
     await asyncio.sleep(8)
 
-    # 显示新的活跃实例
+    # Show new active instance
     for instance in instances:
         if instance.is_active:
-            print(f"📍 新的活跃实例: {instance.instance_id}")
+            print(f"📍 New active instance: {instance.instance_id}")
             break
 
-    # 发送更多命令
+    # Send more commands
     await send_commands(service_name, servers, 10)
 
-    # 继续运行
+    # Continue running
     await asyncio.sleep(8)
 
-    # 显示最终统计
-    print("\n=== 最终统计 ===")
+    # Show final statistics
+    print("\n=== Final statistics ===")
     total_processed = 0
     for instance in instances:
-        print(f"{instance.instance_id}: 处理了 {instance.processed_count} 个命令")
+        print(f"{instance.instance_id}: Processed {instance.processed_count} commands")
         total_processed += instance.processed_count
-    print(f"总共处理: {total_processed} 个命令")
-    print("预期处理: 25 个命令")
+    print(f"Total processed: {total_processed} commands")
+    print("Expected to process: 25 commands")
 
-    # 清理
+    # Cleanup
     for instance in instances:
         instance.running = False
 
@@ -312,14 +320,14 @@ async def demo():
 
 
 if __name__ == "__main__":
-    print("=== 粘性单活跃模式演示 (Working Version) ===\n")
-    print("特点:")
-    print("1. 只有一个实例是活跃的")
-    print("2. 活跃实例会持续处理所有请求")
-    print("3. 活跃实例失效后，其他实例接管")
-    print("4. 使用 JetStream 保证消息不丢失\n")
+    print("=== Sticky Single Active Pattern Demo (Working Version) ===\n")
+    print("Features:")
+    print("1. Only one instance is active")
+    print("2. Active instance continuously processes all requests")
+    print("3. When active instance fails, another instance takes over")
+    print("4. Uses JetStream to ensure messages are not lost\n")
 
     try:
         asyncio.run(demo())
     except KeyboardInterrupt:
-        print("\n\n用户中断，退出...")
+        print("\n\nUser interrupted, exiting...")

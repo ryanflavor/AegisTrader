@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from ..domain.models import Command, Event, RPCRequest, ServiceInfo
@@ -50,12 +51,10 @@ class Service:
         # Health management
         self._heartbeat_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
-        self._start_time = None
+        self._start_time: datetime | None = None
 
     async def start(self) -> None:
         """Start the service."""
-        from datetime import datetime
-
         # Set start time
         self._start_time = datetime.now()
 
@@ -102,7 +101,7 @@ class Service:
         print(f"👋 Service stopped: {self.service_name}/{self.instance_id}")
 
     # RPC Methods
-    def rpc(self, method: str):
+    def rpc(self, method: str) -> Callable[[Callable], Callable]:
         """Decorator to register RPC handler.
 
         Example:
@@ -111,7 +110,7 @@ class Service:
                 return {"user_id": params["id"], "name": "John"}
         """
 
-        def decorator(handler: Callable):
+        def decorator(handler: Callable) -> Callable:
             if not SubjectPatterns.is_valid_method_name(method):
                 raise ValueError(f"Invalid method name: {method}")
 
@@ -140,7 +139,7 @@ class Service:
         return response.result
 
     # Event Methods
-    def subscribe(self, pattern: str, durable: bool = True):
+    def subscribe(self, pattern: str, durable: bool = True) -> Callable[[Callable], Callable]:
         """Decorator to subscribe to events.
 
         Example:
@@ -149,7 +148,7 @@ class Service:
                 print(f"Order event: {event.event_type}")
         """
 
-        def decorator(handler: Callable):
+        def decorator(handler: Callable) -> Callable:
             if pattern not in self._event_handlers:
                 self._event_handlers[pattern] = []
             self._event_handlers[pattern].append(handler)
@@ -176,7 +175,7 @@ class Service:
         await self._bus.publish_event(event)
 
     # Command Methods
-    def command(self, command_name: str):
+    def command(self, command_name: str) -> Callable[[Callable], Callable]:
         """Decorator to register command handler.
 
         Example:
@@ -187,7 +186,7 @@ class Service:
                 return {"processed": 10}
         """
 
-        def decorator(handler: Callable):
+        def decorator(handler: Callable) -> Callable:
             self._command_handlers[command_name] = handler
 
             # Registration will happen in start()

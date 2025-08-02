@@ -321,7 +321,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -347,7 +349,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -361,7 +365,9 @@ class TestNATSAdapterRPC:
         wrapper = mock_nc.subscribe.call_args.kwargs["cb"]
 
         # Create mock message with msgpack data
-        request = RPCRequest(target="test_service", method="test_method", params={"key": "value"})
+        request = RPCRequest(
+            target="test_service", method="test_method", params={"key": "value"}
+        )
         mock_msg = Mock()
         mock_msg.data = serialize_to_msgpack(request)
         mock_msg.respond = AsyncMock()
@@ -378,7 +384,9 @@ class TestNATSAdapterRPC:
         assert isinstance(response_data, bytes)  # msgpack response
 
         # Verify metrics
-        adapter._metrics.increment.assert_called_with("rpc.test_service.test_method.success")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.test_service.test_method.success"
+        )
 
     @pytest.mark.asyncio
     async def test_rpc_handler_success_json(self):
@@ -388,7 +396,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -402,7 +412,9 @@ class TestNATSAdapterRPC:
         wrapper = mock_nc.subscribe.call_args.kwargs["cb"]
 
         # Create mock message with JSON data
-        request = RPCRequest(target="test_service", method="test_method", params={"key": "value"})
+        request = RPCRequest(
+            target="test_service", method="test_method", params={"key": "value"}
+        )
         mock_msg = Mock()
         mock_msg.data = request.model_dump_json().encode()
         mock_msg.respond = AsyncMock()
@@ -429,7 +441,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -453,7 +467,9 @@ class TestNATSAdapterRPC:
 
         # Verify error response
         mock_msg.respond.assert_called_once()
-        adapter._metrics.increment.assert_called_with("rpc.test_service.test_method.error")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.test_service.test_method.error"
+        )
 
     @pytest.mark.asyncio
     async def test_call_rpc_success(self):
@@ -463,7 +479,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = Mock(spec=NATSClient)
@@ -471,7 +489,9 @@ class TestNATSAdapterRPC:
         adapter._connections = [mock_nc]
 
         # Create request
-        request = RPCRequest(target="test_service", method="test_method", params={"key": "value"})
+        request = RPCRequest(
+            target="test_service", method="test_method", params={"key": "value"}
+        )
 
         # Mock response
         response = RPCResponse(
@@ -494,7 +514,9 @@ class TestNATSAdapterRPC:
             serialize_to_msgpack(request),
             timeout=request.timeout,
         )
-        adapter._metrics.increment.assert_called_with("rpc.client.test_service.test_method.success")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.client.test_service.test_method.success"
+        )
 
     @pytest.mark.asyncio
     async def test_call_rpc_timeout(self):
@@ -504,7 +526,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = Mock(spec=NATSClient)
@@ -523,7 +547,9 @@ class TestNATSAdapterRPC:
         # Verify timeout response
         assert result.success is False
         assert "Timeout" in result.error
-        adapter._metrics.increment.assert_called_with("rpc.client.test_service.test_method.timeout")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.client.test_service.test_method.timeout"
+        )
 
     @pytest.mark.asyncio
     async def test_call_rpc_error(self):
@@ -533,7 +559,9 @@ class TestNATSAdapterRPC:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = Mock(spec=NATSClient)
@@ -552,7 +580,9 @@ class TestNATSAdapterRPC:
         # Verify error response
         assert result.success is False
         assert "Connection error" in result.error
-        adapter._metrics.increment.assert_called_with("rpc.client.test_service.test_method.error")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.client.test_service.test_method.error"
+        )
 
     @pytest.mark.asyncio
     async def test_rpc_handler_serialization_error_fallback(self):
@@ -579,7 +609,9 @@ class TestNATSAdapterRPC:
         # Create message with invalid msgpack that will fail deserialization
         mock_msg = Mock()
         # This will fail msgpack deserialization but succeed with JSON
-        mock_msg.data = b'{"message_id": "123", "method": "test", "params": {"key": "value"}}'
+        mock_msg.data = (
+            b'{"message_id": "123", "method": "test", "params": {"key": "value"}}'
+        )
         mock_msg.respond = AsyncMock()
 
         # Call wrapper
@@ -590,7 +622,9 @@ class TestNATSAdapterRPC:
 
         # Verify response was sent
         mock_msg.respond.assert_called_once()
-        adapter._metrics.increment.assert_called_with("rpc.test_service.test_method.success")
+        adapter._metrics.increment.assert_called_with(
+            "rpc.test_service.test_method.success"
+        )
 
     @pytest.mark.asyncio
     async def test_rpc_handler_non_bytes_data(self):
@@ -616,7 +650,9 @@ class TestNATSAdapterRPC:
 
         # Create message with string data (not bytes)
         mock_msg = Mock()
-        mock_msg.data = '{"message_id": "123", "method": "test", "params": {"string": "data"}}'
+        mock_msg.data = (
+            '{"message_id": "123", "method": "test", "params": {"string": "data"}}'
+        )
         mock_msg.respond = AsyncMock()
 
         # Call wrapper
@@ -712,7 +748,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -741,7 +779,9 @@ class TestNATSAdapterEvents:
         handler = AsyncMock()
 
         # Subscribe to specific subject
-        await adapter.subscribe_event("events.user.created", handler, durable="test-durable")
+        await adapter.subscribe_event(
+            "events.user.created", handler, durable="test-durable"
+        )
 
         # Should use JetStream
         mock_js.subscribe.assert_called_once()
@@ -769,7 +809,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -807,7 +849,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -841,7 +885,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -883,7 +929,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -915,7 +963,9 @@ class TestNATSAdapterEvents:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -928,7 +978,9 @@ class TestNATSAdapterEvents:
         event = Event(domain="user", event_type="created", payload={})
 
         # Publish should raise after retries
-        with pytest.raises(Exception, match="JetStream publish failed after 3 attempts"):
+        with pytest.raises(
+            Exception, match="JetStream publish failed after 3 attempts"
+        ):
             await adapter.publish_event(event)
 
         # Verify 3 attempts
@@ -1013,7 +1065,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1030,7 +1084,9 @@ class TestNATSAdapterCommands:
         wrapper = mock_js.subscribe.call_args.kwargs["cb"]
 
         # Create mock message
-        command = Command(target="test_service", command="process", payload={"data": "test"})
+        command = Command(
+            target="test_service", command="process", payload={"data": "test"}
+        )
         mock_msg = Mock()
         mock_msg.data = serialize_to_msgpack(command)
         mock_msg.ack = AsyncMock()
@@ -1054,7 +1110,9 @@ class TestNATSAdapterCommands:
 
         # Verify ack
         mock_msg.ack.assert_called_once()
-        adapter._metrics.increment.assert_called_with("commands.processed.test_service.process")
+        adapter._metrics.increment.assert_called_with(
+            "commands.processed.test_service.process"
+        )
 
     @pytest.mark.asyncio
     async def test_command_handler_with_progress(self):
@@ -1064,7 +1122,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1079,7 +1139,9 @@ class TestNATSAdapterCommands:
             return {"status": "done"}
 
         # Register and capture wrapper
-        await adapter.register_command_handler("test_service", "process", handler_with_progress)
+        await adapter.register_command_handler(
+            "test_service", "process", handler_with_progress
+        )
         wrapper = mock_js.subscribe.call_args.kwargs["cb"]
 
         # Create mock message
@@ -1093,7 +1155,9 @@ class TestNATSAdapterCommands:
         await wrapper(mock_msg)
 
         # Verify progress was reported
-        progress_calls = [c for c in mock_nc.publish.call_args_list if "progress" in c.args[0]]
+        progress_calls = [
+            c for c in mock_nc.publish.call_args_list if "progress" in c.args[0]
+        ]
         assert len(progress_calls) == 1
 
         # Verify progress data
@@ -1115,7 +1179,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1149,7 +1215,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1218,7 +1286,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1231,7 +1301,9 @@ class TestNATSAdapterCommands:
         mock_js.publish.return_value = mock_ack
 
         # Create command
-        command = Command(target="test_service", command="process", payload={"data": "test"})
+        command = Command(
+            target="test_service", command="process", payload={"data": "test"}
+        )
 
         # Send command without tracking
         result = await adapter.send_command(command, track_progress=False)
@@ -1261,7 +1333,9 @@ class TestNATSAdapterCommands:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
@@ -1278,7 +1352,9 @@ class TestNATSAdapterCommands:
         mock_nc.subscribe = AsyncMock()
 
         # Create command with very short timeout
-        command = Command(target="test_service", command="process", payload={}, timeout=0.2)
+        command = Command(
+            target="test_service", command="process", payload={}, timeout=0.2
+        )
 
         # Send command (should timeout)
         result = await adapter.send_command(command, track_progress=True)
@@ -1370,7 +1446,9 @@ class TestNATSAdapterCommands:
         # Start sending command (in background)
         import asyncio
 
-        send_task = asyncio.create_task(adapter.send_command(command, track_progress=True))
+        send_task = asyncio.create_task(
+            adapter.send_command(command, track_progress=True)
+        )
 
         # Wait for subscriptions
         await asyncio.sleep(0.1)
@@ -1449,7 +1527,9 @@ class TestNATSAdapterCommands:
         command = Command(target="test_service", command="process", payload={})
 
         # Send command should raise exception
-        with pytest.raises(Exception, match="JetStream publish failed after 3 attempts"):
+        with pytest.raises(
+            Exception, match="JetStream publish failed after 3 attempts"
+        ):
             await adapter.send_command(command, track_progress=False)
 
         # Verify metrics
@@ -1551,7 +1631,9 @@ class TestNATSAdapterIntegration:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_nc = AsyncMock(spec=NATSClient)
@@ -1565,7 +1647,9 @@ class TestNATSAdapterIntegration:
         wrapper = mock_nc.subscribe.call_args.kwargs["cb"]
 
         # Create mock message with JSON data (not msgpack)
-        request = RPCRequest(target="test_service", method="test_method", params={"key": "value"})
+        request = RPCRequest(
+            target="test_service", method="test_method", params={"key": "value"}
+        )
         mock_msg = Mock()
         mock_msg.data = request.model_dump_json().encode()  # JSON, not msgpack
         mock_msg.respond = AsyncMock()
@@ -1606,7 +1690,9 @@ class TestNATSAdapterIntegration:
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
-        timer_context.__exit__ = Mock(return_value=False)  # False means don't suppress exceptions
+        timer_context.__exit__ = Mock(
+            return_value=False
+        )  # False means don't suppress exceptions
         adapter._metrics.timer = Mock(return_value=timer_context)
         adapter._metrics.increment = Mock()
         mock_js = AsyncMock(spec=JetStreamContext)
