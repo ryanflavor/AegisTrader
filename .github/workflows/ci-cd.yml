@@ -10,6 +10,7 @@ permissions:
   contents: read
   packages: write
   actions: read
+  security-events: write
 
 env:
   PYTHON_VERSION: '3.13'
