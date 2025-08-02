@@ -47,7 +47,8 @@ wait_for_pod() {
         -n "$NAMESPACE" \
         --timeout="${timeout}s" 2>/dev/null; then
 
-        local actual_count=$(kubectl get pods -l "$label" -n "$NAMESPACE" --no-headers | wc -l)
+        local actual_count
+        actual_count=$(kubectl get pods -l "$label" -n "$NAMESPACE" --no-headers | wc -l)
         if [ "$actual_count" -eq "$expected_count" ]; then
             log_info "✓ $expected_count pod(s) ready"
             return 0
@@ -68,7 +69,8 @@ check_service_endpoint() {
     log_info "Checking service $service on port $port..."
 
     if kubectl get service "$service" -n "$NAMESPACE" &>/dev/null; then
-        local endpoints=$(kubectl get endpoints "$service" -n "$NAMESPACE" -o json | \
+        local endpoints
+        endpoints=$(kubectl get endpoints "$service" -n "$NAMESPACE" -o json | \
             jq -r '.subsets[0].addresses | length' 2>/dev/null || echo "0")
 
         if [ "$endpoints" -gt 0 ]; then
@@ -87,7 +89,8 @@ check_service_endpoint() {
 test_nats_connectivity() {
     log_info "Testing NATS connectivity..."
 
-    local test_pod="nats-test-$(date +%s)"
+    local test_pod
+    test_pod="nats-test-$(date +%s)"
 
     # Create test pod
     kubectl run "$test_pod" \
@@ -130,7 +133,8 @@ test_nats_connectivity() {
 test_api_health() {
     log_info "Testing Management API health..."
 
-    local api_pod=$(kubectl get pod -l "app.kubernetes.io/name=monitor-api" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    local api_pod
+    api_pod=$(kubectl get pod -l "app.kubernetes.io/name=monitor-api" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -n "$api_pod" ]; then
         if kubectl exec "$api_pod" -n "$NAMESPACE" -- wget -qO- http://localhost:8100/health &>/dev/null; then
@@ -146,7 +150,8 @@ test_api_health() {
 test_ui_accessibility() {
     log_info "Testing Monitor UI accessibility..."
 
-    local ui_pod=$(kubectl get pod -l "app.kubernetes.io/name=monitor-ui" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    local ui_pod
+    ui_pod=$(kubectl get pod -l "app.kubernetes.io/name=monitor-ui" -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -n "$ui_pod" ]; then
         if kubectl exec "$ui_pod" -n "$NAMESPACE" -- wget -qO- http://localhost:3100 2>/dev/null | grep -q "<html"; then
@@ -200,7 +205,8 @@ main() {
 
     # Check persistent volumes
     log_info "Checking persistent volumes..."
-    local pvcs=$(kubectl get pvc -n "$NAMESPACE" --no-headers | wc -l)
+    local pvcs
+    pvcs=$(kubectl get pvc -n "$NAMESPACE" --no-headers | wc -l)
     if [ "$pvcs" -gt 0 ]; then
         log_info "✓ Found $pvcs PVC(s)"
         kubectl get pvc -n "$NAMESPACE"
@@ -212,7 +218,8 @@ main() {
     echo ""
     echo "=== Validation Summary ==="
 
-    local failed_pods=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running,status.phase!=Succeeded --no-headers | wc -l)
+    local failed_pods
+    failed_pods=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running,status.phase!=Succeeded --no-headers | wc -l)
     if [ "$failed_pods" -eq 0 ]; then
         log_info "All pods are healthy"
         echo ""

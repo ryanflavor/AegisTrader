@@ -4,9 +4,9 @@ This is an infrastructure adapter that implements the ServiceRepository port
 for testing and development purposes.
 """
 
-from ..application.use_cases import ServiceRepository
 from ..domain.aggregates import ServiceAggregate
 from ..domain.value_objects import InstanceId, ServiceName
+from ..ports.repository import ServiceRepository
 
 
 class InMemoryServiceRepository(ServiceRepository):

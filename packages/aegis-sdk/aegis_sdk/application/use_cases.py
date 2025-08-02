@@ -4,7 +4,6 @@ This module contains application services that orchestrate use cases
 by coordinating between domain services, aggregates, and infrastructure ports.
 """
 
-from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -16,6 +15,7 @@ from ..domain.services import HealthCheckService, MessageRoutingService, Metrics
 from ..domain.value_objects import InstanceId, ServiceName
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
+from ..ports.repository import ServiceRepository
 
 
 class UseCase(Protocol):
@@ -55,7 +55,7 @@ class ServiceRegistrationUseCase:
         self,
         message_bus: MessageBusPort,
         metrics: MetricsPort,
-        service_repository: "ServiceRepository",
+        service_repository: ServiceRepository,
     ):
         """Initialize the use case with required dependencies."""
         self._message_bus = message_bus
@@ -134,7 +134,7 @@ class ServiceHeartbeatUseCase:
         self,
         message_bus: MessageBusPort,
         metrics: MetricsPort,
-        service_repository: "ServiceRepository",
+        service_repository: ServiceRepository,
         health_service: HealthCheckService,
     ):
         """Initialize the use case with required dependencies."""
@@ -282,35 +282,6 @@ class RPCCallUseCase:
             except TimeoutError:
                 self._metrics.increment(f"{metric_prefix}.timeout")
                 raise
-
-
-class ServiceRepository(ABC):
-    """Abstract repository for service aggregates.
-
-    This is a port that must be implemented by the infrastructure layer.
-    """
-
-    @abstractmethod
-    async def save(self, aggregate: ServiceAggregate) -> None:
-        """Save a service aggregate."""
-        ...
-
-    @abstractmethod
-    async def get(
-        self, service_name: ServiceName, instance_id: InstanceId
-    ) -> ServiceAggregate | None:
-        """Get a service aggregate by ID."""
-        ...
-
-    @abstractmethod
-    async def list_by_service(self, service_name: ServiceName) -> list[ServiceAggregate]:
-        """List all instances of a service."""
-        ...
-
-    @abstractmethod
-    async def delete(self, service_name: ServiceName, instance_id: InstanceId) -> None:
-        """Delete a service aggregate."""
-        ...
 
 
 class CommandProcessingRequest(BaseModel):

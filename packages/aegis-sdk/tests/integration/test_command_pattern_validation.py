@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+
 from aegis_sdk.domain.models import Command
 from aegis_sdk.domain.patterns import SubjectPatterns
 

@@ -3,9 +3,10 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
+
 from aegis_sdk.domain.aggregates import ServiceAggregate, ServiceLifecycleEvent, ServiceStatus
 from aegis_sdk.domain.value_objects import InstanceId, ServiceName
-from pydantic import ValidationError
 
 
 class TestServiceAggregate:

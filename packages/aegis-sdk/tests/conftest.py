@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from testcontainers.nats import NatsContainer
+
+from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 
 
 @pytest.fixture

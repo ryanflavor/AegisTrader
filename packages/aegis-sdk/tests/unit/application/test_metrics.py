@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+
 from aegis_sdk.application.metrics import Metrics, MetricsSummary, get_metrics
 from aegis_sdk.application.metrics_models import MetricsSnapshot, MetricsSummaryData
 

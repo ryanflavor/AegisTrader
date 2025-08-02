@@ -1,6 +1,7 @@
 """Tests for the in-memory metrics implementation."""
 
 import pytest
+
 from aegis_sdk.infrastructure.in_memory_metrics import InMemoryMetrics, get_metrics, set_metrics
 from aegis_sdk.ports.metrics import MetricsPort
 

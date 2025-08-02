@@ -51,7 +51,7 @@ nats:
         runAsUser: 1000
         capabilities:
           drop:
-          - ALL
+            - ALL
   # Service configuration
   service:
     type: ClusterIP

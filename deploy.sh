@@ -147,7 +147,7 @@ deploy_to_k8s() {
     info "部署到 Kubernetes..."
 
     # 进入 helm 目录
-    cd helm
+    cd helm || exit
 
     # 构建 values 文件列表
     VALUES_FILES="-f values.yaml"
@@ -180,7 +180,7 @@ deploy_to_k8s() {
         --wait \
         --debug
 
-    cd ..
+    cd .. || exit
 
     info "部署完成"
 }

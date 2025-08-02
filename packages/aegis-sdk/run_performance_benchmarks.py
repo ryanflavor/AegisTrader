@@ -8,6 +8,7 @@ import time
 from typing import Any
 
 import psutil
+
 from aegis_sdk.application.service import Service
 from aegis_sdk.domain.models import Event
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter

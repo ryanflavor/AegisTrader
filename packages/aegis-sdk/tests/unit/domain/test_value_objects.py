@@ -1,8 +1,9 @@
 """Comprehensive tests for domain value objects following TDD principles."""
 
 import pytest
-from aegis_sdk.domain.value_objects import EventType, InstanceId, MethodName, Priority, ServiceName
 from pydantic import ValidationError
+
+from aegis_sdk.domain.value_objects import EventType, InstanceId, MethodName, Priority, ServiceName
 
 
 class TestServiceName:

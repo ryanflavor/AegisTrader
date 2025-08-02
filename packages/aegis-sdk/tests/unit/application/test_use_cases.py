@@ -3,6 +3,8 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from pydantic import ValidationError
+
 from aegis_sdk.application.use_cases import (
     CommandProcessingRequest,
     CommandProcessingUseCase,
@@ -25,7 +27,6 @@ from aegis_sdk.domain.value_objects import InstanceId, ServiceName
 from aegis_sdk.infrastructure.in_memory_repository import InMemoryServiceRepository
 from aegis_sdk.ports.message_bus import MessageBusPort
 from aegis_sdk.ports.metrics import MetricsPort
-from pydantic import ValidationError
 
 
 @pytest.fixture

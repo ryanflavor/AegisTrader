@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import pytest
+
 from aegis_sdk.domain.models import RPCRequest
 from aegis_sdk.domain.patterns import SubjectPatterns
 

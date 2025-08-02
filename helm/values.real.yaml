@@ -6,6 +6,14 @@ monitor-api:
     repository: aegistrader-monitor-api
     tag: latest
     pullPolicy: Never  # Never pull since we loaded locally
+  # Reduce app resources for local
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
 
 # Use actual monitor-ui image
 monitor-ui:
@@ -13,6 +21,14 @@ monitor-ui:
     repository: aegistrader-monitor-ui
     tag: latest
     pullPolicy: Never  # Never pull since we loaded locally
+  # Reduce app resources for local
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
 
 # Reduce NATS for local
 nats:
@@ -28,22 +44,3 @@ nats:
     jetstream:
       fileStorage:
         size: 1Gi
-
-# Reduce app resources for local
-monitor-api:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 200m
-      memory: 512Mi
-
-monitor-ui:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 200m
-      memory: 512Mi

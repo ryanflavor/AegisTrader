@@ -17,6 +17,7 @@ kubectl get serviceaccount ${SERVICE_ACCOUNT} -n ${NAMESPACE} &>/dev/null || {
 }
 
 # Get the service account token secret name
+SECRET_NAME=""
 SECRET_NAME=$(kubectl get serviceaccount ${SERVICE_ACCOUNT} -n ${NAMESPACE} -o jsonpath='{.secrets[0].name}')
 
 # If no secret exists (K8s 1.24+), create one
@@ -38,12 +39,15 @@ EOF
 fi
 
 # Get the token
+TOKEN=""
 TOKEN=$(kubectl get secret ${SECRET_NAME} -n ${NAMESPACE} -o jsonpath='{.data.token}' | base64 -d)
 
 # Get the certificate
+CA_CERT=""
 CA_CERT=$(kubectl get secret ${SECRET_NAME} -n ${NAMESPACE} -o jsonpath='{.data.ca\.crt}')
 
 # Get the API server URL
+API_SERVER=""
 API_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 
 # Create kubeconfig

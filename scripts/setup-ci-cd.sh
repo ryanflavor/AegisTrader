@@ -22,9 +22,9 @@ kubectl apply -f k8s/ci-rbac.yaml
 # Generate kubeconfig
 echo ""
 echo "🔑 Generating CI/CD kubeconfig..."
-cd scripts
+cd scripts || exit
 ./generate-ci-kubeconfig.sh
-cd ..
+cd .. || exit
 
 echo ""
 echo "📋 Setup Instructions:"

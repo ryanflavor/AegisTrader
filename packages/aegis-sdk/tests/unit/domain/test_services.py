@@ -1,13 +1,13 @@
 """Comprehensive tests for domain services following TDD principles."""
 
 import pytest
+
 from aegis_sdk.domain.services import (
     HealthCheckService,
     MessageRoutingService,
     MetricsNamingService,
 )
 from aegis_sdk.domain.value_objects import MethodName, ServiceName
-
 from tests.builders import CommandBuilder, EventBuilder, RPCRequestBuilder
 
 

@@ -4,8 +4,9 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from aegis_sdk.domain.models import Command, Event, Message, RPCRequest, RPCResponse, ServiceInfo
 from pydantic import ValidationError
+
+from aegis_sdk.domain.models import Command, Event, Message, RPCRequest, RPCResponse, ServiceInfo
 
 
 class TestMessage:
