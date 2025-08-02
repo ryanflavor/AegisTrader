@@ -123,20 +123,22 @@ class TestDeploymentIntegration(unittest.TestCase):
                             self.assertIn("wait-for-api", content)
 
     def test_resource_requirements(self) -> None:
-        """Test that resource requirements are properly defined."""
-        with open(self.helm_dir / "values.yaml") as f:
-            values = yaml.safe_load(f)
-
-        # Check each service has resource definitions
+        """Test that resource requirements are properly defined in subchart values."""
         services = ["monitor-api", "monitor-ui"]
+
         for service in services:
-            self.assertIn("resources", values[service])
-            self.assertIn("requests", values[service]["resources"])
-            self.assertIn("limits", values[service]["resources"])
+            # Resources are defined in subchart values
+            values_path = self.helm_dir / "charts" / service / "values.yaml"
+            with open(values_path) as f:
+                values = yaml.safe_load(f)
+
+            self.assertIn("resources", values)
+            self.assertIn("requests", values["resources"])
+            self.assertIn("limits", values["resources"])
 
             # Verify CPU and memory are defined
             for resource_type in ["requests", "limits"]:
-                resources = values[service]["resources"][resource_type]
+                resources = values["resources"][resource_type]
                 self.assertIn("cpu", resources)
                 self.assertIn("memory", resources)
 
@@ -177,14 +179,17 @@ class TestDeploymentIntegration(unittest.TestCase):
                 self.assertIn("startupProbe:", content)
 
     def test_deployment_order_dependencies(self) -> None:
-        """Test that deployment order is properly defined via Helm hooks."""
-        # Check for NATS KV job hook
+        """Test that deployment order is properly handled."""
+        # NATS KV job runs as a normal Kubernetes resource without helm hooks
+        # to avoid circular dependency with --wait
         with open(self.helm_dir / "templates/nats-kv-job.yaml") as f:
             content = f.read()
 
-        self.assertIn("helm.sh/hook", content)
-        self.assertIn("post-install", content)
-        self.assertIn("helm.sh/hook-weight", content)
+        # Verify job exists and has proper restart policy
+        self.assertIn("kind: Job", content)
+        self.assertIn("restartPolicy: OnFailure", content)
+        # Job has retry logic built-in
+        self.assertIn("MAX_RETRIES", content)
 
     def test_nats_kv_bucket_configuration(self) -> None:
         """Test NATS KV bucket configuration for service registry."""

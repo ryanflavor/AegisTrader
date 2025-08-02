@@ -78,7 +78,7 @@ class TestHelmChartStructure(unittest.TestCase):
             with open(chart_yaml) as f:
                 chart = yaml.safe_load(f)
                 self.assertEqual(chart["name"], subchart)
-                self.assertEqual(chart["version"], "0.1.0")
+                self.assertEqual(chart["version"], "1.0.1")
 
 
 @unittest.skipIf(not HELM_AVAILABLE, "Helm CLI not available")
@@ -156,7 +156,7 @@ class TestHelmTemplateRendering(unittest.TestCase):
         deployment = api_deployments[0]
         containers = deployment["spec"]["template"]["spec"]["containers"]
         self.assertEqual(len(containers), 1)
-        self.assertEqual(containers[0]["image"], "aegis-trader/monitor-api:latest")
+        self.assertEqual(containers[0]["image"], "aegistrader-monitor-api:latest")
 
         # Check init containers
         init_containers = deployment["spec"]["template"]["spec"].get(
@@ -183,7 +183,7 @@ class TestHelmTemplateRendering(unittest.TestCase):
         deployment = ui_deployments[0]
         containers = deployment["spec"]["template"]["spec"]["containers"]
         self.assertEqual(len(containers), 1)
-        self.assertEqual(containers[0]["image"], "aegis-trader/monitor-ui:latest")
+        self.assertEqual(containers[0]["image"], "aegistrader-monitor-ui:latest")
 
     def test_services_are_created(self) -> None:
         """Test that all required services are created."""
@@ -213,10 +213,10 @@ class TestHelmTemplateRendering(unittest.TestCase):
         self.assertEqual(len(kv_jobs), 1, "NATS KV creation job not found")
 
         job = kv_jobs[0]
-        self.assertIn("helm.sh/hook", job["metadata"]["annotations"])
-        self.assertEqual(
-            job["metadata"]["annotations"]["helm.sh/hook"], "post-install,post-upgrade"
-        )
+        # The job runs as a normal Kubernetes resource without helm hooks
+        # to avoid circular dependency with --wait
+        self.assertEqual(job["kind"], "Job")
+        self.assertEqual(job["spec"]["template"]["spec"]["restartPolicy"], "OnFailure")
 
 
 class TestHelmValueOverrides(unittest.TestCase):
@@ -239,36 +239,46 @@ class TestHelmValueOverrides(unittest.TestCase):
         self.assertEqual(dev_values["monitor-ui"]["ingress"]["enabled"], True)
 
     def test_resource_limits_configuration(self) -> None:
-        """Test that resource limits are properly configured."""
-        with open(self.helm_dir / "values.yaml") as f:
-            values = yaml.safe_load(f)
-
+        """Test that resource limits are properly configured in subchart values."""
         # Check monitor-api resources
-        api_resources = values["monitor-api"]["resources"]
+        api_values_file = self.helm_dir / "charts" / "monitor-api" / "values.yaml"
+        with open(api_values_file) as f:
+            api_values = yaml.safe_load(f)
+
+        api_resources = api_values["resources"]
         self.assertEqual(api_resources["requests"]["cpu"], "1000m")
         self.assertEqual(api_resources["requests"]["memory"], "2Gi")
         self.assertEqual(api_resources["limits"]["cpu"], "1000m")
         self.assertEqual(api_resources["limits"]["memory"], "2Gi")
 
         # Check monitor-ui resources
-        ui_resources = values["monitor-ui"]["resources"]
+        ui_values_file = self.helm_dir / "charts" / "monitor-ui" / "values.yaml"
+        with open(ui_values_file) as f:
+            ui_values = yaml.safe_load(f)
+
+        ui_resources = ui_values["resources"]
         self.assertEqual(ui_resources["requests"]["cpu"], "500m")
         self.assertEqual(ui_resources["requests"]["memory"], "1Gi")
 
     def test_probe_configuration(self) -> None:
-        """Test that health probes are properly configured."""
-        with open(self.helm_dir / "values.yaml") as f:
-            values = yaml.safe_load(f)
-
+        """Test that health probes are properly configured in subchart values."""
         # Check monitor-api probes
-        api_probes = values["monitor-api"]["probes"]
+        api_values_file = self.helm_dir / "charts" / "monitor-api" / "values.yaml"
+        with open(api_values_file) as f:
+            api_values = yaml.safe_load(f)
+
+        api_probes = api_values["probes"]
         self.assertTrue(api_probes["liveness"]["enabled"])
         self.assertTrue(api_probes["readiness"]["enabled"])
         self.assertTrue(api_probes["startup"]["enabled"])
         self.assertEqual(api_probes["startup"]["failureThreshold"], 60)
 
         # Check monitor-ui probes
-        ui_probes = values["monitor-ui"]["probes"]
+        ui_values_file = self.helm_dir / "charts" / "monitor-ui" / "values.yaml"
+        with open(ui_values_file) as f:
+            ui_values = yaml.safe_load(f)
+
+        ui_probes = ui_values["probes"]
         self.assertTrue(ui_probes["liveness"]["enabled"])
         self.assertTrue(ui_probes["readiness"]["enabled"])
 

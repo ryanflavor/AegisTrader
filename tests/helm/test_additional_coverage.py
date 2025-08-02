@@ -49,7 +49,9 @@ class TestHelmHelpers:
         # Extract NATS URL helper section
         nats_section = content[content.find('define "aegis-trader.natsUrl"') :]
         assert "nats://" in nats_section
-        assert "-nats:4222" in nats_section
+        # Check template format
+        assert 'printf "nats://%s-nats:%v"' in nats_section
+        assert "$natsPort" in nats_section
 
     def test_monitor_api_url_helper(self, helm_dir: Path) -> None:
         """Test Monitor API URL helper format."""
@@ -59,7 +61,9 @@ class TestHelmHelpers:
         # Extract API URL helper section
         api_section = content[content.find('define "aegis-trader.monitorApiUrl"') :]
         assert "http://" in api_section
-        assert "-monitor-api:8100" in api_section
+        # Check template format
+        assert 'printf "http://%s-monitor-api:%d"' in api_section
+        assert "$apiPort" in api_section
 
 
 class TestConfigMapTemplates:
@@ -146,30 +150,35 @@ class TestDeploymentAdvanced:
 
     def test_resource_limits_match_requests(self, helm_dir: Path) -> None:
         """Test that resource limits match requests for predictable performance."""
-        values_file = helm_dir / "values.yaml"
-        with open(values_file) as f:
-            values = yaml.safe_load(f)
-
         for service in ["monitor-api", "monitor-ui"]:
-            resources = values[service]["resources"]
+            # Resources are defined in subchart values
+            values_file = helm_dir / "charts" / service / "values.yaml"
+            with open(values_file) as f:
+                values = yaml.safe_load(f)
+
+            resources = values["resources"]
             assert resources["requests"]["cpu"] == resources["limits"]["cpu"]
             assert resources["requests"]["memory"] == resources["limits"]["memory"]
 
     def test_probe_configuration_completeness(self, helm_dir: Path) -> None:
         """Test all required probes are configured."""
-        values_file = helm_dir / "values.yaml"
-        with open(values_file) as f:
-            values = yaml.safe_load(f)
-
         # Monitor API should have all three probes
-        api_probes = values["monitor-api"]["probes"]
+        api_values_file = helm_dir / "charts" / "monitor-api" / "values.yaml"
+        with open(api_values_file) as f:
+            api_values = yaml.safe_load(f)
+
+        api_probes = api_values["probes"]
         assert api_probes["liveness"]["enabled"] is True
         assert api_probes["readiness"]["enabled"] is True
         assert api_probes["startup"]["enabled"] is True
         assert api_probes["startup"]["failureThreshold"] == 60
 
         # Monitor UI should have liveness and readiness
-        ui_probes = values["monitor-ui"]["probes"]
+        ui_values_file = helm_dir / "charts" / "monitor-ui" / "values.yaml"
+        with open(ui_values_file) as f:
+            ui_values = yaml.safe_load(f)
+
+        ui_probes = ui_values["probes"]
         assert ui_probes["liveness"]["enabled"] is True
         assert ui_probes["readiness"]["enabled"] is True
 
@@ -192,8 +201,8 @@ class TestDeploymentAdvanced:
         # Check init container configuration
         assert "initContainers:" in content
         assert f"name: {init_container}" in content
-        assert "busybox:latest" in content
-        assert "nc -vz" in content  # netcat for connection check
+        assert "busybox:" in content  # Any busybox version
+        assert "nc -z" in content  # netcat for connection check
         assert wait_for in content
 
 
@@ -226,7 +235,9 @@ class TestNATSConfiguration:
         assert values["nats"]["container"]["env"]["GOMEMLIMIT"] == "7GiB"
 
         # Verify it's ~90% of memory limit
-        memory_limit = values["nats"]["nats"]["resources"]["limits"]["memory"]
+        memory_limit = values["nats"]["container"]["merge"]["resources"]["limits"][
+            "memory"
+        ]
         assert memory_limit == "8Gi"
 
     def test_nats_topology_constraints(self, helm_dir: Path) -> None:
@@ -236,10 +247,12 @@ class TestNATSConfiguration:
             values = yaml.safe_load(f)
 
         constraints = values["nats"]["podTemplate"]["topologySpreadConstraints"]
-        assert len(constraints) > 0
-        assert constraints[0]["maxSkew"] == 1
-        assert constraints[0]["topologyKey"] == "kubernetes.io/hostname"
-        assert constraints[0]["whenUnsatisfiable"] == "DoNotSchedule"
+        assert "kubernetes.io/hostname" in constraints
+        assert constraints["kubernetes.io/hostname"]["maxSkew"] == 1
+        assert (
+            constraints["kubernetes.io/hostname"]["whenUnsatisfiable"]
+            == "DoNotSchedule"
+        )
 
 
 class TestServiceRegistry:
@@ -263,17 +276,15 @@ class TestServiceRegistry:
         assert sr_config["bucket"]["maxBytes"] == 1073741824  # 1GB
 
     def test_kv_job_helm_hooks(self, helm_dir: Path) -> None:
-        """Test KV creation job has proper Helm hooks."""
+        """Test KV creation job configuration."""
         kv_job_file = helm_dir / "templates" / "nats-kv-job.yaml"
         content = kv_job_file.read_text()
 
-        # Check Helm hook annotations
-        assert '"helm.sh/hook": post-install,post-upgrade' in content
-        assert '"helm.sh/hook-weight": "10"' in content
-        assert (
-            '"helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded'
-            in content
-        )
+        # Check job configuration (no hooks to avoid circular dependency)
+        assert "kind: Job" in content
+        assert "restartPolicy: OnFailure" in content
+        # Verify comment explaining why hooks were removed
+        assert "Removed helm hooks to avoid circular dependency with --wait" in content
 
     def test_kv_job_idempotency(self, helm_dir: Path) -> None:
         """Test KV creation job is idempotent."""
