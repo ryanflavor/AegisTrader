@@ -214,10 +214,10 @@ class TestNATSConfiguration:
         with open(values_file) as f:
             values = yaml.safe_load(f)
 
-        nats_config = values["nats"]["nats"]["jetstream"]
+        nats_config = values["nats"]["config"]["jetstream"]
         assert nats_config["enabled"] is True
-        assert nats_config["fileStorage"]["enabled"] is True
-        assert nats_config["fileStorage"]["size"] == "10Gi"
+        assert nats_config["fileStore"]["enabled"] is True
+        assert nats_config["fileStore"]["pvc"]["size"] == "10Gi"
 
     def test_nats_memory_efficiency(self, helm_dir: Path) -> None:
         """Test NATS memory configuration for efficiency."""

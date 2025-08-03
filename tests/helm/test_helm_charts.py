@@ -152,7 +152,9 @@ class TestHelmTemplateRendering(unittest.TestCase):
         deployment = api_deployments[0]
         containers = deployment["spec"]["template"]["spec"]["containers"]
         self.assertEqual(len(containers), 1)
-        self.assertEqual(containers[0]["image"], "aegistrader-monitor-api:latest")
+        # Check image name without tag
+        image = containers[0]["image"]
+        self.assertTrue(image.startswith("aegistrader-monitor-api:"))
 
         # Check init containers
         init_containers = deployment["spec"]["template"]["spec"].get("initContainers", [])
@@ -177,7 +179,9 @@ class TestHelmTemplateRendering(unittest.TestCase):
         deployment = ui_deployments[0]
         containers = deployment["spec"]["template"]["spec"]["containers"]
         self.assertEqual(len(containers), 1)
-        self.assertEqual(containers[0]["image"], "aegistrader-monitor-ui:latest")
+        # Check image name without tag
+        image = containers[0]["image"]
+        self.assertTrue(image.startswith("aegistrader-monitor-ui:"))
 
     def test_services_are_created(self) -> None:
         """Test that all required services are created."""

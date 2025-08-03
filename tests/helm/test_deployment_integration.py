@@ -144,14 +144,15 @@ class TestDeploymentIntegration(unittest.TestCase):
             values = yaml.safe_load(f)
 
         # NATS should have JetStream file storage configured
-        nats_config = values["nats"]["nats"]["jetstream"]
+        nats_config = values["nats"]["config"]["jetstream"]
         self.assertTrue(nats_config["enabled"])
-        self.assertIn("fileStorage", nats_config)
-        self.assertTrue(nats_config["fileStorage"]["enabled"])
-        self.assertIn("size", nats_config["fileStorage"])
+        self.assertIn("fileStore", nats_config)
+        self.assertTrue(nats_config["fileStore"]["enabled"])
+        self.assertIn("pvc", nats_config["fileStore"])
+        self.assertIn("size", nats_config["fileStore"]["pvc"])
 
         # Verify storage size is reasonable
-        storage_size = nats_config["fileStorage"]["size"]
+        storage_size = nats_config["fileStore"]["pvc"]["size"]
         self.assertIn("Gi", storage_size)
         size_value = int(storage_size.replace("Gi", ""))
         self.assertGreaterEqual(size_value, 5, "Storage size too small for production")
