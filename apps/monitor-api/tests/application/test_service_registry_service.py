@@ -16,13 +16,14 @@ from app.domain.exceptions import (
     ServiceNotFoundException,
 )
 from app.domain.models import ServiceDefinition
-from app.ports.kv_store import KVStorePort
 
 
 @pytest.fixture
 def mock_kv_store() -> Mock:
     """Create a mock KV store port."""
-    mock = Mock(spec=KVStorePort)
+    from app.ports.service_registry_kv_store import ServiceRegistryKVStorePort
+
+    mock = Mock(spec=ServiceRegistryKVStorePort)
     mock.get = AsyncMock()
     mock.put = AsyncMock()
     mock.update = AsyncMock()
@@ -84,7 +85,7 @@ class TestServiceRegistryService:
             "description": "Test service",
             "version": "1.0.0",
         }
-        mock_kv_store.put.side_effect = ServiceAlreadyExistsException("existing-service")
+        mock_kv_store.put.side_effect = ValueError("Key 'existing-service' already exists")
 
         # Act & Assert
         with pytest.raises(ServiceAlreadyExistsException) as exc_info:
@@ -116,7 +117,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test getting an existing service."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         expected_service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
@@ -155,7 +156,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test successful service update."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         existing_service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
@@ -180,8 +181,8 @@ class TestServiceRegistryService:
         assert result.owner == "test-team"  # Unchanged
         assert result.description == "New description"
         assert result.version == "1.1.0"
-        assert result.created_at == now  # Unchanged
-        assert result.updated_at > now  # Updated
+        assert result.created_at == existing_service.created_at  # Unchanged
+        assert result.updated_at > existing_service.updated_at  # Updated
 
         # Verify calls
         mock_kv_store.get.assert_called_once_with("test-service")
@@ -197,7 +198,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test service update with optimistic locking."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         existing_service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
@@ -241,7 +242,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test handling concurrent update conflicts."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         existing_service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
@@ -251,7 +252,7 @@ class TestServiceRegistryService:
             updated_at=now,
         )
         mock_kv_store.get.return_value = existing_service
-        mock_kv_store.update.side_effect = ConcurrentUpdateException("test-service")
+        mock_kv_store.update.side_effect = ValueError("Revision mismatch for key 'test-service'")
 
         updates = {"version": "1.1.0"}
 
@@ -280,7 +281,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test deleting a non-existent service."""
         # Arrange
-        mock_kv_store.delete.side_effect = ServiceNotFoundException("non-existent")
+        mock_kv_store.delete.side_effect = ValueError("Key 'non-existent' not found")
 
         # Act & Assert
         with pytest.raises(ServiceNotFoundException) as exc_info:
@@ -293,7 +294,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test listing all services."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         services = [
             ServiceDefinition(
                 service_name="service1",
@@ -343,7 +344,7 @@ class TestServiceRegistryService:
     ) -> None:
         """Test getting service with revision when adapter supports it."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         expected_service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
@@ -380,10 +381,8 @@ class TestServiceRegistryService:
         result = await service_registry.create_service(service_data)
 
         # Assert
-        # Verify timestamps are ISO 8601 format
-        datetime.fromisoformat(result.created_at.replace("Z", "+00:00"))
-        datetime.fromisoformat(result.updated_at.replace("Z", "+00:00"))
-
-        # Verify timestamps include timezone info
-        assert "T" in result.created_at
-        assert ("Z" in result.created_at) or ("+" in result.created_at)
+        # Verify timestamps are datetime objects with timezone
+        assert isinstance(result.created_at, datetime)
+        assert isinstance(result.updated_at, datetime)
+        assert result.created_at.tzinfo is not None
+        assert result.updated_at.tzinfo is not None

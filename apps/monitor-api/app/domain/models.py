@@ -8,7 +8,7 @@ Domain models are free from any infrastructure dependencies.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from ..utils.timezone import utc8_timestamp_factory
 
@@ -160,35 +160,62 @@ class ServiceDefinition(BaseModel):
         description="Service version",
         pattern=r"^\d+\.\d+\.\d+$",
     )
-    created_at: str = Field(
+    created_at: datetime = Field(
         ...,
-        description="Creation timestamp in ISO 8601 format",
+        description="Creation timestamp (UTC+8)",
     )
-    updated_at: str = Field(
+    updated_at: datetime = Field(
         ...,
-        description="Last update timestamp in ISO 8601 format",
+        description="Last update timestamp (UTC+8)",
     )
 
-    @field_validator("created_at", "updated_at")
+    @field_validator("service_name")
     @classmethod
-    def validate_iso_timestamp(cls, v: str) -> str:
-        """Validate timestamp is in ISO 8601 format with time component."""
-        try:
-            # Ensure it has a time component (T separator)
-            if "T" not in v:
-                raise ValueError("Timestamp must include time component (T separator)")
-            datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError as e:
-            raise ValueError(f"Timestamp must be in ISO 8601 format: {e}") from e
+    def validate_service_name_format(cls, v: str) -> str:
+        """Additional validation for service name format."""
+        if "--" in v:
+            raise ValueError("Service name cannot contain consecutive hyphens")
         return v
+
+    @field_validator("version")
+    @classmethod
+    def validate_semantic_version(cls, v: str) -> str:
+        """Validate semantic version format."""
+        parts = v.split(".")
+        for part in parts:
+            if not part.isdigit() or (len(part) > 1 and part.startswith("0")):
+                raise ValueError("Version parts must be numeric without leading zeros")
+        return v
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def parse_timestamp(cls, v: Any) -> datetime:
+        """Parse timestamp from various formats."""
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            # Handle ISO format with Z or timezone
+            return datetime.fromisoformat(v.replace("Z", "+00:00"))
+        raise ValueError(f"Invalid timestamp format: {v}")
 
     @field_validator("updated_at")
     @classmethod
-    def validate_updated_after_created(cls, v: str, info: Any) -> str:
+    def validate_updated_after_created(cls, v: datetime, info: Any) -> datetime:
         """Validate updated_at is not before created_at."""
         if hasattr(info, "data") and info.data and "created_at" in info.data:
-            created = datetime.fromisoformat(info.data["created_at"].replace("Z", "+00:00"))
-            updated = datetime.fromisoformat(v.replace("Z", "+00:00"))
-            if updated < created:
+            created_at = info.data["created_at"]
+            if v < created_at:
                 raise ValueError("updated_at cannot be before created_at")
         return v
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return value.isoformat()
+
+    def to_iso_dict(self) -> dict[str, Any]:
+        """Convert to dictionary with ISO format timestamps."""
+        data = self.model_dump()
+        data["created_at"] = self.created_at.isoformat()
+        data["updated_at"] = self.updated_at.isoformat()
+        return data

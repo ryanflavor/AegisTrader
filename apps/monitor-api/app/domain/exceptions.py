@@ -39,6 +39,7 @@ class ServiceNotFoundException(DomainException):
 
     def __init__(self, service_name: str):
         super().__init__(f"Service '{service_name}' not found", "SERVICE_NOT_FOUND")
+        self.key = service_name
 
 
 class ServiceAlreadyExistsException(DomainException):
@@ -46,6 +47,7 @@ class ServiceAlreadyExistsException(DomainException):
 
     def __init__(self, service_name: str):
         super().__init__(f"Service '{service_name}' already exists", "SERVICE_ALREADY_EXISTS")
+        self.key = service_name
 
 
 class ConcurrentUpdateException(DomainException):
@@ -55,6 +57,7 @@ class ConcurrentUpdateException(DomainException):
         super().__init__(
             f"Concurrent update detected for service '{service_name}'", "CONCURRENT_UPDATE"
         )
+        self.key = service_name
 
 
 class KVStoreException(DomainException):

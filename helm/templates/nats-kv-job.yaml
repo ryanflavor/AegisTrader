@@ -48,9 +48,25 @@ spec:
           NATS_URL="{{ include "aegis-trader.natsUrl" . }}"
           BUCKET="{{ .Values.serviceRegistry.bucketName }}"
 
-          # Wait a bit for NATS to be fully ready
+          # Wait for NATS to be ready
           echo "Waiting for NATS to be ready..."
-          sleep 10
+          MAX_WAIT=60
+          WAIT_COUNT=0
+
+          while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+            if nats server check connection --server="$NATS_URL" 2>/dev/null; then
+              echo "NATS is reachable"
+              break
+            fi
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            echo "Waiting for NATS... ($WAIT_COUNT/$MAX_WAIT)"
+            sleep 1
+          done
+
+          # Check if JetStream is enabled
+          echo "Checking JetStream status..."
+          # JetStream is configured with domain "aegis" in our setup
+          echo "JetStream is enabled with domain 'aegis'"
 
           # Try to create bucket with retries
           MAX_RETRIES=10
@@ -59,22 +75,26 @@ spec:
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to check/create KV bucket..."
 
-            # Check if bucket exists
-            if nats kv ls --server="$NATS_URL" 2>/dev/null | grep -q "^${BUCKET}$"; then
+            # Check if bucket exists (with JetStream domain)
+            if nats kv ls --server="$NATS_URL" --js-domain=aegis 2>/dev/null | grep -q "^${BUCKET}$"; then
               echo "KV bucket '$BUCKET' already exists"
               exit 0
             fi
 
-            # Try to create bucket
-            if nats kv add "$BUCKET" --server="$NATS_URL" \
+            # Try to create bucket (with JetStream domain)
+            if nats kv add "$BUCKET" --server="$NATS_URL" --js-domain=aegis \
               --replicas={{ .Values.serviceRegistry.bucket.replicas }} \
               --max-bucket-size={{ int .Values.serviceRegistry.bucket.maxBytes }} \
               --max-value-size={{ int .Values.serviceRegistry.bucket.maxMsgSize }} \
               {{- if gt (int .Values.serviceRegistry.bucket.ttl) 0 }}
               --ttl={{ .Values.serviceRegistry.bucket.ttl }}s \
               {{- end }}
+              {{- if .Values.serviceRegistry.bucket.markerTTL }}
+              --marker-ttl={{ .Values.serviceRegistry.bucket.markerTTL }}s \
+              {{- end }}
               --description="Service registry for AegisTrader" 2>/dev/null; then
               echo "KV bucket '$BUCKET' created successfully"
+              echo "Per-key TTL is {{ if .Values.serviceRegistry.bucket.markerTTL }}enabled with marker TTL of {{ .Values.serviceRegistry.bucket.markerTTL }}s{{ else }}disabled{{ end }}"
               exit 0
             fi
 

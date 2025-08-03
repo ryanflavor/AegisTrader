@@ -15,11 +15,12 @@ class KVStorePort(ABC):
     """
 
     @abstractmethod
-    async def connect(self, bucket: str) -> None:
+    async def connect(self, bucket: str, ttl: int | None = None) -> None:
         """Connect to a KV store bucket.
 
         Args:
             bucket: The name of the KV bucket to connect to
+            ttl: Optional TTL in seconds for all entries in the bucket
         """
         ...
 

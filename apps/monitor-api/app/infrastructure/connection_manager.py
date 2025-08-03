@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..domain.exceptions import KVStoreException
-from ..ports.kv_store import KVStorePort
+from ..ports.service_registry_kv_store import ServiceRegistryKVStorePort
 
 if TYPE_CHECKING:
     from ..domain.models import ServiceConfiguration
@@ -28,15 +28,15 @@ class ConnectionManager:
             config: Service configuration
         """
         self.config = config
-        self._kv_store: KVStorePort | None = None
+        self._kv_store: ServiceRegistryKVStorePort | None = None
 
     async def startup(self) -> None:
         """Initialize all connections during application startup."""
         try:
             # Initialize KV Store connection using AegisSDK
-            from .aegis_kv_adapter import AegisKVStoreAdapter
+            from .aegis_sdk_kv_adapter import AegisSDKKVAdapter
 
-            self._kv_store = AegisKVStoreAdapter()
+            self._kv_store = AegisSDKKVAdapter()
             await self._kv_store.connect(self.config.nats_url)
             logger.info("Successfully connected to NATS KV Store")
         except Exception as e:
@@ -53,11 +53,11 @@ class ConnectionManager:
             logger.error(f"Error during shutdown: {e}")
 
     @property
-    def kv_store(self) -> KVStorePort:
+    def kv_store(self) -> ServiceRegistryKVStorePort:
         """Get the KV Store instance.
 
         Returns:
-            KVStorePort: The KV Store instance
+            ServiceRegistryKVStorePort: The KV Store instance
 
         Raises:
             KVStoreException: If not initialized

@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock
 
+from aegis_sdk.ports.kv_store import KVStorePort
 from app.domain.models import ServiceDefinition
-from app.ports.kv_store import KVStorePort
 
 if TYPE_CHECKING:
     from collections.abc import Callable

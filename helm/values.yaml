@@ -16,21 +16,24 @@ global:
 # NATS Configuration
 nats:
   enabled: true
-  # Number of NATS replicas
-  replicas: 3
-  # NATS container configuration
-  nats:
+  # NATS configuration following the subchart structure
+  config:
+    cluster:
+      enabled: true
+      replicas: 3
+    # JetStream configuration - this is the correct path for the NATS subchart
     jetstream:
       enabled: true
-      # JetStream file storage configuration
-      fileStorage:
+      fileStore:
         enabled: true
-        size: 10Gi
-        storageClassName: "" # Uses default if empty
-      # Memory storage configuration (for development)
-      memoryStorage:
+        dir: /data
+        pvc:
+          enabled: true
+          size: 10Gi
+          storageClassName: "" # Uses default if empty
+      memoryStore:
         enabled: false
-        size: 1Gi
+        maxSize: 1Gi
   # Container configuration
   container:
     env:
@@ -82,7 +85,7 @@ monitor-api:
   image:
     repository: aegistrader-monitor-api
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "1.0.1"
   service:
     type: ClusterIP
     port: 8100
@@ -127,7 +130,7 @@ monitor-ui:
   image:
     repository: aegistrader-monitor-ui
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "1.0.1"
   service:
     type: ClusterIP
     port: 3100
@@ -186,15 +189,5 @@ serviceRegistry:
     maxMsgSize: 1048576 # 1MB
 
 # Development overrides
-development:
-  # Use local storage for development
-  nats:
-    nats:
-      jetstream:
-        fileStorage:
-          size: 5Gi
-  # Single replica for development
-  monitor-api:
-    replicaCount: 1
-  monitor-ui:
-    replicaCount: 1
+# NOTE: For development, use values.dev.yaml or values.local.yaml files
+# to override specific settings

@@ -201,17 +201,19 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     )
 
     # If detail is already in our format, use it directly
-    if isinstance(exc.detail, dict) and "error" in exc.detail:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=exc.detail,
-        )
+    if isinstance(exc.detail, dict):  # type: ignore[unreachable]
+        if "error" in exc.detail:  # type: ignore[unreachable]
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=exc.detail,
+            )
 
     # Otherwise, create our standard format
     error_response = ErrorResponse(
         error=ErrorDetail(
             code=f"HTTP_{exc.status_code}",
             message=str(exc.detail),
+            details=None,
         )
     )
 
@@ -240,6 +242,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         error=ErrorDetail(
             code="INTERNAL_ERROR",
             message="An internal server error occurred",
+            details=None,
         )
     )
 
@@ -255,10 +258,11 @@ def register_error_handlers(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance
     """
-    app.add_exception_handler(DomainException, domain_exception_handler)
-    app.add_exception_handler(ValidationError, validation_exception_handler)
+    app.add_exception_handler(DomainException, domain_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(ValidationError, validation_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(
-        RequestValidationError, validation_exception_handler
+        RequestValidationError,
+        validation_exception_handler,  # type: ignore[arg-type]
     )  # Handle FastAPI request validation
-    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, general_exception_handler)

@@ -1,4 +1,4 @@
-"""Unit tests for NATS KV Store adapter."""
+"""Unit tests for NATS KV Store adapter - concise and comprehensive."""
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -35,6 +35,7 @@ class TestNATSKVStore:
         # Mock KV
         kv = AsyncMock()
         js.key_value = AsyncMock(return_value=kv)
+        js.create_key_value = AsyncMock(return_value=kv)
 
         return client, js, kv
 
@@ -58,6 +59,31 @@ class TestNATSKVStore:
             js.key_value.assert_called_once_with("test-bucket")
             assert kv_store._kv == kv
             assert kv_store._bucket_name == "test-bucket"
+
+    @pytest.mark.asyncio
+    async def test_connect_with_enable_ttl(self, kv_store, mock_nats_client):
+        """Test connect with enable_ttl creates bucket with TTL support."""
+        client, js, kv = mock_nats_client
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            await kv_store.connect("ttl-bucket", enable_ttl=True)
+
+            # Should try key_value first
+            assert js.key_value.call_count >= 1
+            assert kv_store._bucket_name == "ttl-bucket"
+
+    @pytest.mark.asyncio
+    async def test_connect_not_connected(self, kv_store):
+        """Test connect fails when not connected to NATS."""
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter.is_connected = AsyncMock(return_value=False)
+
+            with pytest.raises(RuntimeError, match="NATS adapter is not connected"):
+                await kv_store.connect("test-bucket")
 
     @pytest.mark.asyncio
     async def test_disconnect_clears_kv_reference(self, kv_store):
@@ -145,6 +171,7 @@ class TestNATSKVStore:
         """Test put with TTL and revision check."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
+        kv_store._bucket_name = "test-bucket"
 
         # Mock get for revision check
         mock_entry = Mock()
@@ -152,15 +179,24 @@ class TestNATSKVStore:
         mock_kv.get = AsyncMock(return_value=mock_entry)
         mock_kv.put = AsyncMock(return_value=124)
 
-        # Test TTL option (Note: NATS KV doesn't support per-key TTL)
-        options = KVOptions(ttl=3600)
-        await kv_store.put("test-key", "value", options)
+        # Mock the NATS adapter and JetStream
+        mock_js = AsyncMock()
+        mock_pa = Mock()
+        mock_pa.seq = 125
+        mock_js.publish = AsyncMock(return_value=mock_pa)
+        kv_store._nats_adapter._js = mock_js
 
-        mock_kv.put.assert_called_once()
-        call_args = mock_kv.put.call_args
-        # TTL is not passed to put method in NATS KV
-        assert call_args[0][0] == "test-key"  # no sanitization needed for this key
+        # Test TTL option with per-message TTL
+        options = KVOptions(ttl=3600)
+        revision = await kv_store.put("test-key", "value", options)
+
+        # Should use JetStream publish with TTL header
+        mock_js.publish.assert_called_once()
+        call_args = mock_js.publish.call_args
+        assert call_args[0][0] == "$KV.test-bucket.test-key"
         assert call_args[0][1] == b'"value"'
+        assert call_args[1]["headers"]["Nats-TTL"] == "3600"
+        assert revision == 125
 
     @pytest.mark.asyncio
     async def test_put_create_only(self, kv_store):
@@ -325,10 +361,14 @@ class TestNATSKVStore:
         """Test watch yields events for key changes."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
+        kv_store._key_mapping = {}  # Initialize key mapping
 
-        # Mock watcher
+        # Mock watcher with updates method
         mock_watcher = AsyncMock()
-        mock_updates = [
+
+        # Mock updates sequence
+        updates_sequence = [
+            None,  # Initial marker
             Mock(
                 operation="PUT",
                 key="test-key",
@@ -347,11 +387,10 @@ class TestNATSKVStore:
             ),
         ]
 
-        async def mock_updates_gen():
-            for update in mock_updates:
-                yield update
+        # Configure updates method to return values in sequence
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
 
-        mock_watcher.updates = mock_updates_gen
+        # Configure watch to return the watcher
         mock_kv.watch = AsyncMock(return_value=mock_watcher)
 
         events = []
@@ -367,6 +406,54 @@ class TestNATSKVStore:
         assert events[1].operation == "DELETE"
         assert events[1].entry is None
 
+        # Verify watch was called correctly
+        mock_kv.watch.assert_called_once_with("test-key", include_history=False)
+
+    @pytest.mark.asyncio
+    async def test_watch_prefix(self, kv_store):
+        """Test watch with prefix filter."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}  # Initialize key mapping
+
+        # Mock watcher with updates method
+        mock_watcher = AsyncMock()
+
+        # Mock updates including keys with and without prefix
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="PUT",
+                key="prefix:key1",
+                value=b'"value1"',
+                revision=1,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+            Mock(
+                operation="PUT",
+                key="other:key",
+                value=b'"ignored"',
+                revision=2,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(prefix="prefix:"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        assert len(events) == 1
+        assert events[0].entry.key == "prefix:key1"
+        # For prefix watching, NATS watches all keys (">") and filters in app
+        mock_kv.watch.assert_called_once_with(">", include_history=False)
+
     @pytest.mark.asyncio
     async def test_watch_validates_parameters(self, kv_store):
         """Test watch validates mutually exclusive parameters."""
@@ -380,20 +467,20 @@ class TestNATSKVStore:
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
 
-        # Mock history entries
+        # Mock history entries (oldest first, as returned by NATS)
         mock_entries = [
-            Mock(
-                key="test-key",
-                value=b'"value-v2"',
-                revision=2,
-                created=datetime(2025, 1, 1, 0, 1, 0, tzinfo=UTC),
-                delta=None,
-            ),
             Mock(
                 key="test-key",
                 value=b'"value-v1"',
                 revision=1,
                 created=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
+                delta=None,
+            ),
+            Mock(
+                key="test-key",
+                value=b'"value-v2"',
+                revision=2,
+                created=datetime(2025, 1, 1, 0, 1, 0, tzinfo=UTC),
                 delta=None,
             ),
         ]
@@ -480,3 +567,88 @@ class TestNATSKVStore:
         mock_adapter = Mock()
         kv_store = NATSKVStore(nats_adapter=mock_adapter)
         assert kv_store._nats_adapter == mock_adapter
+
+    def test_sanitize_key(self):
+        """Test key sanitization for NATS compatibility."""
+        kv_store = NATSKVStore(sanitize_keys=True)
+
+        # Test various invalid characters
+        assert kv_store._sanitize_key("key with spaces") == "key_with_spaces"
+        assert kv_store._sanitize_key("key.with.dots") == "key_with_dots"
+        assert kv_store._sanitize_key("key*with*stars") == "key_with_stars"
+        assert kv_store._sanitize_key("key>with>gt") == "key_with_gt"
+        assert kv_store._sanitize_key("key/with/slash") == "key_with_slash"
+        assert kv_store._sanitize_key("key\\with\\backslash") == "key_with_backslash"
+        assert kv_store._sanitize_key("key:with:colon") == "key_with_colon"
+
+        # Test key mapping is stored
+        assert kv_store._key_mapping["key_with_spaces"] == "key with spaces"
+
+        # Test with sanitization disabled
+        kv_store_no_sanitize = NATSKVStore(sanitize_keys=False)
+        assert kv_store_no_sanitize._sanitize_key("key with spaces") == "key with spaces"
+
+    @pytest.mark.asyncio
+    async def test_put_with_ttl_and_revision(self, kv_store):
+        """Test put with both TTL and revision check."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._bucket_name = "test-bucket"
+
+        # Mock get for revision check
+        mock_entry = Mock()
+        mock_entry.revision = 123
+        mock_kv.get = AsyncMock(return_value=mock_entry)
+
+        # Mock JetStream publish
+        mock_js = AsyncMock()
+        mock_pa = Mock()
+        mock_pa.seq = 125
+        mock_js.publish = AsyncMock(return_value=mock_pa)
+        kv_store._nats_adapter._js = mock_js
+
+        # Test with both TTL and revision
+        options = KVOptions(ttl=3600, revision=123)
+        revision = await kv_store.put("test-key", "value", options)
+
+        # Verify revision check was performed
+        mock_kv.get.assert_called_once_with("test-key")
+
+        # Verify publish was called with TTL header
+        mock_js.publish.assert_called_once()
+        call_args = mock_js.publish.call_args
+        assert call_args[1]["headers"]["Nats-TTL"] == "3600"
+        assert call_args[1]["headers"]["Nats-Expected-Last-Subject-Sequence"] == "123"
+        assert revision == 125
+
+    @pytest.mark.asyncio
+    async def test_create_kv_stream_with_ttl(self, kv_store, mock_nats_client):
+        """Test creating KV stream with TTL enabled."""
+        client, js, kv = mock_nats_client
+
+        # Mock stream API request
+        mock_response = Mock()
+        mock_response.stream_info = Mock()
+        mock_response.stream_info.created = True
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            # Mock the request method
+            client.request = AsyncMock(return_value=mock_response)
+
+            result = await kv_store._create_kv_stream_with_ttl("test-bucket")
+            assert result is True
+
+            # Verify stream creation request
+            client.request.assert_called_once()
+            call_args = client.request.call_args
+            assert call_args[0][0] == "$JS.API.STREAM.CREATE.KV_test-bucket"
+
+            # Verify stream config has allow_msg_ttl
+            import json
+
+            config = json.loads(call_args[0][1])
+            assert config["allow_msg_ttl"] is True

@@ -1,0 +1,20 @@
+# Enable per-message TTL for NATS KV Store
+# This configuration enables per-key TTL support in NATS KV buckets
+
+# JetStream is already enabled in values.yaml
+# This file only needs to configure the service registry bucket
+
+# Service Registry with per-message TTL support
+serviceRegistry:
+  createBucket: true
+  bucketName: service-registry
+  bucket:
+    replicas: 3
+    # No default TTL - use per-message TTL instead
+    ttl: 0
+    maxBytes: 1073741824 # 1GB
+    maxMsgs: -1 # Unlimited
+    maxMsgSize: 1048576 # 1MB
+    # Enable per-key TTL with marker TTL
+    # This allows individual keys to have their own TTL using Nats-TTL header
+    markerTTL: 3600 # 1 hour in seconds

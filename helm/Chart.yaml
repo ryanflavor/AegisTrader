@@ -22,13 +22,13 @@ dependencies:
     tags:
       - messaging
   - name: monitor-api
-    version: "0.1.0"
+    version: "1.0.1"
     repository: "file://./charts/monitor-api"
     condition: monitor-api.enabled
     tags:
       - backend
   - name: monitor-ui
-    version: "0.1.0"
+    version: "1.0.1"
     repository: "file://./charts/monitor-ui"
     condition: monitor-ui.enabled
     tags:

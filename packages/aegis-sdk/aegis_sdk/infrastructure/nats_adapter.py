@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -63,7 +64,12 @@ class NATSAdapter(MessageBusPort):
 
         # Initialize JetStream on first connection
         if self._connections:
-            self._js = self._connections[0].jetstream()
+            # Get JetStream domain from environment
+            js_domain = os.getenv("NATS_JS_DOMAIN")
+            if js_domain:
+                self._js = self._connections[0].jetstream(domain=js_domain)
+            else:
+                self._js = self._connections[0].jetstream()
 
             # Ensure streams exist
             await self._ensure_streams()

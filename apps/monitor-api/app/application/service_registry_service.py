@@ -8,9 +8,14 @@ from __future__ import annotations
 
 import logging
 
+from ..domain.exceptions import (
+    ConcurrentUpdateException,
+    ServiceAlreadyExistsException,
+    ServiceNotFoundException,
+)
 from ..domain.models import ServiceDefinition
-from ..ports.kv_store import KVStorePort
-from ..utils.timezone import now_utc8_iso
+from ..ports.service_registry_kv_store import ServiceRegistryKVStorePort
+from ..utils.timezone import utc8_timestamp_factory
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +23,7 @@ logger = logging.getLogger(__name__)
 class ServiceRegistryService:
     """Service for managing service definitions in the registry."""
 
-    def __init__(self, kv_store: KVStorePort):
+    def __init__(self, kv_store: ServiceRegistryKVStorePort):
         """Initialize the service registry.
 
         Args:
@@ -40,7 +45,7 @@ class ServiceRegistryService:
             KVStoreException: If storage fails
         """
         # Generate timestamps
-        now = now_utc8_iso()
+        now = utc8_timestamp_factory()
 
         # Create the service definition
         service = ServiceDefinition(
@@ -53,7 +58,12 @@ class ServiceRegistryService:
         )
 
         # Store in KV Store
-        await self._kv_store.put(service.service_name, service)
+        try:
+            await self._kv_store.put(service.service_name, service)
+        except ValueError as e:
+            if "already exists" in str(e):
+                raise ServiceAlreadyExistsException(service.service_name) from e
+            raise
 
         logger.info(f"Created service: {service.service_name}")
         return service
@@ -98,20 +108,26 @@ class ServiceRegistryService:
         # Get existing service
         existing = await self._kv_store.get(service_name)
         if not existing:
-            from ..domain.exceptions import ServiceNotFoundException
-
             raise ServiceNotFoundException(service_name)
 
         # Update fields
         service_data = existing.model_dump()
         service_data.update(updates)
-        service_data["updated_at"] = now_utc8_iso()
+        service_data["updated_at"] = utc8_timestamp_factory()
 
         # Create updated service
         updated_service = ServiceDefinition(**service_data)
 
         # Update in KV Store
-        await self._kv_store.update(service_name, updated_service, revision)
+        try:
+            await self._kv_store.update(service_name, updated_service, revision)
+        except ValueError as e:
+            error_msg = str(e)
+            if "not found" in error_msg:
+                raise ServiceNotFoundException(service_name) from e
+            if "Revision mismatch" in error_msg:
+                raise ConcurrentUpdateException(service_name) from e
+            raise
 
         logger.info(f"Updated service: {service_name}")
         return updated_service
@@ -126,7 +142,12 @@ class ServiceRegistryService:
             ServiceNotFoundException: If service doesn't exist
             KVStoreException: If deletion fails
         """
-        await self._kv_store.delete(service_name)
+        try:
+            await self._kv_store.delete(service_name)
+        except ValueError as e:
+            if "not found" in str(e):
+                raise ServiceNotFoundException(service_name) from e
+            raise
         logger.info(f"Deleted service: {service_name}")
 
     async def list_services(self) -> list[ServiceDefinition]:

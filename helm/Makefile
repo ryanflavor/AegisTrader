@@ -157,3 +157,33 @@ dev-upgrade: ## Upgrade with development values
 .PHONY: dev-uninstall
 dev-uninstall: ## Uninstall development deployment
 	@$(MAKE) uninstall NAMESPACE=aegis-dev
+
+# TTL Support
+.PHONY: upgrade-ttl
+upgrade-ttl: ## Upgrade with TTL support enabled
+	@echo "$(YELLOW)Upgrading with per-message TTL support...$(NC)"
+	@$(HELM) upgrade $(RELEASE_NAME) . \
+		--namespace $(NAMESPACE) \
+		--values $(VALUES_FILE) \
+		--values values.ttl-enabled.yaml \
+		--timeout $(HELM_TIMEOUT) \
+		--wait
+	@echo "$(GREEN)TTL support enabled!$(NC)"
+	@echo "$(YELLOW)Note: KV buckets will be recreated with TTL support$(NC)"
+
+.PHONY: restore-cluster
+restore-cluster: ## Restore to default 3-node cluster configuration
+	@echo "$(YELLOW)Restoring default cluster configuration...$(NC)"
+	@$(HELM) upgrade $(RELEASE_NAME) . \
+		--namespace $(NAMESPACE) \
+		--values $(VALUES_FILE) \
+		--reset-values \
+		--timeout $(HELM_TIMEOUT) \
+		--wait
+	@echo "$(GREEN)Cluster configuration restored!$(NC)"
+	@kubectl get pods -n $(NAMESPACE) -l app.kubernetes.io/name=nats
+
+.PHONY: test-ttl
+test-ttl: ## Test TTL functionality
+	@echo "$(YELLOW)Testing TTL functionality...$(NC)"
+	@cd .. && uv run python test_ttl_k8s.py || echo "$(RED)Make sure port-forward is running$(NC)"

@@ -1,6 +1,6 @@
-"""Unit tests for AegisKVStoreAdapter infrastructure adapter.
+"""Unit tests for AegisSDKKVAdapter infrastructure adapter.
 
-These tests ensure the adapter properly implements the KVStorePort
+These tests ensure the adapter properly implements the ServiceRegistryKVStorePort
 interface while using AegisSDK's NATSAdapter.
 """
 
@@ -8,20 +8,15 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-from app.domain.exceptions import (
-    ConcurrentUpdateException,
-    KVStoreException,
-)
+from app.domain.exceptions import KVStoreException
 from app.domain.models import ServiceDefinition
-from app.infrastructure.aegis_kv_adapter import AegisKVStoreAdapter
-from nats.js.errors import BucketNotFoundError, KeyNotFoundError
-from nats.js.kv import KeyValue
+from app.infrastructure.aegis_sdk_kv_adapter import AegisSDKKVAdapter
 
 
 @pytest.fixture
 def service_definition() -> ServiceDefinition:
     """Create a test service definition."""
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(UTC)
     return ServiceDefinition(
         service_name="test-service",
         owner="test-team",
@@ -33,164 +28,95 @@ def service_definition() -> ServiceDefinition:
 
 
 @pytest.fixture
-def mock_kv_entry() -> Mock:
-    """Create a mock KV entry."""
-    entry = Mock()
-    entry.value = (
-        b'{"service_name": "test-service", "owner": "test-team", '
-        b'"description": "Test service", "version": "1.0.0", '
-        b'"created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}'
-    )
-    entry.revision = 42
-    return entry
-
-
-@pytest.fixture
-def mock_kv() -> Mock:
-    """Create a mock KeyValue instance."""
-    mock = Mock(spec=KeyValue)
-    mock.get = AsyncMock()
-    mock.put = AsyncMock()
-    mock.update = AsyncMock()
-    mock.delete = AsyncMock()
-    mock.keys = AsyncMock()
-    return mock
-
-
-@pytest.fixture
-def mock_jetstream() -> Mock:
-    """Create a mock JetStream context."""
-    mock = Mock()
-    mock.key_value = AsyncMock()
-    mock.create_key_value = AsyncMock()
-    return mock
-
-
-@pytest.fixture
-def mock_nats_client() -> Mock:
-    """Create a mock NATS client."""
-    mock = Mock()
-    mock.jetstream = Mock()
-    mock.close = AsyncMock()
-    return mock
-
-
-@pytest.fixture
 def mock_aegis_adapter() -> Mock:
     """Create a mock AegisSDK NATSAdapter."""
     mock = Mock()
     mock.connect = AsyncMock()
     mock.disconnect = AsyncMock()
-    mock._js = None  # Will be set in tests
-    mock._connections = []  # Will be set in tests
-    mock._metrics = Mock()
-    mock._metrics.get_all = Mock(return_value={"test": "metrics"})
     return mock
 
 
 @pytest.fixture
-def adapter() -> AegisKVStoreAdapter:
+def adapter() -> AegisSDKKVAdapter:
     """Create an Aegis KV adapter instance."""
-    return AegisKVStoreAdapter(bucket_name="test-bucket")
+    return AegisSDKKVAdapter()
 
 
-class TestAegisKVStoreAdapter:
-    """Test cases for AegisKVStoreAdapter."""
+class TestAegisSDKKVAdapter:
+    """Test cases for AegisSDKKVAdapter."""
 
     @pytest.mark.asyncio
-    async def test_connect_creates_new_bucket_using_aegis_js(
+    async def test_connect_success(
         self,
-        adapter: AegisKVStoreAdapter,
+        adapter: AegisSDKKVAdapter,
         mock_aegis_adapter: Mock,
-        mock_jetstream: Mock,
-        mock_kv: Mock,
     ) -> None:
-        """Test connecting and creating a new bucket using AegisSDK's JetStream."""
+        """Test connecting to NATS and initializing KV Store."""
         # Arrange
-        mock_aegis_adapter._js = mock_jetstream
-        mock_jetstream.key_value.side_effect = BucketNotFoundError()
-        mock_jetstream.create_key_value.return_value = mock_kv
+        mock_kv_store = Mock()
+        mock_kv_store.connect = AsyncMock()
 
-        with patch(
-            "app.infrastructure.aegis_kv_adapter.NATSAdapter",
-            return_value=mock_aegis_adapter,
+        with (
+            patch(
+                "app.infrastructure.aegis_sdk_kv_adapter.NATSAdapter",
+                return_value=mock_aegis_adapter,
+            ),
+            patch(
+                "app.infrastructure.aegis_sdk_kv_adapter.NATSKVStore",
+                return_value=mock_kv_store,
+            ),
         ):
             # Act
             await adapter.connect("nats://localhost:4222")
 
             # Assert
-            assert adapter._adapter == mock_aegis_adapter
-            assert adapter._js == mock_jetstream
-            assert adapter._kv == mock_kv
+            assert adapter._nats_adapter == mock_aegis_adapter
+            assert adapter._kv_store == mock_kv_store
+            assert adapter._connected is True
             mock_aegis_adapter.connect.assert_called_once_with(["nats://localhost:4222"])
-            mock_jetstream.create_key_value.assert_called_once()
-            config = mock_jetstream.create_key_value.call_args[0][0]
-            assert config.bucket == "test-bucket"
-            assert config.description == "Service registry definitions"
-            assert config.max_value_size == 1024 * 1024
-            assert config.history == 10
+            mock_kv_store.connect.assert_called_once_with("service-registry")
 
     @pytest.mark.asyncio
-    async def test_connect_fallback_to_connections(
+    async def test_connect_failure(
         self,
-        adapter: AegisKVStoreAdapter,
-        mock_aegis_adapter: Mock,
-        mock_nats_client: Mock,
-        mock_jetstream: Mock,
-        mock_kv: Mock,
-    ) -> None:
-        """Test connecting when AegisSDK doesn't expose _js but has _connections."""
-        # Arrange
-        mock_aegis_adapter._js = None  # No _js attribute
-        mock_aegis_adapter._connections = [mock_nats_client]
-        mock_nats_client.jetstream.return_value = mock_jetstream
-        mock_jetstream.key_value.return_value = mock_kv
-
-        with patch(
-            "app.infrastructure.aegis_kv_adapter.NATSAdapter",
-            return_value=mock_aegis_adapter,
-        ):
-            # Act
-            await adapter.connect("nats://localhost:4222")
-
-            # Assert
-            assert adapter._js == mock_jetstream
-            assert adapter._kv == mock_kv
-            mock_nats_client.jetstream.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_connect_failure_no_jetstream_access(
-        self,
-        adapter: AegisKVStoreAdapter,
+        adapter: AegisSDKKVAdapter,
         mock_aegis_adapter: Mock,
     ) -> None:
-        """Test connection failure when AegisSDK doesn't provide JetStream access."""
+        """Test connection failure."""
         # Arrange
-        mock_aegis_adapter._js = None
-        mock_aegis_adapter._connections = []
+        mock_aegis_adapter.connect.side_effect = Exception("Connection failed")
 
         with patch(
-            "app.infrastructure.aegis_kv_adapter.NATSAdapter",
+            "app.infrastructure.aegis_sdk_kv_adapter.NATSAdapter",
             return_value=mock_aegis_adapter,
         ):
             # Act & Assert
             with pytest.raises(KVStoreException) as exc_info:
                 await adapter.connect("nats://localhost:4222")
-            assert "Unable to access NATS JetStream from AegisSDK" in str(exc_info.value)
+            assert "Failed to connect to NATS" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_disconnect(self, adapter: AegisKVStoreAdapter, mock_aegis_adapter: Mock) -> None:
-        """Test disconnecting using AegisSDK."""
+    async def test_disconnect(self, adapter: AegisSDKKVAdapter) -> None:
+        """Test disconnecting from NATS."""
         # Arrange
-        adapter._adapter = mock_aegis_adapter
+        mock_nats_adapter = Mock()
+        mock_nats_adapter.disconnect = AsyncMock()
+        mock_kv_store = Mock()
+        mock_kv_store.disconnect = AsyncMock()
+
+        adapter._nats_adapter = mock_nats_adapter
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act
         await adapter.disconnect()
 
         # Assert
-        mock_aegis_adapter.disconnect.assert_called_once()
+        mock_kv_store.disconnect.assert_called_once()
+        mock_nats_adapter.disconnect.assert_called_once()
+        assert adapter._connected is False
 
-    def test_ensure_connected_raises_when_not_connected(self, adapter: AegisKVStoreAdapter) -> None:
+    def test_ensure_connected_raises_when_not_connected(self, adapter: AegisSDKKVAdapter) -> None:
         """Test that operations fail when not connected."""
         # Act & Assert
         with pytest.raises(KVStoreException) as exc_info:
@@ -200,15 +126,18 @@ class TestAegisKVStoreAdapter:
     @pytest.mark.asyncio
     async def test_get_existing_key(
         self,
-        adapter: AegisKVStoreAdapter,
-        mock_kv: Mock,
-        mock_kv_entry: Mock,
+        adapter: AegisSDKKVAdapter,
         service_definition: ServiceDefinition,
     ) -> None:
         """Test getting an existing key."""
         # Arrange
-        adapter._kv = mock_kv
-        mock_kv.get.return_value = mock_kv_entry
+        mock_kv_store = Mock()
+        mock_entry = Mock()
+        mock_entry.value = service_definition.model_dump()
+        mock_kv_store.get = AsyncMock(return_value=mock_entry)
+
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act
         result = await adapter.get("test-service")
@@ -217,75 +146,84 @@ class TestAegisKVStoreAdapter:
         assert result is not None
         assert result.service_name == "test-service"
         assert result.owner == "test-team"
-        mock_kv.get.assert_called_once_with("test-service")
+        mock_kv_store.get.assert_called_once_with("test-service")
 
     @pytest.mark.asyncio
     async def test_put_new_key(
         self,
-        adapter: AegisKVStoreAdapter,
-        mock_kv: Mock,
+        adapter: AegisSDKKVAdapter,
         service_definition: ServiceDefinition,
     ) -> None:
         """Test putting a new key."""
         # Arrange
-        adapter._kv = mock_kv
-        mock_kv.get.side_effect = KeyNotFoundError()  # Key doesn't exist
-        mock_kv.put.return_value = None
+        mock_kv_store = Mock()
+        mock_kv_store.exists = AsyncMock(return_value=False)
+        mock_kv_store.put = AsyncMock()
+
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act
         await adapter.put("test-service", service_definition)
 
         # Assert
-        mock_kv.get.assert_called_once_with("test-service")
-        mock_kv.put.assert_called_once()
-        put_data = mock_kv.put.call_args[0][1]
-        assert service_definition.model_dump_json().encode() == put_data
+        mock_kv_store.exists.assert_called_once_with("test-service")
+        mock_kv_store.put.assert_called_once_with("test-service", service_definition.to_iso_dict())
 
     @pytest.mark.asyncio
     async def test_update_with_revision_conflict_handling(
         self,
-        adapter: AegisKVStoreAdapter,
-        mock_kv: Mock,
-        mock_kv_entry: Mock,
+        adapter: AegisSDKKVAdapter,
         service_definition: ServiceDefinition,
     ) -> None:
         """Test concurrent update conflict detection."""
         # Arrange
-        adapter._kv = mock_kv
-        mock_kv.get.return_value = mock_kv_entry
-        mock_kv.update.side_effect = Exception("wrong last sequence")
+        mock_kv_store = Mock()
+        mock_entry = Mock()
+        mock_entry.value = service_definition.model_dump()
+        mock_kv_store.get = AsyncMock(return_value=mock_entry)
+        mock_kv_store.put = AsyncMock(side_effect=ValueError("revision check failed"))
+
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act & Assert
-        with pytest.raises(ConcurrentUpdateException) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await adapter.update("test-service", service_definition, revision=41)
-        assert "test-service" in str(exc_info.value)
+        assert "Revision mismatch" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_delete_existing_key(
-        self, adapter: AegisKVStoreAdapter, mock_kv: Mock, mock_kv_entry: Mock
-    ) -> None:
+    async def test_delete_existing_key(self, adapter: AegisSDKKVAdapter) -> None:
         """Test deleting an existing key."""
         # Arrange
-        adapter._kv = mock_kv
-        mock_kv.get.return_value = mock_kv_entry
-        mock_kv.delete.return_value = None
+        mock_kv_store = Mock()
+        mock_kv_store.exists = AsyncMock(return_value=True)
+        mock_kv_store.delete = AsyncMock()
+
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act
         await adapter.delete("test-service")
 
         # Assert
-        mock_kv.get.assert_called_once_with("test-service")
-        mock_kv.delete.assert_called_once_with("test-service")
+        mock_kv_store.exists.assert_called_once_with("test-service")
+        mock_kv_store.delete.assert_called_once_with("test-service")
 
     @pytest.mark.asyncio
     async def test_list_all_with_services(
-        self, adapter: AegisKVStoreAdapter, mock_kv: Mock, mock_kv_entry: Mock
+        self, adapter: AegisSDKKVAdapter, service_definition: ServiceDefinition
     ) -> None:
         """Test listing all services."""
         # Arrange
-        adapter._kv = mock_kv
-        mock_kv.keys.return_value = ["service1", "service2"]
-        mock_kv.get.return_value = mock_kv_entry
+        mock_kv_store = Mock()
+        mock_kv_store.keys = AsyncMock(return_value=["service1", "service2"])
+        mock_entry = Mock()
+        mock_entry.value = service_definition.model_dump()
+        mock_kv_store.get = AsyncMock(return_value=mock_entry)
+
+        adapter._kv_store = mock_kv_store
+        adapter._connected = True
 
         # Act
         result = await adapter.list_all()
@@ -293,37 +231,5 @@ class TestAegisKVStoreAdapter:
         # Assert
         assert len(result) == 2
         assert all(s.service_name == "test-service" for s in result)
-        mock_kv.keys.assert_called_once()
-        assert mock_kv.get.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_get_metrics(
-        self, adapter: AegisKVStoreAdapter, mock_aegis_adapter: Mock
-    ) -> None:
-        """Test getting metrics from AegisSDK adapter."""
-        # Arrange
-        adapter._adapter = mock_aegis_adapter
-        expected_metrics = {"connections": 1, "messages": 100}
-        mock_aegis_adapter._metrics.get_all.return_value = expected_metrics
-
-        # Act
-        result = adapter.get_metrics()
-
-        # Assert
-        assert result == expected_metrics
-        mock_aegis_adapter._metrics.get_all.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_get_metrics_no_metrics_available(
-        self, adapter: AegisKVStoreAdapter, mock_aegis_adapter: Mock
-    ) -> None:
-        """Test getting metrics when AegisSDK doesn't have metrics."""
-        # Arrange
-        adapter._adapter = mock_aegis_adapter
-        delattr(mock_aegis_adapter, "_metrics")  # Remove _metrics attribute
-
-        # Act
-        result = adapter.get_metrics()
-
-        # Assert
-        assert result == {}
+        mock_kv_store.keys.assert_called_once()
+        assert mock_kv_store.get.call_count == 2

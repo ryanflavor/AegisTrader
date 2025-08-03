@@ -401,3 +401,193 @@ class TestServiceRegistryAPI:
         get_time = (time.time() - start) * 1000
         assert response.status_code == 200
         assert get_time < 100  # Should be less than 100ms
+
+    @pytest.mark.asyncio
+    async def test_update_service_no_fields(self, api_client: httpx.AsyncClient, clean_kv_store):
+        """Test updating service with no fields returns 400."""
+        # Create service
+        await api_client.post("/api/services", json=TEST_SERVICE_1)
+
+        # Try to update with empty dict
+        response = await api_client.put("/api/services/payment-service", json={})
+        assert response.status_code == 400
+        error = response.json()
+        assert error["error"]["code"] == "HTTP_400"
+        assert "No fields to update" in error["error"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_service(self, api_client: httpx.AsyncClient, clean_kv_store):
+        """Test updating non-existent service returns 404."""
+        updates = {"version": "2.0.0"}
+        response = await api_client.put("/api/services/nonexistent-service", json=updates)
+        assert response.status_code == 404
+        error = response.json()
+        assert error["error"]["code"] == "SERVICE_NOT_FOUND"
+
+    @pytest.mark.asyncio
+    async def test_get_service_with_revision_not_found(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test getting non-existent service with revision returns 404."""
+        response = await api_client.get("/api/services/nonexistent-service/revision")
+        assert response.status_code == 404
+        error = response.json()
+        assert error["error"]["code"] == "SERVICE_NOT_FOUND"
+
+    @pytest.mark.asyncio
+    async def test_get_service_with_revision_success(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test getting service with revision successfully."""
+        # Create service
+        create_response = await api_client.post("/api/services", json=TEST_SERVICE_1)
+        created_service = create_response.json()
+
+        # Get with revision
+        response = await api_client.get("/api/services/payment-service/revision")
+        assert response.status_code == 200
+        data = response.json()
+        assert "service" in data
+        assert "revision" in data
+        assert data["service"]["service_name"] == created_service["service_name"]
+        assert isinstance(data["revision"], int)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_updates_with_revision(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test concurrent updates properly handle revision conflicts."""
+        # Create service
+        await api_client.post("/api/services", json=TEST_SERVICE_1)
+
+        # Get service with revision
+        response = await api_client.get("/api/services/payment-service/revision")
+        revision1 = response.json()["revision"]
+
+        # First update succeeds
+        update1 = {"version": "1.1.0", "revision": revision1}
+        response = await api_client.put("/api/services/payment-service", json=update1)
+        assert response.status_code == 200
+
+        # Second update with same revision fails
+        update2 = {"version": "1.2.0", "revision": revision1}
+        response = await api_client.put("/api/services/payment-service", json=update2)
+        assert response.status_code == 409
+        error = response.json()
+        assert error["error"]["code"] == "CONCURRENT_UPDATE"
+
+    @pytest.mark.asyncio
+    async def test_create_service_with_empty_fields(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test creating service with empty required fields."""
+        # Empty owner
+        service = TEST_SERVICE_1.copy()
+        service["owner"] = ""
+        response = await api_client.post("/api/services", json=service)
+        assert response.status_code == 422
+
+        # Empty description
+        service = TEST_SERVICE_1.copy()
+        service["description"] = ""
+        response = await api_client.post("/api/services", json=service)
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_update_service_with_invalid_version(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test updating service with invalid version format."""
+        # Create service
+        await api_client.post("/api/services", json=TEST_SERVICE_1)
+
+        # Update with invalid version
+        updates = {"version": "invalid-version"}
+        response = await api_client.put("/api/services/payment-service", json=updates)
+        assert response.status_code == 422
+        error = response.json()
+        assert error["error"]["code"] == "VALIDATION_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_service_name_edge_cases(self, api_client: httpx.AsyncClient, clean_kv_store):
+        """Test service name validation edge cases."""
+        # Minimum length (3 chars)
+        service = TEST_SERVICE_1.copy()
+        service["service_name"] = "abc"
+        response = await api_client.post("/api/services", json=service)
+        assert response.status_code == 201
+
+        # Clean up
+        await api_client.delete("/api/services/abc")
+
+        # Maximum length (64 chars) - but need to follow the pattern
+        service = TEST_SERVICE_1.copy()
+        # Create a valid 64-char service name following the pattern
+        service["service_name"] = "a" + "b" * 62 + "c"  # 64 chars total, no consecutive hyphens
+        response = await api_client.post("/api/services", json=service)
+        assert response.status_code == 201
+
+    @pytest.mark.asyncio
+    async def test_concurrent_creates_same_service(
+        self, api_client: httpx.AsyncClient, clean_kv_store
+    ):
+        """Test concurrent creation of the same service handles race condition."""
+        # Try to create the same service concurrently
+        tasks = [
+            api_client.post("/api/services", json=TEST_SERVICE_1),
+            api_client.post("/api/services", json=TEST_SERVICE_1),
+        ]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # One should succeed, one should fail with 409
+        status_codes = [r.status_code for r in responses if not isinstance(r, Exception)]
+        assert 201 in status_codes
+        assert (
+            409 in status_codes or len(status_codes) == 1
+        )  # Both might succeed if timing is perfect
+
+    @pytest.mark.asyncio
+    async def test_list_services_ordering(self, api_client: httpx.AsyncClient, clean_kv_store):
+        """Test that list services returns consistent ordering."""
+        # Create multiple services
+        services = [
+            {
+                "service_name": "alpha-service",
+                "owner": "team-a",
+                "description": "A",
+                "version": "1.0.0",
+            },
+            {
+                "service_name": "beta-service",
+                "owner": "team-b",
+                "description": "B",
+                "version": "1.0.0",
+            },
+            {
+                "service_name": "gamma-service",
+                "owner": "team-c",
+                "description": "C",
+                "version": "1.0.0",
+            },
+        ]
+
+        for service in services:
+            await api_client.post("/api/services", json=service)
+
+        # List services multiple times
+        response1 = await api_client.get("/api/services")
+        response2 = await api_client.get("/api/services")
+
+        services1 = response1.json()
+        services2 = response2.json()
+
+        # Should have same count
+        assert len(services1) == 3
+        assert len(services2) == 3
+
+        # Extract names for comparison
+        names1 = [s["service_name"] for s in services1]
+        names2 = [s["service_name"] for s in services2]
+
+        # Order might vary, but all should be present
+        assert set(names1) == set(names2) == {"alpha-service", "beta-service", "gamma-service"}

@@ -1,5 +1,6 @@
 """NATS KV Store adapter - Concrete implementation of KVStorePort."""
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -66,8 +67,62 @@ class NATSKVStore(KVStorePort):
         """Get the original key from a sanitized key."""
         return self._key_mapping.get(sanitized_key, sanitized_key)
 
-    async def connect(self, bucket: str) -> None:
-        """Connect to a KV store bucket."""
+    async def _create_kv_stream_with_ttl(self, bucket: str) -> bool:
+        """Create a KV stream with per-message TTL enabled using raw API.
+
+        Args:
+            bucket: The bucket name
+
+        Returns:
+            bool: True if stream was created successfully
+        """
+        stream_name = f"KV_{bucket}"
+
+        # Create stream configuration with AllowMsgTTL
+        stream_config = {
+            "name": stream_name,
+            "subjects": [f"$KV.{bucket}.>"],
+            "retention": "limits",
+            "max_msgs_per_subject": 10,  # History of 10
+            "max_bytes": -1,
+            "max_age": 0,  # No bucket-level TTL
+            "max_msg_size": 1024 * 1024,  # 1MB
+            "storage": "file",
+            "allow_direct": True,
+            "allow_rollup_hdrs": True,
+            "deny_delete": True,
+            "deny_purge": False,
+            "discard": "new",
+            "allow_msg_ttl": True,  # Enable per-message TTL
+        }
+
+        # Create the stream using raw API
+        try:
+            nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None
+            if not nc:
+                raise Exception("No NATS connection available")
+
+            resp = await nc.request(
+                f"$JS.API.STREAM.CREATE.{stream_name}",
+                json.dumps(stream_config).encode(),
+                timeout=5.0,
+            )
+            result = json.loads(resp.data.decode())
+            if "error" in result:
+                print(f"Error creating stream: {result['error']}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Failed to create stream with TTL: {e}")
+            return False
+
+    async def connect(self, bucket: str, enable_ttl: bool = True) -> None:
+        """Connect to a KV store bucket.
+
+        Args:
+            bucket: The bucket name
+            enable_ttl: Whether to enable per-message TTL support (default: True)
+        """
         # Ensure NATS adapter is connected
         if not await self._nats_adapter.is_connected():
             raise Exception("NATS adapter not connected")
@@ -81,14 +136,41 @@ class NATSKVStore(KVStorePort):
                 self._kv = await self._nats_adapter._js.key_value(bucket)
             except Exception:
                 # Bucket doesn't exist, create it
-                config = {
-                    "bucket": bucket,
-                    "history": 10,  # Keep last 10 revisions
-                    "ttl": 0,  # No default TTL
-                    "max_value_size": 1024 * 1024,  # 1MB max value size
-                    "storage": "file",  # Use file storage for persistence
-                }
-                self._kv = await self._nats_adapter._js.create_key_value(**config)
+                stream_name = f"KV_{bucket}"
+
+                try:
+                    # Check if stream already exists
+                    await self._nats_adapter._js.stream_info(stream_name)
+                except Exception as e:
+                    # Stream doesn't exist, create it
+                    if enable_ttl:
+                        # Use raw API to create stream with TTL support
+                        success = await self._create_kv_stream_with_ttl(bucket)
+                        if not success:
+                            raise Exception("Failed to create stream with TTL support") from e
+                    else:
+                        # Use standard API without TTL
+                        from nats.js import api
+
+                        stream_config = api.StreamConfig(
+                            name=stream_name,
+                            subjects=[f"$KV.{bucket}.>"],
+                            retention=api.RetentionPolicy.LIMITS,
+                            max_msgs_per_subject=10,  # History of 10
+                            max_bytes=-1,
+                            max_age=0,
+                            max_msg_size=1024 * 1024,  # 1MB
+                            storage=api.StorageType.FILE,
+                            allow_direct=True,
+                            allow_rollup_hdrs=True,
+                            deny_delete=True,
+                            deny_purge=False,
+                            discard=api.DiscardPolicy.NEW,
+                        )
+                        await self._nats_adapter._js.add_stream(config=stream_config)
+
+                # Now get the KV bucket interface
+                self._kv = await self._nats_adapter._js.key_value(bucket)
 
             self._bucket_name = bucket
             self._metrics.gauge("kv.buckets.active", 1)
@@ -174,7 +256,13 @@ class NATSKVStore(KVStorePort):
                 if options:
                     if options.create_only:
                         # Use create for exclusive creation
-                        revision = await self._kv.create(safe_key, serialized)
+                        try:
+                            revision = await self._kv.create(safe_key, serialized)
+                        except Exception as e:
+                            # Convert NATS-specific error to generic exception
+                            if "wrong last sequence" in str(e) or "duplicate" in str(e).lower():
+                                raise Exception("key already exists") from e
+                            raise
                     elif options.update_only:
                         # Use update for existing keys only
                         # If no revision specified, get current revision
@@ -207,10 +295,30 @@ class NATSKVStore(KVStorePort):
 
                         # Put with TTL if specified
                         if options.ttl:
-                            # NATS KV doesn't support per-key TTL in put operation
-                            # TTL must be configured at bucket level
-                            # For now, we'll just put without TTL
-                            revision = await self._kv.put(safe_key, serialized)
+                            # Try to use per-message TTL via JetStream publish
+                            try:
+                                # NATS 2.11+ supports per-message TTL via Nats-TTL header
+                                hdrs = {"Nats-TTL": str(options.ttl)}
+
+                                # Get the subject for this KV bucket
+                                subject = f"$KV.{self._bucket_name}.{safe_key}"
+
+                                # Publish directly to JetStream with TTL header
+                                pa = await self._nats_adapter._js.publish(
+                                    subject, serialized, headers=hdrs
+                                )
+                                revision = pa.seq
+                                self._metrics.increment("kv.put.ttl.success")
+                            except Exception as e:
+                                # NO FALLBACK - fail if per-message TTL is not supported
+                                if "per-message TTL is disabled" in str(e):
+                                    raise ValueError(
+                                        "Per-message TTL is not enabled on NATS server. "
+                                        "Please configure the server with 'allow_msg_ttl: true' "
+                                        "in the JetStream configuration."
+                                    ) from e
+                                # Re-raise other errors
+                                raise
                         else:
                             revision = await self._kv.put(safe_key, serialized)
                 else:
@@ -328,19 +436,46 @@ class NATSKVStore(KVStorePort):
         if not self._kv:
             raise Exception("KV store not connected")
 
-        # Sanitize key/prefix
+        # Set up watch based on key or prefix
         if key:
             safe_key = self._sanitize_key(key)
-            watcher = await self._kv.watch(safe_key)
+            # Watch only this specific key, don't include history
+            watcher = await self._kv.watch(safe_key, include_history=False)
         elif prefix:
-            # For prefix watching, we need to watch all and filter
-            watcher = await self._kv.watchall()
+            # For prefix watching, watch all keys and filter in application
+            # This is a workaround for NATS KV pattern matching limitations
+            watcher = await self._kv.watch(">", include_history=False)
+            # Store the prefix for filtering later
+            self._watch_prefix = prefix
         else:
-            watcher = await self._kv.watchall()
+            # Watch all keys
+            watcher = await self._kv.watch(">", include_history=False)
+
+        # Track if we've seen the first update (which might be initial state)
+        # For prefix watching, we need to track per key
+        first_updates = {}  # key -> bool
+
+        # Helper to continuously read from watcher even after None marker
+        async def watch_generator():
+            while True:
+                try:
+                    # Use updates() method instead of async iteration to avoid StopAsyncIteration
+                    update = await watcher.updates(timeout=5.0)  # 5 second timeout for debugging
+                    if update is None:
+                        # This is the initial "no pending updates" marker
+                        continue
+                    yield update
+                except asyncio.TimeoutError:
+                    # No updates for 5 seconds
+                    # No updates for timeout period
+                    continue
+                except Exception:
+                    # Error in watcher, stop watching
+                    break
 
         # Yield events
-        async for update in watcher.updates():
-            # Get original key
+        async for update in watch_generator():
+            # Get original key - this reverses the sanitization
             original_key = self._get_original_key(update.key)
 
             # Filter by prefix if specified
@@ -348,8 +483,30 @@ class NATSKVStore(KVStorePort):
                 continue
 
             # Convert to domain event
-            if update.operation == "PUT":
-                value = json.loads(update.value.decode()) if update.value else None
+            # NATS KV might return operation as string or None
+            # None typically means initial value or PUT
+            operation = update.operation if hasattr(update, "operation") else None
+
+            # Check if this is an initial state update for this key
+            # Initial updates have delta=0 (no time since last update)
+            is_initial = False
+            if original_key not in first_updates:
+                first_updates[original_key] = True
+                is_initial = hasattr(update, "delta") and update.delta == 0
+            else:
+                is_initial = False
+
+            # Skip initial DELETE events (key doesn't exist initially)
+            if is_initial and operation in ("DELETE", "delete", "DEL", "del"):
+                continue
+
+            # Handle PUT operations (including initial values where operation is None)
+            if operation in (None, "PUT", "put"):
+                # Skip if no value (this can happen for the initial nil marker)
+                if update.value is None:
+                    continue
+
+                value = json.loads(update.value.decode())
 
                 # Handle timestamp
                 from datetime import UTC, datetime
@@ -368,14 +525,20 @@ class NATSKVStore(KVStorePort):
                     revision=update.revision,
                     created_at=created_at,
                     updated_at=updated_at,
-                    ttl=update.delta if update.delta and update.delta > 0 else None,
+                    ttl=(
+                        update.delta
+                        if hasattr(update, "delta") and update.delta and update.delta > 0
+                        else None
+                    ),
                 )
                 event = KVWatchEvent(operation="PUT", entry=entry)
-            elif update.operation == "DELETE":
+            elif operation in ("DELETE", "delete", "DEL", "del"):
                 event = KVWatchEvent(operation="DELETE", entry=None)
-            elif update.operation == "PURGE":
+            elif operation in ("PURGE", "purge"):
                 event = KVWatchEvent(operation="PURGE", entry=None)
             else:
+                # Log unknown operation for debugging
+                print(f"Unknown KV watch operation: {operation} for key: {original_key}")
                 continue  # Skip unknown operations
 
             yield event
@@ -394,7 +557,11 @@ class NATSKVStore(KVStorePort):
 
             # Convert to domain models and limit
             results = []
-            for entry in list(history_entries)[:limit]:
+            entries_list = list(history_entries)
+            # Reverse to get newest first
+            entries_list.reverse()
+
+            for entry in entries_list[:limit]:
                 value = json.loads(entry.value.decode()) if entry.value else None
 
                 # Handle timestamp

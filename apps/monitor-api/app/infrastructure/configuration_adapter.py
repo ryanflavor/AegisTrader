@@ -7,6 +7,7 @@ Loads configuration from environment variables.
 from __future__ import annotations
 
 import os
+from typing import Literal, cast
 
 from ..domain.exceptions import ConfigurationException
 from ..domain.models import ServiceConfiguration
@@ -46,8 +47,8 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             config = ServiceConfiguration(
                 nats_url=nats_url,
                 api_port=api_port,
-                log_level=log_level,
-                environment=environment,
+                log_level=cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level),
+                environment=cast(Literal["development", "staging", "production"], environment),
             )
 
             self.validate_configuration(config)
