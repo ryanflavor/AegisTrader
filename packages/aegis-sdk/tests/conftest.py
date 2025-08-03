@@ -100,11 +100,11 @@ def mock_kv_store():
 @pytest.fixture
 def mock_logger():
     """Create a mock logger for testing."""
-    mock = AsyncMock()
-    mock.info = AsyncMock()
-    mock.warning = AsyncMock()
-    mock.error = AsyncMock()
-    mock.debug = AsyncMock()
+    mock = MagicMock()
+    mock.info = MagicMock()
+    mock.warning = MagicMock()
+    mock.error = MagicMock()
+    mock.debug = MagicMock()
     return mock
 
 

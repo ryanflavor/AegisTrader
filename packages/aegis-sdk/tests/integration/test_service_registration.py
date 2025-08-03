@@ -247,7 +247,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", ttl=30)
+        await kv_store.connect("service-registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -294,7 +294,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", ttl=30)
+        await kv_store.connect("service-registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -340,7 +340,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", ttl=30)
+        await kv_store.connect("service-registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)

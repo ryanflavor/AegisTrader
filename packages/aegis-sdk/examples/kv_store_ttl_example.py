@@ -5,6 +5,7 @@ import asyncio
 import os
 from datetime import datetime
 
+from aegis_sdk.domain.exceptions import KVTTLNotSupportedError
 from aegis_sdk.domain.models import KVOptions
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
@@ -75,7 +76,7 @@ async def main():
 
     try:
         await kv_store_no_ttl.put("test", "value", KVOptions(ttl=10))
-    except ValueError as e:
+    except KVTTLNotSupportedError as e:
         print(f"✓ Expected error: {e}")
 
     await kv_store_no_ttl.disconnect()
