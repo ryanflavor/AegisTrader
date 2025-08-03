@@ -90,8 +90,8 @@ class TestServiceDiscoveryK8sIntegration:
 
             # Add RPC handler
             @service.rpc("echo")
-            async def echo_handler(params):
-                return {"message": params.get("message"), "instance": service._instance_id}
+            async def echo_handler(params, _service=service):
+                return {"message": params.get("message"), "instance": _service._instance_id}
 
             await service.start()
             instances.append(service)
@@ -255,7 +255,7 @@ class TestServiceDiscoveryK8sIntegration:
 
         # Scenario 3: Cache invalidation
         await discovery.invalidate_cache("test-service-a")
-        instances4 = await discovery.discover_instances("test-service-a")
+        await discovery.discover_instances("test-service-a")
 
         stats = discovery.get_cache_stats()
         assert stats["cache_misses"] == 3
@@ -292,8 +292,8 @@ class TestServiceDiscoveryK8sIntegration:
             service._instance_id = f"failover-{i + 1}"
 
             @service.rpc("health_check")
-            async def health_handler(params):
-                return {"status": "ok", "instance": service._instance_id}
+            async def health_handler(params, _service=service):
+                return {"status": "ok", "instance": _service._instance_id}
 
             await service.start()
             services.append(service)
