@@ -1,7 +1,7 @@
 """Comprehensive tests for domain models."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ from aegis_sdk.domain.models import (
     RPCRequest,
     RPCResponse,
     ServiceInfo,
+    ServiceInstance,
 )
 
 
@@ -704,3 +705,330 @@ class TestKVWatchEvent:
             timestamp=custom_time,
         )
         assert event.timestamp == custom_time
+
+
+class TestServiceInstance:
+    """Test cases for ServiceInstance model."""
+
+    def test_service_instance_basic(self):
+        """Test basic ServiceInstance creation."""
+        instance = ServiceInstance(
+            service_name="trading-service",
+            instance_id="trading-service-a1b2c3d4",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat="2025-01-01T00:00:00+08:00",
+        )
+
+        assert instance.service_name == "trading-service"
+        assert instance.instance_id == "trading-service-a1b2c3d4"
+        assert instance.version == "1.0.0"
+        assert instance.status == "ACTIVE"
+        assert instance.sticky_active_group is None
+        assert isinstance(instance.last_heartbeat, datetime)
+        assert instance.metadata == {}  # Default is empty dict, not None
+
+    def test_service_instance_with_all_fields(self):
+        """Test ServiceInstance with all fields."""
+        metadata = {"region": "us-east-1", "zone": "zone-a"}
+        instance = ServiceInstance(
+            service_name="order-service",
+            instance_id="order-service-12345678",
+            version="2.3.1",
+            status="STANDBY",
+            sticky_active_group="group-1",
+            last_heartbeat="2025-01-02T10:30:00+08:00",
+            metadata=metadata,
+        )
+
+        assert instance.service_name == "order-service"
+        assert instance.instance_id == "order-service-12345678"
+        assert instance.version == "2.3.1"
+        assert instance.status == "STANDBY"
+        assert instance.sticky_active_group == "group-1"
+        assert isinstance(instance.last_heartbeat, datetime)
+        assert instance.metadata == metadata
+
+    def test_service_instance_status_validation(self):
+        """Test status validation."""
+        # Valid statuses
+        for status in ["ACTIVE", "UNHEALTHY", "STANDBY"]:
+            instance = ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version="1.0.0",
+                status=status,
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+            assert instance.status == status
+
+        # Invalid status
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version="1.0.0",
+                status="RUNNING",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+        assert "String should match pattern" in str(exc_info.value)
+
+    def test_service_instance_version_validation(self):
+        """Test version format validation."""
+        # Valid versions
+        for version in ["1.0.0", "10.20.30", "0.0.1"]:
+            instance = ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version=version,
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+            assert instance.version == version
+
+        # Invalid versions
+        invalid_versions = ["1.0", "v1.0.0", "1.0.0.0", "1.a.0", ""]
+        for invalid_version in invalid_versions:
+            with pytest.raises(ValidationError) as exc_info:
+                ServiceInstance(
+                    service_name="test-service",
+                    instance_id="test-id",
+                    version=invalid_version,
+                    status="ACTIVE",
+                    last_heartbeat="2025-01-01T00:00:00+08:00",
+                )
+            assert "Invalid version format" in str(
+                exc_info.value
+            ) or "String should have at least 1 character" in str(exc_info.value)
+
+    def test_service_instance_lastheartbeat_validation(self):
+        """Test lastHeartbeat timestamp validation."""
+        # Valid timestamps
+        valid_timestamps = [
+            "2025-01-01T00:00:00+08:00",
+            "2025-01-01T12:30:45.123456+00:00",
+            "2025-12-31T23:59:59Z",
+        ]
+        for timestamp in valid_timestamps:
+            instance = ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat=timestamp,
+            )
+            assert isinstance(instance.last_heartbeat, datetime)
+
+        # Invalid timestamp
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat="not-a-timestamp",
+            )
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+    def test_service_instance_service_name_validation(self):
+        """Test service name validation."""
+        # Valid service names (based on SubjectPatterns)
+        valid_names = ["trading-service", "order_service", "user-api", "payment_gateway"]
+        for name in valid_names:
+            instance = ServiceInstance(
+                service_name=name,
+                instance_id="test-id",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+            assert instance.service_name == name
+
+        # Invalid service names
+        invalid_names = ["", "service with spaces", "service.with.dots", "123-start-with-number"]
+        for invalid_name in invalid_names:
+            with pytest.raises(ValidationError) as exc_info:
+                ServiceInstance(
+                    service_name=invalid_name,
+                    instance_id="test-id",
+                    version="1.0.0",
+                    status="ACTIVE",
+                    last_heartbeat="2025-01-01T00:00:00+08:00",
+                )
+            assert "Invalid service name format" in str(
+                exc_info.value
+            ) or "String should have at least 1 character" in str(exc_info.value)
+
+    def test_service_instance_required_fields(self):
+        """Test that all required fields must be provided."""
+        # Missing service_name
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                instance_id="test-id",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+        assert "Field required" in str(exc_info.value)
+
+        # Missing instance_id
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+        assert "Field required" in str(exc_info.value)
+
+        # Missing version
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+            )
+        assert "Field required" in str(exc_info.value)
+
+        # Status has default, so no error
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-id",
+            version="1.0.0",
+            # last_heartbeat has default_factory, so no error
+        )
+        assert instance.status == "ACTIVE"
+        assert isinstance(instance.last_heartbeat, datetime)
+
+    def test_service_instance_strict_mode(self):
+        """Test that extra fields are not allowed."""
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                instance_id="test-id",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat="2025-01-01T00:00:00+08:00",
+                extra_field="not allowed",
+            )
+        assert "Extra inputs are not permitted" in str(exc_info.value)
+
+    def test_service_instance_serialization(self):
+        """Test ServiceInstance serialization."""
+        metadata = {"region": "us-west-2", "custom": "data"}
+        instance = ServiceInstance(
+            service_name="api-gateway",
+            instance_id="api-gateway-xyz789",
+            version="3.2.1",
+            status="ACTIVE",
+            sticky_active_group="primary",
+            last_heartbeat="2025-01-01T15:30:00+08:00",
+            metadata=metadata,
+        )
+
+        # Test model_dump with snake_case (default)
+        data = instance.model_dump()
+        assert data["service_name"] == "api-gateway"
+        assert data["instance_id"] == "api-gateway-xyz789"
+        assert data["version"] == "3.2.1"
+        assert data["status"] == "ACTIVE"
+        assert data["sticky_active_group"] == "primary"
+        assert isinstance(data["last_heartbeat"], str)  # Converted to ISO string
+        assert data["metadata"] == metadata
+
+        # Test model_dump with camelCase (by_alias=True)
+        camel_data = instance.model_dump(by_alias=True)
+        assert camel_data["serviceName"] == "api-gateway"
+        assert camel_data["instanceId"] == "api-gateway-xyz789"
+        assert camel_data["stickyActiveGroup"] == "primary"
+        assert camel_data["lastHeartbeat"] is not None
+
+        # Test model_dump_json (always uses camelCase)
+        json_str = instance.model_dump_json()
+        assert isinstance(json_str, str)
+        assert "serviceName" in json_str
+        assert "api-gateway" in json_str
+        assert "3.2.1" in json_str
+
+    def test_service_instance_deserialization(self):
+        """Test ServiceInstance deserialization from dict."""
+        # Test with snake_case
+        data = {
+            "service_name": "cache-service",
+            "instance_id": "cache-service-abc123",
+            "version": "1.5.0",
+            "status": "UNHEALTHY",
+            "sticky_active_group": None,
+            "last_heartbeat": "2025-01-01T20:00:00+08:00",
+            "metadata": {"memory": "8GB", "cpu": "4"},
+        }
+
+        instance = ServiceInstance(**data)
+        assert instance.service_name == "cache-service"
+        assert instance.instance_id == "cache-service-abc123"
+        assert instance.version == "1.5.0"
+        assert instance.status == "UNHEALTHY"
+        assert instance.sticky_active_group is None
+        assert isinstance(instance.last_heartbeat, datetime)
+        assert instance.metadata == {"memory": "8GB", "cpu": "4"}
+
+        # Test with camelCase (backward compatibility)
+        camel_data = {
+            "serviceName": "cache-service",
+            "instanceId": "cache-service-abc123",
+            "version": "1.5.0",
+            "status": "UNHEALTHY",
+            "stickyActiveGroup": None,
+            "lastHeartbeat": "2025-01-01T20:00:00+08:00",
+            "metadata": {"memory": "8GB", "cpu": "4"},
+        }
+
+        # Should work with populate_by_name=True
+        instance2 = ServiceInstance(**camel_data)
+        assert instance2.service_name == "cache-service"
+        assert instance2.instance_id == "cache-service-abc123"
+
+    def test_service_instance_domain_methods(self):
+        """Test ServiceInstance domain methods."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Test is_healthy
+        assert instance.is_healthy() is True
+        instance.status = "STANDBY"
+        assert instance.is_healthy() is True
+        instance.status = "UNHEALTHY"
+        assert instance.is_healthy() is False
+
+        # Test is_active
+        assert instance.is_active() is False
+        instance.status = "ACTIVE"
+        assert instance.is_active() is True
+
+        # Test mark_unhealthy
+        instance.mark_unhealthy()
+        assert instance.status == "UNHEALTHY"
+
+        # Test update_heartbeat
+        old_heartbeat = instance.last_heartbeat
+        import time
+
+        time.sleep(0.01)  # Small delay to ensure timestamp changes
+        instance.update_heartbeat()
+        assert instance.last_heartbeat > old_heartbeat
+
+        # Test seconds_since_heartbeat
+        seconds = instance.seconds_since_heartbeat()
+        assert seconds >= 0
+        assert seconds < 1  # Should be very recent
+
+        # Test is_stale
+        assert instance.is_stale(60) is False  # Not stale with 60s threshold
+        # Force stale by setting old heartbeat
+        instance.last_heartbeat = datetime.now(UTC) - timedelta(seconds=120)
+        assert instance.is_stale(60) is True  # Now stale with 60s threshold

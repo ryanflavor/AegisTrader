@@ -83,3 +83,39 @@ def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest.fixture
+def mock_kv_store():
+    """Create a mock KV store for testing."""
+    mock = AsyncMock()
+    mock.put = AsyncMock()
+    mock.get = AsyncMock()
+    mock.delete = AsyncMock()
+    mock.connect = AsyncMock()
+    mock.disconnect = AsyncMock()
+    return mock
+
+
+@pytest.fixture
+def mock_logger():
+    """Create a mock logger for testing."""
+    mock = AsyncMock()
+    mock.info = AsyncMock()
+    mock.warning = AsyncMock()
+    mock.error = AsyncMock()
+    mock.debug = AsyncMock()
+    return mock
+
+
+@pytest.fixture
+def mock_service_registry():
+    """Create a mock service registry for testing."""
+    mock = AsyncMock()
+    mock.register = AsyncMock()
+    mock.update_heartbeat = AsyncMock()
+    mock.deregister = AsyncMock()
+    mock.get_instance = AsyncMock()
+    mock.list_instances = AsyncMock()
+    mock.list_all_services = AsyncMock()
+    return mock

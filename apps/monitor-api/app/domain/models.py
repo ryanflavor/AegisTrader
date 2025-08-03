@@ -215,7 +215,7 @@ class ServiceDefinition(BaseModel):
 
     def to_iso_dict(self) -> dict[str, Any]:
         """Convert to dictionary with ISO format timestamps."""
-        data = self.model_dump()
+        data: dict[str, Any] = self.model_dump()
         data["created_at"] = self.created_at.isoformat()
         data["updated_at"] = self.updated_at.isoformat()
         return data

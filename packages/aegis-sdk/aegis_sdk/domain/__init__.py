@@ -28,6 +28,7 @@ from .models import (
     RPCRequest,
     RPCResponse,
     ServiceInfo,
+    ServiceInstance,
 )
 from .patterns import SubjectPatterns
 from .value_objects import SanitizedKey
@@ -59,6 +60,7 @@ __all__ = [
     "SerializationError",
     "ServiceError",
     "ServiceInfo",
+    "ServiceInstance",
     # Patterns
     "SubjectPatterns",
     "TimeoutError",

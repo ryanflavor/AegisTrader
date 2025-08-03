@@ -1,5 +1,7 @@
 """Domain models using Pydantic for validation."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -70,7 +72,7 @@ class RPCResponse(Message):
     error: str | None = Field(default=None, description="Error message if failed")
 
     @model_validator(mode="after")
-    def validate_error_consistency(self) -> "RPCResponse":
+    def validate_error_consistency(self) -> RPCResponse:
         """Ensure error is consistent with success status."""
         if self.success and self.error is not None:
             raise ValueError("Error must be None when success is True")
@@ -205,7 +207,7 @@ class KVEntry(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_timestamp_order(self) -> "KVEntry":
+    def validate_timestamp_order(self) -> KVEntry:
         """Ensure updated_at is not before created_at."""
         created = datetime.fromisoformat(self.created_at.replace("Z", "+00:00"))
         updated = datetime.fromisoformat(self.updated_at.replace("Z", "+00:00"))
@@ -236,7 +238,7 @@ class KVOptions(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_exclusivity(self) -> "KVOptions":
+    def validate_exclusivity(self) -> KVOptions:
         """Ensure create_only and update_only are mutually exclusive."""
         if self.create_only and self.update_only:
             raise ValueError("create_only and update_only are mutually exclusive")
@@ -271,8 +273,205 @@ class KVWatchEvent(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_entry_consistency(self) -> "KVWatchEvent":
+    def validate_entry_consistency(self) -> KVWatchEvent:
         """Ensure entry is consistent with operation."""
         if self.operation == "PUT" and self.entry is None:
             raise ValueError("PUT operation requires an entry")
         return self
+
+
+class ServiceInstance(BaseModel):
+    """Service instance domain entity for service registration.
+
+    This entity represents a running instance of a service in the system,
+    tracking its health status, version, and metadata. It follows DDD
+    principles by encapsulating business rules and invariants.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        strict=True,
+        validate_assignment=True,
+        # Use snake_case internally, can serialize to camelCase if needed
+        alias_generator=None,
+        populate_by_name=True,
+    )
+
+    # Core identity
+    service_name: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the service",
+        validation_alias="serviceName",
+    )
+    instance_id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier for this instance",
+        validation_alias="instanceId",
+    )
+    version: str = Field(..., description="Version of the service")
+
+    # Status and health
+    status: str = Field(
+        default="ACTIVE",
+        pattern="^(ACTIVE|UNHEALTHY|STANDBY)$",
+        description="Current status of the service instance",
+    )
+    last_heartbeat: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        description="Last heartbeat timestamp",
+        validation_alias="lastHeartbeat",
+    )
+
+    # Optional fields
+    sticky_active_group: str | None = Field(
+        default=None,
+        description="Optional sticky active group identifier",
+        validation_alias="stickyActiveGroup",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata for the service instance",
+    )
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str) -> str:
+        """Validate version format (semantic versioning)."""
+        import re
+
+        if not re.match(r"^\d+\.\d+\.\d+$", v):
+            raise ValueError(f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)")
+        return v
+
+    @field_validator("service_name")
+    @classmethod
+    def validate_service_name(cls, v: str) -> str:
+        """Validate service name format."""
+        # Import here to avoid circular imports
+        from aegis_sdk.domain.patterns import SubjectPatterns
+
+        if not SubjectPatterns.is_valid_service_name(v):
+            raise ValueError(f"Invalid service name format: {v}")
+        return v
+
+    @field_validator("last_heartbeat", mode="before")
+    @classmethod
+    def parse_heartbeat(cls, v: Any) -> datetime:
+        """Parse heartbeat timestamp from various formats.
+
+        Ensures all timestamps are timezone-aware and in UTC.
+        """
+        if isinstance(v, datetime):
+            if v.tzinfo is None:
+                return v.replace(tzinfo=UTC)
+            # Convert to UTC if in different timezone
+            return v.astimezone(UTC)
+        if isinstance(v, str):
+            try:
+                # Handle both Z suffix and timezone offset
+                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                return dt.astimezone(UTC)
+            except ValueError as e:
+                raise ValueError(f"Invalid ISO timestamp format: {v}") from e
+        raise TypeError(f"Expected datetime or str, got {type(v).__name__}")
+
+    def model_dump(self, **kwargs: Any) -> dict[str, Any]:
+        """Override to support camelCase serialization."""
+        data: dict[str, Any] = super().model_dump(**kwargs)
+
+        # Convert datetime to ISO string
+        if "last_heartbeat" in data and isinstance(data["last_heartbeat"], datetime):
+            data["last_heartbeat"] = data["last_heartbeat"].isoformat()
+
+        # Support camelCase output when by_alias=True
+        if kwargs.get("by_alias", False):
+            camel_data = {}
+            camel_data["serviceName"] = data.get("service_name")
+            camel_data["instanceId"] = data.get("instance_id")
+            camel_data["version"] = data.get("version")
+            camel_data["status"] = data.get("status")
+            camel_data["lastHeartbeat"] = data.get("last_heartbeat")
+            camel_data["stickyActiveGroup"] = data.get("sticky_active_group")
+            camel_data["metadata"] = data.get("metadata")
+            return camel_data
+
+        return data
+
+    def model_dump_json(self, **kwargs: Any) -> str:
+        """Override to ensure proper JSON serialization."""
+        # Get data in camelCase format
+        data = self.model_dump(by_alias=True)
+        # Then serialize to JSON
+        import json
+
+        return json.dumps(data, separators=(",", ":"))
+
+    # Domain methods
+    def is_healthy(self) -> bool:
+        """Check if the service instance is healthy.
+
+        A service is considered healthy if it's in ACTIVE or STANDBY status.
+        """
+        return self.status in ("ACTIVE", "STANDBY")
+
+    def is_active(self) -> bool:
+        """Check if the service instance is active.
+
+        Only ACTIVE status indicates the service is actively processing.
+        """
+        return self.status == "ACTIVE"
+
+    def mark_unhealthy(self) -> None:
+        """Mark the service instance as unhealthy.
+
+        This is a domain event that should trigger re-evaluation of service availability.
+        """
+        self.status = "UNHEALTHY"
+
+    def update_heartbeat(self, timestamp: datetime | None = None) -> None:
+        """Update the last heartbeat timestamp.
+
+        Args:
+            timestamp: Optional timestamp to set. Defaults to current UTC time.
+        """
+        self.last_heartbeat = timestamp or datetime.now(UTC)
+
+    def seconds_since_heartbeat(self) -> float:
+        """Calculate seconds since last heartbeat.
+
+        Returns:
+            Number of seconds elapsed since the last heartbeat.
+        """
+        return (datetime.now(UTC) - self.last_heartbeat).total_seconds()
+
+    def is_stale(self, threshold_seconds: int = 60) -> bool:
+        """Check if the heartbeat is stale.
+
+        Args:
+            threshold_seconds: Maximum allowed seconds since last heartbeat.
+
+        Returns:
+            True if the heartbeat is older than the threshold.
+        """
+        return self.seconds_since_heartbeat() > threshold_seconds
+
+    def should_be_active(self) -> bool:
+        """Determine if this instance should be in active state.
+
+        This considers sticky active group membership if configured.
+
+        Returns:
+            True if the instance should be active based on its configuration.
+        """
+        # If no sticky group is configured, any healthy instance can be active
+        if not self.sticky_active_group:
+            return self.is_healthy()
+
+        # TODO: Implement sticky active group logic based on coordination service
+        # For now, return True if healthy and has a sticky group
+        return self.is_healthy()

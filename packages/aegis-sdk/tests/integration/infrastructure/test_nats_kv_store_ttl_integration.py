@@ -85,7 +85,10 @@ class TestNATSKVStoreTTL:
         try:
             # Attempting to use TTL should raise an error
             options = KVOptions(ttl=5)
-            with pytest.raises(ValueError, match="Per-message TTL is not enabled"):
+            # When TTL is disabled but attempted to use, it raises KVTTLNotSupportedError
+            from aegis_sdk.domain.exceptions import KVTTLNotSupportedError
+
+            with pytest.raises(KVTTLNotSupportedError):
                 await kv_store.put("ttl-test", "value", options)
 
         finally:

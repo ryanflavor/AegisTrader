@@ -201,8 +201,8 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     )
 
     # If detail is already in our format, use it directly
-    if isinstance(exc.detail, dict):  # type: ignore[unreachable]
-        if "error" in exc.detail:  # type: ignore[unreachable]
+    if isinstance(exc.detail, dict):
+        if "error" in exc.detail:
             return JSONResponse(
                 status_code=exc.status_code,
                 content=exc.detail,
@@ -258,11 +258,11 @@ def register_error_handlers(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance
     """
-    app.add_exception_handler(DomainException, domain_exception_handler)  # type: ignore[arg-type]
-    app.add_exception_handler(ValidationError, validation_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(DomainException, domain_exception_handler)
+    app.add_exception_handler(ValidationError, validation_exception_handler)
     app.add_exception_handler(
         RequestValidationError,
-        validation_exception_handler,  # type: ignore[arg-type]
+        validation_exception_handler,
     )  # Handle FastAPI request validation
-    app.add_exception_handler(HTTPException, http_exception_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(Exception, general_exception_handler)

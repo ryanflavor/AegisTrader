@@ -45,6 +45,18 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     python-multipart==0.0.12 \
     httpx==0.28.0
 
+# Copy and install the aegis-sdk package first (SDK 变化时才会重新构建)
+COPY packages/aegis-sdk /packages/aegis-sdk
+RUN if [ -n "$HTTP_PROXY" ]; then \
+      export http_proxy=$HTTP_PROXY && \
+      export https_proxy=$HTTPS_PROXY && \
+      export HTTP_PROXY=$HTTP_PROXY && \
+      export HTTPS_PROXY=$HTTPS_PROXY && \
+      export UV_HTTP_PROXY=$HTTP_PROXY && \
+      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
+    fi && \
+    uv pip install --system --no-cache -e /packages/aegis-sdk
+
 # Copy requirements file if it exists (requirements.txt 变化时才会重新构建)
 COPY apps/monitor-api/requirements.txt* /app/
 
@@ -58,18 +70,6 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
       export UV_HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
     if [ -f requirements.txt ]; then uv pip install --system --no-cache -r requirements.txt; fi
-
-# Copy and install the aegis-sdk package (SDK 变化时才会重新构建)
-COPY packages/aegis-sdk /packages/aegis-sdk
-RUN if [ -n "$HTTP_PROXY" ]; then \
-      export http_proxy=$HTTP_PROXY && \
-      export https_proxy=$HTTPS_PROXY && \
-      export HTTP_PROXY=$HTTP_PROXY && \
-      export HTTPS_PROXY=$HTTPS_PROXY && \
-      export UV_HTTP_PROXY=$HTTP_PROXY && \
-      export UV_HTTPS_PROXY=$HTTPS_PROXY; \
-    fi && \
-    uv pip install --system --no-cache -e /packages/aegis-sdk
 
 # Copy application code (只有应用代码变化时才会重新构建这一层)
 COPY apps/monitor-api/ /app/

@@ -431,8 +431,9 @@ class TestValueObjectEdgeCases:
         assert instance != 123
         assert instance != 123
 
-        # Comparison with boolean
-        assert not instance
+        # Comparison with boolean - explicitly test inequality
+        assert instance != True  # noqa: E712
+        assert instance != False  # noqa: E712
 
         # Comparison with tuple
         assert instance != ("test", "123")

@@ -4,12 +4,14 @@ import asyncio
 import contextlib
 import uuid
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from ..domain.models import Command, Event, RPCRequest, ServiceInfo
+from ..domain.models import Command, Event, RPCRequest, ServiceInfo, ServiceInstance
 from ..domain.patterns import SubjectPatterns
+from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
+from ..ports.service_registry import ServiceRegistryPort
 
 
 class Service:
@@ -21,6 +23,11 @@ class Service:
         message_bus: MessageBusPort,
         instance_id: str | None = None,
         version: str = "1.0.0",
+        service_registry: ServiceRegistryPort | None = None,
+        logger: LoggerPort | None = None,
+        registry_ttl: int = 30,  # 30 seconds default TTL
+        heartbeat_interval: int = 10,  # 10 seconds default heartbeat interval
+        enable_registration: bool = True,  # Can be disabled for testing
     ):
         """Initialize service.
 
@@ -29,6 +36,11 @@ class Service:
             message_bus: Message bus implementation
             instance_id: Optional instance ID (auto-generated if not provided)
             version: Service version
+            service_registry: Optional service registry implementation
+            logger: Optional logger implementation
+            registry_ttl: TTL for registry entries in seconds (default: 30)
+            heartbeat_interval: Heartbeat interval in seconds (default: 10)
+            enable_registration: Whether to enable service registration (default: True)
         """
         if not SubjectPatterns.is_valid_service_name(service_name):
             raise ValueError(f"Invalid service name: {service_name}")
@@ -43,6 +55,16 @@ class Service:
             version=version,
         )
 
+        # Dependencies
+        self._registry = service_registry
+        self._logger = logger
+
+        # Registry configuration
+        self._registry_ttl = registry_ttl
+        self._heartbeat_interval = heartbeat_interval
+        self._enable_registration = enable_registration
+        self._service_instance: ServiceInstance | None = None
+
         # Handler registries
         self._rpc_handlers: dict[str, Callable] = {}
         self._event_handlers: dict[str, list[Callable]] = {}
@@ -50,18 +72,35 @@ class Service:
 
         # Health management
         self._heartbeat_task: asyncio.Task | None = None
+        self._status_update_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
         self._start_time: datetime | None = None
 
     async def start(self) -> None:
         """Start the service."""
         # Set start time
-        self._start_time = datetime.now()
+        self._start_time = datetime.now(UTC)
 
         # Call on_start hook for subclasses to register handlers
         await self.on_start()
 
-        # Register service
+        # Initialize service instance model
+        if self._enable_registration:
+            self._service_instance = ServiceInstance(
+                service_name=self.service_name,
+                instance_id=self.instance_id,
+                version=self.version,
+                status="ACTIVE",
+                metadata={
+                    "start_time": self._start_time.isoformat() if self._start_time else None,
+                },
+            )
+
+            # Register if registry is provided
+            if self._registry:
+                await self._register_instance()
+
+        # Register service with message bus
         await self._bus.register_service(self.service_name, self.instance_id)
 
         # Register all RPC handlers
@@ -95,7 +134,29 @@ class Service:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
 
-        # Unregister service
+        # Cancel any pending status update
+        if self._status_update_task:
+            self._status_update_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._status_update_task
+
+        # Deregister service instance
+        if self._enable_registration and self._registry and self._service_instance:
+            try:
+                await self._registry.deregister(
+                    self._service_instance.service_name,
+                    self._service_instance.instance_id,
+                )
+            except Exception as e:
+                if self._logger:
+                    self._logger.warning(
+                        "Failed to remove service instance from registry",
+                        error=str(e),
+                        service=self.service_name,
+                        instance=self.instance_id,
+                    )
+
+        # Unregister service from message bus
         await self._bus.unregister_service(self.service_name, self.instance_id)
 
         print(f"👋 Service stopped: {self.service_name}/{self.instance_id}")
@@ -215,15 +276,99 @@ class Service:
         return await self._bus.send_command(command, track_progress)
 
     # Health Management
+    async def _register_instance(self) -> None:
+        """Register service instance in registry."""
+        if not self._registry or not self._service_instance:
+            return
+
+        try:
+            await self._registry.register(
+                self._service_instance,
+                self._registry_ttl,
+            )
+        except Exception as e:
+            if self._logger:
+                self._logger.error(
+                    "Failed to register service instance",
+                    error=str(e),
+                    service=self.service_name,
+                    instance=self.instance_id,
+                )
+            raise
+
     async def _heartbeat_loop(self) -> None:
-        """Send periodic heartbeats."""
+        """Send periodic heartbeats and update registry.
+
+        This method coordinates heartbeats between the message bus and registry.
+        Failures are logged but don't stop the heartbeat loop.
+        """
+        consecutive_failures = 0
+        max_consecutive_failures = 3
+
         while not self._shutdown_event.is_set():
             try:
+                # Send heartbeat to message bus
                 await self._bus.send_heartbeat(self.service_name, self.instance_id)
-                await asyncio.sleep(5)  # Every 5 seconds
+
+                # Update registry entry if enabled
+                if self._enable_registration and self._registry and self._service_instance:
+                    await self._update_registry_heartbeat()
+
+                # Reset failure counter on success
+                consecutive_failures = 0
+                await asyncio.sleep(self._heartbeat_interval)
+
             except Exception as e:
-                print(f"❌ Heartbeat error: {e}")
-                await asyncio.sleep(1)  # Retry faster on error
+                consecutive_failures += 1
+
+                if self._logger:
+                    self._logger.warning(
+                        "Heartbeat error",
+                        error=str(e),
+                        service=self.service_name,
+                        instance=self.instance_id,
+                        consecutive_failures=consecutive_failures,
+                    )
+                else:
+                    print(
+                        f"❌ Heartbeat error ({consecutive_failures}/{max_consecutive_failures}): {e}"
+                    )
+
+                # If too many consecutive failures, mark service as unhealthy
+                if consecutive_failures >= max_consecutive_failures:
+                    self.set_status("UNHEALTHY")
+
+                # Exponential backoff with jitter for retries
+                backoff = min(2**consecutive_failures, 10) + asyncio.get_event_loop().time() % 1
+                await asyncio.sleep(backoff)
+
+    async def _update_registry_heartbeat(self) -> None:
+        """Update the heartbeat timestamp in the registry.
+
+        This method handles the case where the registry entry might have been
+        lost and needs re-registration.
+        """
+        if not self._registry or not self._service_instance:
+            return
+
+        try:
+            # Update heartbeat in domain model first
+            self._service_instance.update_heartbeat()
+
+            await self._registry.update_heartbeat(
+                self._service_instance,
+                self._registry_ttl,
+            )
+        except Exception as e:
+            if self._logger:
+                self._logger.warning(
+                    "Failed to update registry heartbeat",
+                    error=str(e),
+                    service=self.service_name,
+                    instance=self.instance_id,
+                )
+            # Re-raise to let heartbeat loop handle it
+            raise
 
     @property
     def info(self) -> ServiceInfo:
@@ -231,10 +376,60 @@ class Service:
         return self._info
 
     def set_status(self, status: str) -> None:
-        """Update service status."""
-        if status not in ["ACTIVE", "STANDBY", "UNHEALTHY", "SHUTDOWN"]:
-            raise ValueError(f"Invalid status: {status}")
+        """Update service status.
+
+        This method updates the status in multiple places:
+        1. Local ServiceInfo object
+        2. ServiceInstance domain model (if registration enabled)
+        3. Service registry (async, if available)
+
+        Args:
+            status: One of ACTIVE, STANDBY, UNHEALTHY, or SHUTDOWN
+
+        Raises:
+            ValueError: If status is not valid
+        """
+        valid_statuses = ["ACTIVE", "STANDBY", "UNHEALTHY", "SHUTDOWN"]
+        if status not in valid_statuses:
+            raise ValueError(f"Invalid status: {status}. Must be one of {valid_statuses}")
+
+        # Update local info
         self._info.status = status
+
+        # Update domain model
+        if self._service_instance:
+            self._service_instance.status = status
+
+        # Schedule registry update if enabled
+        if self._enable_registration and self._registry and self._service_instance:
+            # Create a tracked task for proper cleanup
+            if hasattr(self, "_status_update_task") and self._status_update_task:
+                self._status_update_task.cancel()
+
+            self._status_update_task = asyncio.create_task(
+                self._update_registry_status(status), name=f"status_update_{status}"
+            )
+
+    async def _update_registry_status(self, status: str) -> None:
+        """Update the service status in the registry."""
+        if not self._registry or not self._service_instance:
+            return
+
+        try:
+            # Update heartbeat with new status
+            await self._registry.update_heartbeat(
+                self._service_instance,
+                self._registry_ttl,
+            )
+        except Exception as e:
+            if self._logger:
+                self._logger.warning(
+                    "Failed to update registry status",
+                    error=str(e),
+                    service=self.service_name,
+                    instance=self.instance_id,
+                    status=status,
+                )
 
     async def on_start(self) -> None:
         """Hook for subclasses to perform initialization during start.
