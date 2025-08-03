@@ -6,7 +6,17 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from aegis_sdk.domain.models import Command, Event, Message, RPCRequest, RPCResponse, ServiceInfo
+from aegis_sdk.domain.models import (
+    Command,
+    Event,
+    KVEntry,
+    KVOptions,
+    KVWatchEvent,
+    Message,
+    RPCRequest,
+    RPCResponse,
+    ServiceInfo,
+)
 
 
 class TestMessage:
@@ -427,3 +437,270 @@ class TestModelIntegration:
 
         assert command.payload == event.payload
         assert command.correlation_id == event.message_id
+
+
+class TestKVEntry:
+    """Test cases for KVEntry model."""
+
+    def test_kventry_basic(self):
+        """Test basic KVEntry creation."""
+        now = datetime.now(UTC).isoformat()
+        entry = KVEntry(
+            key="user:123",
+            value={"name": "John", "age": 30},
+            revision=1,
+            created_at=now,
+            updated_at=now,
+        )
+
+        assert entry.key == "user:123"
+        assert entry.value == {"name": "John", "age": 30}
+        assert entry.revision == 1
+        assert entry.created_at == now
+        assert entry.updated_at == now
+        assert entry.ttl is None
+
+    def test_kventry_with_ttl(self):
+        """Test KVEntry with TTL."""
+        now = datetime.now(UTC).isoformat()
+        entry = KVEntry(
+            key="temp:456",
+            value="temporary data",
+            revision=2,
+            created_at=now,
+            updated_at=now,
+            ttl=3600,  # 1 hour
+        )
+
+        assert entry.ttl == 3600
+
+    def test_kventry_invalid_timestamps(self):
+        """Test KVEntry with invalid timestamps - covers lines 203-204."""
+        # Invalid created_at timestamp
+        with pytest.raises(ValidationError) as exc_info:
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at="not-a-timestamp",
+                updated_at=datetime.now(UTC).isoformat(),
+            )
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+        # Invalid updated_at timestamp
+        with pytest.raises(ValidationError) as exc_info:
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at=datetime.now(UTC).isoformat(),
+                updated_at="2025-13-45T25:99:99",  # Invalid date/time
+            )
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+    def test_kventry_timestamp_order_validation(self):
+        """Test KVEntry timestamp order validation - covers line 213."""
+        created = datetime.now(UTC)
+        updated = created.replace(microsecond=created.microsecond - 1000)  # Earlier than created
+
+        with pytest.raises(ValidationError) as exc_info:
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at=created.isoformat(),
+                updated_at=updated.isoformat(),
+            )
+        assert "updated_at cannot be before created_at" in str(exc_info.value)
+
+    def test_kventry_valid_timestamp_order(self):
+        """Test KVEntry with valid timestamp order."""
+        created = datetime.now(UTC)
+        updated = created.replace(microsecond=created.microsecond + 1000)  # Later than created
+
+        entry = KVEntry(
+            key="test",
+            value="data",
+            revision=1,
+            created_at=created.isoformat(),
+            updated_at=updated.isoformat(),
+        )
+
+        assert entry.created_at == created.isoformat()
+        assert entry.updated_at == updated.isoformat()
+
+    def test_kventry_same_timestamps(self):
+        """Test KVEntry with same created and updated timestamps."""
+        now = datetime.now(UTC).isoformat()
+
+        entry = KVEntry(
+            key="test",
+            value="data",
+            revision=1,
+            created_at=now,
+            updated_at=now,
+        )
+
+        assert entry.created_at == entry.updated_at
+
+    def test_kventry_ttl_validation(self):
+        """Test KVEntry TTL validation."""
+        now = datetime.now(UTC).isoformat()
+
+        # Zero TTL should fail
+        with pytest.raises(ValidationError):
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at=now,
+                updated_at=now,
+                ttl=0,
+            )
+
+        # Negative TTL should fail
+        with pytest.raises(ValidationError):
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at=now,
+                updated_at=now,
+                ttl=-10,
+            )
+
+
+class TestKVOptions:
+    """Test cases for KVOptions model."""
+
+    def test_kvoptions_defaults(self):
+        """Test KVOptions with default values."""
+        options = KVOptions()
+
+        assert options.ttl is None
+        assert options.revision is None
+        assert options.create_only is False
+        assert options.update_only is False
+
+    def test_kvoptions_with_values(self):
+        """Test KVOptions with custom values."""
+        options = KVOptions(
+            ttl=3600,
+            revision=5,
+            create_only=True,
+        )
+
+        assert options.ttl == 3600
+        assert options.revision == 5
+        assert options.create_only is True
+        assert options.update_only is False
+
+    def test_kvoptions_mutually_exclusive_validation(self):
+        """Test KVOptions mutual exclusivity validation - covers line 242."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVOptions(
+                create_only=True,
+                update_only=True,
+            )
+        assert "create_only and update_only are mutually exclusive" in str(exc_info.value)
+
+    def test_kvoptions_create_only(self):
+        """Test KVOptions with create_only."""
+        options = KVOptions(create_only=True)
+        assert options.create_only is True
+        assert options.update_only is False
+
+    def test_kvoptions_update_only(self):
+        """Test KVOptions with update_only."""
+        options = KVOptions(update_only=True)
+        assert options.create_only is False
+        assert options.update_only is True
+
+
+class TestKVWatchEvent:
+    """Test cases for KVWatchEvent model."""
+
+    def test_kvwatchevent_put_operation(self):
+        """Test KVWatchEvent with PUT operation."""
+        now = datetime.now(UTC).isoformat()
+        entry = KVEntry(
+            key="test",
+            value="data",
+            revision=1,
+            created_at=now,
+            updated_at=now,
+        )
+
+        event = KVWatchEvent(
+            operation="PUT",
+            entry=entry,
+        )
+
+        assert event.operation == "PUT"
+        assert event.entry == entry
+        assert event.timestamp  # Should have auto-generated timestamp
+
+    def test_kvwatchevent_delete_operation(self):
+        """Test KVWatchEvent with DELETE operation."""
+        event = KVWatchEvent(
+            operation="DELETE",
+            entry=None,
+        )
+
+        assert event.operation == "DELETE"
+        assert event.entry is None
+
+    def test_kvwatchevent_invalid_timestamp(self):
+        """Test KVWatchEvent with invalid timestamp - covers lines 267-271."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVWatchEvent(
+                operation="PUT",
+                entry=None,
+                timestamp="invalid-timestamp-format",
+            )
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+    def test_kvwatchevent_put_requires_entry(self):
+        """Test KVWatchEvent PUT operation requires entry - covers line 277."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVWatchEvent(
+                operation="PUT",
+                entry=None,
+            )
+        assert "PUT operation requires an entry" in str(exc_info.value)
+
+    def test_kvwatchevent_delete_without_entry(self):
+        """Test KVWatchEvent DELETE operation without entry is valid."""
+        event = KVWatchEvent(
+            operation="DELETE",
+            entry=None,
+        )
+        assert event.operation == "DELETE"
+        assert event.entry is None
+
+    def test_kvwatchevent_purge_operation(self):
+        """Test KVWatchEvent with PURGE operation."""
+        event = KVWatchEvent(
+            operation="PURGE",
+            entry=None,
+        )
+        assert event.operation == "PURGE"
+        assert event.entry is None
+
+    def test_kvwatchevent_invalid_operation(self):
+        """Test KVWatchEvent with invalid operation."""
+        with pytest.raises(ValidationError):
+            KVWatchEvent(
+                operation="INVALID",
+                entry=None,
+            )
+
+    def test_kvwatchevent_custom_timestamp(self):
+        """Test KVWatchEvent with custom valid timestamp."""
+        custom_time = "2025-01-01T12:00:00+00:00"
+        event = KVWatchEvent(
+            operation="DELETE",
+            entry=None,
+            timestamp=custom_time,
+        )
+        assert event.timestamp == custom_time

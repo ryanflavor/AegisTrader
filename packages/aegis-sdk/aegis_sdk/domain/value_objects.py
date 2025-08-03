@@ -247,3 +247,72 @@ class Priority(BaseModel):
             return NotImplemented
         priority_order = [self.LOW, self.NORMAL, self.HIGH, self.CRITICAL]
         return priority_order.index(self.value) < priority_order.index(other.value)
+
+
+class SanitizedKey(BaseModel):
+    """Value object representing a sanitized NATS-compatible key.
+
+    NATS KV keys cannot contain: spaces, tabs, '.', '*', '>', '/', '\\'
+    This value object ensures keys are properly sanitized and tracks
+    the mapping between original and sanitized keys.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    original: str = Field(..., min_length=1, description="Original key value")
+    sanitized: str = Field(..., min_length=1, description="Sanitized key value")
+
+    # NATS invalid characters as a class constant
+    INVALID_CHARS: ClassVar[list[str]] = [" ", "\t", ".", "*", ">", "/", "\\", ":"]
+    REPLACEMENT_CHAR: ClassVar[str] = "_"
+
+    @field_validator("original")
+    @classmethod
+    def validate_original_not_empty(cls, v: str) -> str:
+        """Ensure original key is not empty after stripping."""
+        if not v.strip():
+            raise ValueError("Key cannot be empty or contain only whitespace")
+        return v
+
+    @classmethod
+    def create(cls, key: str, sanitize: bool = True) -> "SanitizedKey":
+        """Factory method to create a sanitized key.
+
+        Args:
+            key: The original key value
+            sanitize: Whether to apply sanitization (default: True)
+
+        Returns:
+            SanitizedKey instance
+        """
+        if not sanitize:
+            return cls(original=key, sanitized=key)
+
+        sanitized = key
+        for char in cls.INVALID_CHARS:
+            sanitized = sanitized.replace(char, cls.REPLACEMENT_CHAR)
+
+        return cls(original=key, sanitized=sanitized)
+
+    @property
+    def was_sanitized(self) -> bool:
+        """Check if the key was modified during sanitization."""
+        return self.original != self.sanitized
+
+    def __str__(self) -> str:
+        """Return the sanitized key for string operations."""
+        return self.sanitized
+
+    def __repr__(self) -> str:
+        """Return detailed representation."""
+        return f"SanitizedKey(original='{self.original}', sanitized='{self.sanitized}')"
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality comparison."""
+        if isinstance(other, SanitizedKey):
+            return self.original == other.original and self.sanitized == other.sanitized
+        return False
+
+    def __hash__(self) -> int:
+        """Make hashable for use in sets and dicts."""
+        return hash((self.original, self.sanitized))

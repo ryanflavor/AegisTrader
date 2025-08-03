@@ -1,10 +1,19 @@
 """Unit tests for NATS KV Store adapter - concise and comprehensive."""
 
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from aegis_sdk.domain.exceptions import (
+    KVKeyAlreadyExistsError,
+    KVKeyNotFoundError,
+    KVNotConnectedError,
+    KVRevisionMismatchError,
+    KVStoreError,
+    KVTTLNotSupportedError,
+)
 from aegis_sdk.domain.models import KVEntry, KVOptions
 from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
 from aegis_sdk.ports.metrics import MetricsPort
@@ -82,7 +91,7 @@ class TestNATSKVStore:
         with patch.object(kv_store, "_nats_adapter") as mock_adapter:
             mock_adapter.is_connected = AsyncMock(return_value=False)
 
-            with pytest.raises(RuntimeError, match="NATS adapter is not connected"):
+            with pytest.raises(KVNotConnectedError):
                 await kv_store.connect("test-bucket")
 
     @pytest.mark.asyncio
@@ -573,20 +582,37 @@ class TestNATSKVStore:
         kv_store = NATSKVStore(sanitize_keys=True)
 
         # Test various invalid characters
-        assert kv_store._sanitize_key("key with spaces") == "key_with_spaces"
-        assert kv_store._sanitize_key("key.with.dots") == "key_with_dots"
-        assert kv_store._sanitize_key("key*with*stars") == "key_with_stars"
-        assert kv_store._sanitize_key("key>with>gt") == "key_with_gt"
-        assert kv_store._sanitize_key("key/with/slash") == "key_with_slash"
-        assert kv_store._sanitize_key("key\\with\\backslash") == "key_with_backslash"
-        assert kv_store._sanitize_key("key:with:colon") == "key_with_colon"
+        sanitized = kv_store._sanitize_key("key with spaces")
+        assert sanitized.sanitized == "key_with_spaces"
+        assert sanitized.original == "key with spaces"
+        assert sanitized.was_sanitized
+
+        sanitized = kv_store._sanitize_key("key.with.dots")
+        assert sanitized.sanitized == "key_with_dots"
+
+        sanitized = kv_store._sanitize_key("key*with*stars")
+        assert sanitized.sanitized == "key_with_stars"
+
+        sanitized = kv_store._sanitize_key("key>with>gt")
+        assert sanitized.sanitized == "key_with_gt"
+
+        sanitized = kv_store._sanitize_key("key/with/slash")
+        assert sanitized.sanitized == "key_with_slash"
+
+        sanitized = kv_store._sanitize_key("key\\with\\backslash")
+        assert sanitized.sanitized == "key_with_backslash"
+
+        sanitized = kv_store._sanitize_key("key:with:colon")
+        assert sanitized.sanitized == "key_with_colon"
 
         # Test key mapping is stored
         assert kv_store._key_mapping["key_with_spaces"] == "key with spaces"
 
         # Test with sanitization disabled
         kv_store_no_sanitize = NATSKVStore(sanitize_keys=False)
-        assert kv_store_no_sanitize._sanitize_key("key with spaces") == "key with spaces"
+        sanitized = kv_store_no_sanitize._sanitize_key("key with spaces")
+        assert sanitized.sanitized == "key with spaces"
+        assert not sanitized.was_sanitized
 
     @pytest.mark.asyncio
     async def test_put_with_ttl_and_revision(self, kv_store):
@@ -618,7 +644,7 @@ class TestNATSKVStore:
         mock_js.publish.assert_called_once()
         call_args = mock_js.publish.call_args
         assert call_args[1]["headers"]["Nats-TTL"] == "3600"
-        assert call_args[1]["headers"]["Nats-Expected-Last-Subject-Sequence"] == "123"
+        # Note: revision check is done separately, not in the publish call
         assert revision == 125
 
     @pytest.mark.asyncio
@@ -626,10 +652,9 @@ class TestNATSKVStore:
         """Test creating KV stream with TTL enabled."""
         client, js, kv = mock_nats_client
 
-        # Mock stream API request
+        # Mock stream API response
         mock_response = Mock()
-        mock_response.stream_info = Mock()
-        mock_response.stream_info.created = True
+        mock_response.data = b'{"stream_info": {"created": true}}'  # Valid JSON response
 
         with patch.object(kv_store, "_nats_adapter") as mock_adapter:
             mock_adapter._connections = [client]
@@ -652,3 +677,853 @@ class TestNATSKVStore:
 
             config = json.loads(call_args[0][1])
             assert config["allow_msg_ttl"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_kv_stream_with_ttl_error(self, kv_store, mock_nats_client):
+        """Test creating KV stream with TTL error handling."""
+        client, js, kv = mock_nats_client
+
+        # Mock error response
+        mock_response = Mock()
+        mock_response.data = b'{"error": {"code": 400, "description": "Stream already exists"}}'
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            client.request = AsyncMock(return_value=mock_response)
+
+            result = await kv_store._create_kv_stream_with_ttl("test-bucket")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_put_with_ttl_not_supported(self, kv_store):
+        """Test put with TTL when server doesn't support it."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._bucket_name = "test-bucket"
+
+        # Mock JetStream publish that fails with TTL error
+        mock_js = AsyncMock()
+        mock_js.publish = AsyncMock(side_effect=Exception("per-message TTL is disabled"))
+        kv_store._nats_adapter._js = mock_js
+
+        # Test TTL option
+        options = KVOptions(ttl=3600)
+
+        with pytest.raises(KVTTLNotSupportedError):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_connect_js_not_initialized(self, kv_store, mock_nats_client):
+        """Test connect fails when JetStream not initialized."""
+        client, js, kv = mock_nats_client
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = None  # No JetStream
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            with pytest.raises(KVStoreError, match="NATS JetStream not initialized"):
+                await kv_store.connect("test-bucket")
+
+    @pytest.mark.asyncio
+    async def test_connect_create_bucket_no_ttl(self, kv_store, mock_nats_client):
+        """Test connect creates bucket without TTL support."""
+        client, js, kv = mock_nats_client
+
+        # First call to key_value fails (bucket doesn't exist)
+        js.key_value.side_effect = [Exception("bucket not found"), kv]
+        # Stream doesn't exist
+        js.stream_info = AsyncMock(side_effect=Exception("stream not found"))
+        # Add stream succeeds
+        js.add_stream = AsyncMock()
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            await kv_store.connect("test-bucket", enable_ttl=False)
+
+            # Should have tried to add stream
+            js.add_stream.assert_called_once()
+            assert kv_store._bucket_name == "test-bucket"
+
+    @pytest.mark.asyncio
+    async def test_connect_stream_exists(self, kv_store, mock_nats_client):
+        """Test connect when stream already exists."""
+        client, js, kv = mock_nats_client
+
+        # First call to key_value fails (bucket interface issue)
+        # Second call succeeds
+        js.key_value.side_effect = [Exception("some error"), kv]
+        # Stream already exists
+        js.stream_info = AsyncMock()  # No exception means it exists
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            await kv_store.connect("test-bucket")
+
+            # Should get KV bucket after checking stream exists
+            assert js.key_value.call_count == 2
+            assert kv_store._bucket_name == "test-bucket"
+
+    @pytest.mark.asyncio
+    async def test_get_no_created_timestamp(self, kv_store, mock_metrics):
+        """Test get handles missing created timestamp."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock KV entry without created timestamp
+        mock_entry = Mock()
+        mock_entry.key = "test-key"
+        mock_entry.value = b'{"data": "test"}'
+        mock_entry.revision = 42
+        mock_entry.created = None  # No timestamp
+        mock_entry.delta = 0
+
+        mock_kv.get = AsyncMock(return_value=mock_entry)
+
+        # Test get
+        with mock_metrics.timer.return_value:
+            result = await kv_store.get("test-key")
+
+        assert isinstance(result, KVEntry)
+        assert result.key == "test-key"
+        assert result.value == {"data": "test"}
+        # Should have current timestamp
+        assert result.created_at is not None
+        assert result.updated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_get_with_ttl(self, kv_store, mock_metrics):
+        """Test get retrieves entry with TTL."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock KV entry with TTL
+        mock_entry = Mock()
+        mock_entry.key = "test-key"
+        mock_entry.value = b'{"data": "test"}'
+        mock_entry.revision = 42
+        mock_entry.created = datetime.now(UTC)
+        mock_entry.delta = 3600  # 1 hour TTL
+
+        mock_kv.get = AsyncMock(return_value=mock_entry)
+
+        # Test get
+        with mock_metrics.timer.return_value:
+            result = await kv_store.get("test-key")
+
+        assert isinstance(result, KVEntry)
+        assert result.ttl == 3600
+
+    @pytest.mark.asyncio
+    async def test_put_revision_mismatch(self, kv_store):
+        """Test put with revision mismatch."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get returns different revision successfully (no exception)
+        mock_entry = Mock()
+        mock_entry.revision = 456  # Different from expected
+        mock_kv.get = AsyncMock(return_value=mock_entry)
+
+        options = KVOptions(revision=123)  # Expected revision
+
+        # Should raise KVRevisionMismatchError
+        with pytest.raises(KVRevisionMismatchError) as exc_info:
+            await kv_store.put("test-key", "value", options)
+
+        assert exc_info.value.expected_revision == 123
+        assert exc_info.value.actual_revision == 456
+
+    @pytest.mark.asyncio
+    async def test_put_revision_check_key_not_found(self, kv_store):
+        """Test put with revision check when key doesn't exist."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get throws exception (key not found)
+        mock_kv.get = AsyncMock(side_effect=Exception("key not found"))
+
+        options = KVOptions(revision=123)
+
+        with pytest.raises(KVKeyNotFoundError) as exc_info:
+            await kv_store.put("test-key", "value", options)
+
+        assert exc_info.value.key == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_watch_no_kv_store(self, kv_store):
+        """Test watch fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(KVNotConnectedError):
+            async for _ in kv_store.watch(key="test-key"):
+                pass
+
+    @pytest.mark.asyncio
+    async def test_watch_timeout(self, kv_store):
+        """Test watch handles timeout gracefully."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher that times out
+        mock_watcher = AsyncMock()
+        mock_watcher.updates = AsyncMock(side_effect=[None, asyncio.TimeoutError()])
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            # Should exit after timeout
+            break
+
+        # No events due to timeout
+        assert len(events) == 0
+
+    @pytest.mark.asyncio
+    async def test_watch_unknown_operation(self, kv_store):
+        """Test watch handles unknown operations."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher with unknown operation
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="UNKNOWN_OP",
+                key="test-key",
+                value=b'"value"',
+                revision=1,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+            Mock(
+                operation="PUT",
+                key="test-key",
+                value=b'"value"',
+                revision=2,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        # No need to patch print, the logger will output warnings
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        # Should skip unknown operation and get PUT
+        assert len(events) == 1
+        assert events[0].operation == "PUT"
+        # Logger warning will be in captured logs
+
+    @pytest.mark.asyncio
+    async def test_watch_initial_delete(self, kv_store):
+        """Test watch skips initial DELETE events."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher with initial DELETE (key doesn't exist initially)
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="DELETE",
+                key="test-key",
+                value=None,
+                revision=1,
+                created=None,
+                delta=0,  # Initial update
+            ),
+            Mock(
+                operation="PUT",
+                key="test-key",
+                value=b'"value"',
+                revision=2,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        # Should skip initial DELETE and only get PUT
+        assert len(events) == 1
+        assert events[0].operation == "PUT"
+
+    @pytest.mark.asyncio
+    async def test_watch_exception_handling(self, kv_store):
+        """Test watch handles exceptions gracefully."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher that throws exception
+        mock_watcher = AsyncMock()
+        mock_watcher.updates = AsyncMock(side_effect=[None, Exception("watch error")])
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            # Should exit on exception
+
+        # No events due to exception
+        assert len(events) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_no_kv_store(self, kv_store):
+        """Test get fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.get("test-key")
+
+    @pytest.mark.asyncio
+    async def test_put_no_kv_store(self, kv_store):
+        """Test put fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.put("test-key", "value")
+
+    @pytest.mark.asyncio
+    async def test_delete_no_kv_store(self, kv_store):
+        """Test delete fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.delete("test-key")
+
+    @pytest.mark.asyncio
+    async def test_exists_no_kv_store(self, kv_store):
+        """Test exists fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.exists("test-key")
+
+    @pytest.mark.asyncio
+    async def test_keys_no_kv_store(self, kv_store):
+        """Test keys fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.keys()
+
+    @pytest.mark.asyncio
+    async def test_history_no_kv_store(self, kv_store):
+        """Test history fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.history("test-key")
+
+    @pytest.mark.asyncio
+    async def test_purge_no_kv_store(self, kv_store):
+        """Test purge fails when not connected."""
+        kv_store._kv = None
+
+        with pytest.raises(Exception, match="KV store not connected"):
+            await kv_store.purge("test-key")
+
+    @pytest.mark.asyncio
+    async def test_status_not_connected(self, kv_store):
+        """Test status when not connected."""
+        kv_store._kv = None
+
+        status = await kv_store.status()
+
+        assert status["connected"] is False
+        assert status["bucket"] is None
+        assert status["values"] == 0
+
+    @pytest.mark.asyncio
+    async def test_status_error(self, kv_store):
+        """Test status with error."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._bucket_name = "test-bucket"
+
+        # Mock status throws exception
+        mock_kv.status = AsyncMock(side_effect=Exception("status error"))
+
+        status = await kv_store.status()
+
+        assert status["connected"] is True
+        assert status["bucket"] == "test-bucket"
+        assert "error" in status
+
+    @pytest.mark.asyncio
+    async def test_keys_with_prefix_filtering(self, kv_store):
+        """Test keys with prefix filtering."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {
+            "prefix_key1": "prefix:key1",
+            "prefix_key2": "prefix:key2",
+            "other_key": "other:key",
+        }
+
+        mock_kv.keys = AsyncMock(return_value=["prefix_key1", "prefix_key2", "other_key"])
+
+        keys = await kv_store.keys("prefix:")
+
+        assert len(keys) == 2
+        assert "prefix:key1" in keys
+        assert "prefix:key2" in keys
+        assert "other:key" not in keys
+
+    @pytest.mark.asyncio
+    async def test_keys_exception_returns_empty(self, kv_store):
+        """Test keys returns empty list on exception."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        mock_kv.keys = AsyncMock(side_effect=Exception("keys error"))
+
+        keys = await kv_store.keys()
+
+        assert keys == []
+
+    @pytest.mark.asyncio
+    async def test_history_exception_returns_empty(self, kv_store):
+        """Test history returns empty list on exception."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        mock_kv.history = AsyncMock(side_effect=Exception("history error"))
+
+        history = await kv_store.history("test-key")
+
+        assert history == []
+
+    @pytest.mark.asyncio
+    async def test_put_create_only_duplicate_error(self, kv_store):
+        """Test put with create_only handles duplicate error."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock create throws duplicate error
+        mock_kv.create = AsyncMock(side_effect=Exception("duplicate key"))
+
+        options = KVOptions(create_only=True)
+
+        with pytest.raises(KVKeyAlreadyExistsError) as exc_info:
+            await kv_store.put("test-key", "value", options)
+
+        assert exc_info.value.key == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_put_update_only_no_revision(self, kv_store):
+        """Test put with update_only and no revision gets current revision."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get returns current entry
+        mock_entry = Mock()
+        mock_entry.revision = 123
+        mock_kv.get = AsyncMock(return_value=mock_entry)
+        mock_kv.update = AsyncMock(return_value=124)
+
+        options = KVOptions(update_only=True)
+        revision = await kv_store.put("test-key", "value", options)
+
+        assert revision == 124
+        mock_kv.update.assert_called_once_with("test-key", b'"value"', 123)
+
+    @pytest.mark.asyncio
+    async def test_create_kv_stream_with_ttl_no_connection(self, kv_store):
+        """Test create KV stream fails without connection."""
+        kv_store._nats_adapter._connections = []
+
+        result = await kv_store._create_kv_stream_with_ttl("test-bucket")
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_connect_create_stream_with_ttl_failure(self, kv_store, mock_nats_client):
+        """Test connect handles TTL stream creation failure."""
+        client, js, kv = mock_nats_client
+
+        # First call to key_value fails
+        js.key_value.side_effect = [Exception("bucket not found")]
+        # Stream doesn't exist
+        js.stream_info = AsyncMock(side_effect=Exception("stream not found"))
+
+        # Mock create_kv_stream_with_ttl to fail
+        with (
+            patch.object(kv_store, "_create_kv_stream_with_ttl", return_value=False),
+            patch.object(kv_store, "_nats_adapter") as mock_adapter,
+        ):
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            with pytest.raises(Exception, match="Failed to create stream with TTL support"):
+                await kv_store.connect("test-bucket", enable_ttl=True)
+
+    @pytest.mark.asyncio
+    async def test_connect_failure(self, kv_store, mock_nats_client):
+        """Test connect handles general failure."""
+        client, js, kv = mock_nats_client
+
+        # key_value always fails
+        js.key_value.side_effect = Exception("connection error")
+
+        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
+            mock_adapter._connections = [client]
+            mock_adapter._js = js
+            mock_adapter.is_connected = AsyncMock(return_value=True)
+
+            with pytest.raises(Exception, match="Failed to connect to KV bucket"):
+                await kv_store.connect("test-bucket")
+
+    @pytest.mark.asyncio
+    async def test_put_create_only_generic_error(self, kv_store):
+        """Test put with create_only re-raises generic errors."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock create throws generic error (not duplicate)
+        mock_kv.create = AsyncMock(side_effect=Exception("network error"))
+
+        options = KVOptions(create_only=True)
+
+        with pytest.raises(Exception, match="network error"):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_put_update_only_with_revision(self, kv_store):
+        """Test put with update_only and provided revision."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        mock_kv.update = AsyncMock(return_value=124)
+
+        options = KVOptions(update_only=True, revision=123)
+        revision = await kv_store.put("test-key", "value", options)
+
+        assert revision == 124
+        # Should use provided revision directly, not fetch current
+        mock_kv.update.assert_called_once_with("test-key", b'"value"', 123)
+        mock_kv.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_put_update_only_key_not_found(self, kv_store):
+        """Test put with update_only when key doesn't exist."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get throws exception (key not found)
+        mock_kv.get = AsyncMock(side_effect=Exception("key not found"))
+
+        options = KVOptions(update_only=True)
+
+        # Import the specific exception type
+        from aegis_sdk.domain.exceptions import KVKeyNotFoundError
+
+        with pytest.raises(KVKeyNotFoundError):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_put_revision_check_key_not_found_specific(self, kv_store):
+        """Test put with revision check when key not found."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get throws "not found" error
+        mock_kv.get = AsyncMock(side_effect=Exception("key not found"))
+
+        options = KVOptions(revision=123)
+
+        from aegis_sdk.domain.exceptions import KVKeyNotFoundError
+
+        with pytest.raises(KVKeyNotFoundError):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_put_revision_check_generic_error(self, kv_store):
+        """Test put with revision check generic error."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock get throws generic error (not "not found")
+        mock_kv.get = AsyncMock(side_effect=Exception("connection error"))
+
+        options = KVOptions(revision=123)
+
+        from aegis_sdk.domain.exceptions import KVStoreError
+
+        with pytest.raises(KVStoreError, match="Revision check failed"):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_put_with_ttl_generic_error(self, kv_store):
+        """Test put with TTL re-raises generic errors."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._bucket_name = "test-bucket"
+
+        # Mock JetStream publish that fails with generic error
+        mock_js = AsyncMock()
+        mock_js.publish = AsyncMock(side_effect=Exception("network error"))
+        kv_store._nats_adapter._js = mock_js
+
+        options = KVOptions(ttl=3600)
+
+        with pytest.raises(Exception, match="network error"):
+            await kv_store.put("test-key", "value", options)
+
+    @pytest.mark.asyncio
+    async def test_put_normal_without_options(self, kv_store):
+        """Test normal put when options is None but revision check path is taken."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        mock_kv.put = AsyncMock(return_value=123)
+
+        # Test with options that has revision=None, not create_only or update_only
+        options = KVOptions()  # All fields None by default
+        revision = await kv_store.put("test-key", "value", options)
+
+        assert revision == 123
+        mock_kv.put.assert_called_once_with("test-key", b'"value"')
+
+    @pytest.mark.asyncio
+    async def test_watch_all_keys(self, kv_store):
+        """Test watch without key or prefix (watch all)."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="PUT",
+                key="any-key",
+                value=b'"value"',
+                revision=1,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch():  # No key or prefix
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        assert len(events) == 1
+        # Should watch all keys
+        mock_kv.watch.assert_called_once_with(">", include_history=False)
+
+    @pytest.mark.asyncio
+    async def test_watch_prefix_filter_non_matching(self, kv_store):
+        """Test watch filters out non-matching prefix in event loop."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher that returns events with different prefixes
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="PUT",
+                key="other:key",  # Non-matching prefix
+                value=b'"ignored"',
+                revision=1,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+            Mock(
+                operation="PUT",
+                key="prefix:key1",  # Matching prefix
+                value=b'"value1"',
+                revision=2,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+
+        # Add a counter to prevent infinite loop
+        call_count = 0
+
+        async def mock_updates(*args, **kwargs):
+            nonlocal call_count
+            if call_count < len(updates_sequence):
+                result = updates_sequence[call_count]
+                call_count += 1
+                return result
+            # After all updates, raise timeout to exit
+            raise asyncio.TimeoutError()
+
+        mock_watcher.updates = AsyncMock(side_effect=mock_updates)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(prefix="prefix:"):
+            events.append(event)
+            # Should get only one matching event
+            if len(events) >= 1:
+                break
+
+        assert len(events) == 1
+        assert events[0].entry.key == "prefix:key1"
+
+    @pytest.mark.asyncio
+    async def test_watch_put_with_no_value(self, kv_store):
+        """Test watch skips PUT operations with no value."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher with PUT that has no value
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,  # Initial marker
+            Mock(
+                operation="PUT",
+                key="test-key",
+                value=None,  # No value
+                revision=1,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+            Mock(
+                operation="PUT",
+                key="test-key",
+                value=b'"real-value"',  # Has value
+                revision=2,
+                created=datetime.now(UTC),
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        # Should skip first PUT and only get second
+        assert len(events) == 1
+        assert events[0].entry.value == "real-value"
+
+    @pytest.mark.asyncio
+    async def test_watch_put_no_created_timestamp(self, kv_store):
+        """Test watch handles PUT without created timestamp."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher with PUT that has no created timestamp
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,
+            Mock(
+                operation="PUT",
+                key="test-key",
+                value=b'"value"',
+                revision=1,
+                created=None,  # No timestamp
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        assert len(events) == 1
+        # Should have current timestamp
+        assert events[0].entry.created_at is not None
+        assert events[0].entry.updated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_watch_purge_operation(self, kv_store):
+        """Test watch handles PURGE operations."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+        kv_store._key_mapping = {}
+
+        # Mock watcher with PURGE operation
+        mock_watcher = AsyncMock()
+        updates_sequence = [
+            None,
+            Mock(
+                operation="PURGE",
+                key="test-key",
+                value=None,
+                revision=1,
+                created=None,
+                delta=None,
+            ),
+        ]
+        mock_watcher.updates = AsyncMock(side_effect=updates_sequence)
+        mock_kv.watch = AsyncMock(return_value=mock_watcher)
+
+        events = []
+        async for event in kv_store.watch(key="test-key"):
+            events.append(event)
+            if len(events) >= 1:
+                break
+
+        assert len(events) == 1
+        assert events[0].operation == "PURGE"
+        assert events[0].entry is None
+
+    @pytest.mark.asyncio
+    async def test_history_no_created_timestamp(self, kv_store):
+        """Test history handles entries without created timestamp."""
+        mock_kv = AsyncMock()
+        kv_store._kv = mock_kv
+
+        # Mock history entries without created timestamp
+        mock_entries = [
+            Mock(
+                key="test-key",
+                value=b'{"data": "v1"}',
+                revision=1,
+                created=None,  # No timestamp
+                delta=None,
+            ),
+        ]
+
+        mock_kv.history = AsyncMock(return_value=mock_entries)
+
+        history = await kv_store.history("test-key")
+
+        assert len(history) == 1
+        # Should have current timestamp
+        assert history[0].created_at is not None
+        assert history[0].updated_at is not None

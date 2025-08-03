@@ -5,6 +5,12 @@ from .exceptions import (
     CommandError,
     ConnectionError,
     EventError,
+    KVKeyAlreadyExistsError,
+    KVKeyNotFoundError,
+    KVNotConnectedError,
+    KVRevisionMismatchError,
+    KVStoreError,
+    KVTTLNotSupportedError,
     MessageBusError,
     RPCError,
     SerializationError,
@@ -12,8 +18,19 @@ from .exceptions import (
     TimeoutError,
     ValidationError,
 )
-from .models import Command, Event, Message, RPCRequest, RPCResponse, ServiceInfo
+from .models import (
+    Command,
+    Event,
+    KVEntry,
+    KVOptions,
+    KVWatchEvent,
+    Message,
+    RPCRequest,
+    RPCResponse,
+    ServiceInfo,
+)
 from .patterns import SubjectPatterns
+from .value_objects import SanitizedKey
 
 __all__ = [
     # Exceptions
@@ -23,12 +40,22 @@ __all__ = [
     "ConnectionError",
     "Event",
     "EventError",
+    "KVEntry",
+    "KVKeyAlreadyExistsError",
+    "KVKeyNotFoundError",
+    "KVNotConnectedError",
+    "KVOptions",
+    "KVRevisionMismatchError",
+    "KVStoreError",
+    "KVTTLNotSupportedError",
+    "KVWatchEvent",
     # Models
     "Message",
     "MessageBusError",
     "RPCError",
     "RPCRequest",
     "RPCResponse",
+    "SanitizedKey",
     "SerializationError",
     "ServiceError",
     "ServiceInfo",

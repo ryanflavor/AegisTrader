@@ -47,7 +47,15 @@ def mock_metrics():
     metrics = Mock(spec=MetricsPort)
     metrics.increment = Mock()
     metrics.gauge = Mock()
-    metrics.timer = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock()))
+
+    # Create a proper context manager mock
+    from contextlib import contextmanager
+
+    @contextmanager
+    def timer_context(name):
+        yield
+
+    metrics.timer = Mock(side_effect=timer_context)
     return metrics
 
 

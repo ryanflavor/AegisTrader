@@ -7,12 +7,23 @@ from typing import Any
 
 from nats.js.kv import KeyValue
 
+from ..domain.exceptions import (
+    KVKeyAlreadyExistsError,
+    KVKeyNotFoundError,
+    KVNotConnectedError,
+    KVRevisionMismatchError,
+    KVStoreError,
+    KVTTLNotSupportedError,
+)
 from ..domain.models import KVEntry, KVOptions, KVWatchEvent
+from ..domain.value_objects import SanitizedKey
 from ..ports.kv_store import KVStorePort
+from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
 from .in_memory_metrics import InMemoryMetrics
 from .nats_adapter import NATSAdapter
+from .simple_logger import SimpleLogger
 
 
 class NATSKVStore(KVStorePort):
@@ -26,6 +37,7 @@ class NATSKVStore(KVStorePort):
         self,
         nats_adapter: MessageBusPort | None = None,
         metrics: MetricsPort | None = None,
+        logger: LoggerPort | None = None,
         sanitize_keys: bool = True,
     ):
         """Initialize NATS KV Store adapter.
@@ -33,38 +45,44 @@ class NATSKVStore(KVStorePort):
         Args:
             nats_adapter: Optional NATS adapter. If not provided, creates a new one.
             metrics: Optional metrics port. If not provided, uses default adapter.
+            logger: Optional logger port. If not provided, uses simple logger.
             sanitize_keys: Whether to sanitize keys for NATS compatibility (default: True)
         """
         self._nats_adapter = nats_adapter or NATSAdapter()
         self._metrics = metrics or InMemoryMetrics()
+        self._logger = logger or SimpleLogger("aegis_sdk.nats_kv_store")
         self._kv: KeyValue | None = None
         self._bucket_name: str | None = None
         self._sanitize_keys = sanitize_keys
-        # Keep mapping of original to sanitized keys
+        # Keep mapping of sanitized to original keys for reverse lookup
         self._key_mapping: dict[str, str] = {}
 
-    def _sanitize_key(self, key: str) -> str:
-        """Sanitize key to be compatible with NATS KV restrictions.
+    def _sanitize_key(self, key: str) -> SanitizedKey:
+        """Create a sanitized key value object.
 
-        NATS KV keys cannot contain: spaces, tabs, '.', '*', '>', '/', '\\'
-        We'll replace invalid characters with '_'
+        Args:
+            key: The original key
+
+        Returns:
+            SanitizedKey value object
         """
-        if not self._sanitize_keys:
-            return key
+        sanitized_key = SanitizedKey.create(key, sanitize=self._sanitize_keys)
 
-        # Replace invalid characters
-        sanitized = key
-        for char in [" ", "\t", ".", "*", ">", "/", "\\", ":"]:
-            sanitized = sanitized.replace(char, "_")
+        # Store mapping for reverse lookup if key was sanitized
+        if sanitized_key.was_sanitized:
+            self._key_mapping[sanitized_key.sanitized] = sanitized_key.original
 
-        # Store mapping
-        if sanitized != key:
-            self._key_mapping[sanitized] = key
-
-        return sanitized
+        return sanitized_key
 
     def _get_original_key(self, sanitized_key: str) -> str:
-        """Get the original key from a sanitized key."""
+        """Get the original key from a sanitized key.
+
+        Args:
+            sanitized_key: The sanitized key string
+
+        Returns:
+            The original key if found in mapping, otherwise the sanitized key
+        """
         return self._key_mapping.get(sanitized_key, sanitized_key)
 
     async def _create_kv_stream_with_ttl(self, bucket: str) -> bool:
@@ -98,7 +116,7 @@ class NATSKVStore(KVStorePort):
 
         # Create the stream using raw API
         try:
-            nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None
+            nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None  # type: ignore[attr-defined]
             if not nc:
                 raise Exception("No NATS connection available")
 
@@ -109,14 +127,14 @@ class NATSKVStore(KVStorePort):
             )
             result = json.loads(resp.data.decode())
             if "error" in result:
-                print(f"Error creating stream: {result['error']}")
+                self._logger.error(f"Error creating stream: {result['error']}")
                 return False
             return True
         except Exception as e:
-            print(f"Failed to create stream with TTL: {e}")
+            self._logger.exception("Failed to create stream with TTL", exc_info=e)
             return False
 
-    async def connect(self, bucket: str, enable_ttl: bool = True) -> None:
+    async def connect(self, bucket: str, enable_ttl: bool = True) -> None:  # type: ignore[override]
         """Connect to a KV store bucket.
 
         Args:
@@ -125,10 +143,12 @@ class NATSKVStore(KVStorePort):
         """
         # Ensure NATS adapter is connected
         if not await self._nats_adapter.is_connected():
-            raise Exception("NATS adapter not connected")
+            raise KVNotConnectedError("connect")
 
+        # Check if JetStream is available through a proper interface
+        # This is a temporary check - ideally the MessageBusPort should expose JS access
         if not hasattr(self._nats_adapter, "_js") or not self._nats_adapter._js:
-            raise Exception("NATS JetStream not initialized")
+            raise KVStoreError("NATS JetStream not initialized", operation="connect")
 
         try:
             # Try to get existing bucket first
@@ -174,10 +194,15 @@ class NATSKVStore(KVStorePort):
 
             self._bucket_name = bucket
             self._metrics.gauge("kv.buckets.active", 1)
-            print(f"✅ Connected to NATS KV bucket: {bucket}")
+            self._logger.info(f"Connected to NATS KV bucket: {bucket}")
         except Exception as e:
             self._metrics.increment("kv.connect.error")
-            raise Exception(f"Failed to connect to KV bucket '{bucket}': {e}") from e
+            self._logger.exception(f"Failed to connect to KV bucket '{bucket}'", exc_info=e)
+            raise KVStoreError(
+                f"Failed to connect to KV bucket '{bucket}': {e}",
+                bucket=bucket,
+                operation="connect",
+            ) from e
 
     async def disconnect(self) -> None:
         """Disconnect from the KV store."""
@@ -194,10 +219,11 @@ class NATSKVStore(KVStorePort):
     async def get(self, key: str) -> KVEntry | None:
         """Get a value by key."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("get")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         with self._metrics.timer(f"kv.get.{self._bucket_name}"):
             try:
@@ -242,10 +268,11 @@ class NATSKVStore(KVStorePort):
     async def put(self, key: str, value: Any, options: KVOptions | None = None) -> int:
         """Put a value with optional TTL and revision check."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("put")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         with self._metrics.timer(f"kv.put.{self._bucket_name}"):
             try:
@@ -259,9 +286,9 @@ class NATSKVStore(KVStorePort):
                         try:
                             revision = await self._kv.create(safe_key, serialized)
                         except Exception as e:
-                            # Convert NATS-specific error to generic exception
+                            # Convert NATS-specific error to domain exception
                             if "wrong last sequence" in str(e) or "duplicate" in str(e).lower():
-                                raise Exception("key already exists") from e
+                                raise KVKeyAlreadyExistsError(key) from e
                             raise
                     elif options.update_only:
                         # Use update for existing keys only
@@ -271,9 +298,7 @@ class NATSKVStore(KVStorePort):
                                 current = await self._kv.get(safe_key)
                                 last_revision = current.revision
                             except Exception as err:
-                                raise ValueError(
-                                    "Key does not exist for update_only operation"
-                                ) from err
+                                raise KVKeyNotFoundError(key, self._bucket_name) from err
                         else:
                             last_revision = options.revision
                         revision = await self._kv.update(safe_key, serialized, last_revision)
@@ -285,12 +310,17 @@ class NATSKVStore(KVStorePort):
                             try:
                                 current = await self._kv.get(safe_key)
                                 if current.revision != options.revision:
-                                    raise ValueError(
-                                        f"Revision mismatch: expected {options.revision}, got {current.revision}"
+                                    raise KVRevisionMismatchError(
+                                        key, options.revision, current.revision or 0
                                     )
+                            except KVRevisionMismatchError:
+                                # Re-raise revision mismatch as-is
+                                raise
                             except Exception as err:
-                                raise ValueError(
-                                    "Key does not exist or revision check failed"
+                                if "not found" in str(err).lower():
+                                    raise KVKeyNotFoundError(key, self._bucket_name) from err
+                                raise KVStoreError(
+                                    "Revision check failed", key=key, operation="put"
                                 ) from err
 
                         # Put with TTL if specified
@@ -304,7 +334,7 @@ class NATSKVStore(KVStorePort):
                                 subject = f"$KV.{self._bucket_name}.{safe_key}"
 
                                 # Publish directly to JetStream with TTL header
-                                pa = await self._nats_adapter._js.publish(
+                                pa = await self._nats_adapter._js.publish(  # type: ignore[attr-defined]
                                     subject, serialized, headers=hdrs
                                 )
                                 revision = pa.seq
@@ -312,11 +342,7 @@ class NATSKVStore(KVStorePort):
                             except Exception as e:
                                 # NO FALLBACK - fail if per-message TTL is not supported
                                 if "per-message TTL is disabled" in str(e):
-                                    raise ValueError(
-                                        "Per-message TTL is not enabled on NATS server. "
-                                        "Please configure the server with 'allow_msg_ttl: true' "
-                                        "in the JetStream configuration."
-                                    ) from e
+                                    raise KVTTLNotSupportedError() from e
                                 # Re-raise other errors
                                 raise
                         else:
@@ -336,10 +362,11 @@ class NATSKVStore(KVStorePort):
     async def delete(self, key: str, revision: int | None = None) -> bool:
         """Delete a key with optional revision check."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("delete")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         with self._metrics.timer(f"kv.delete.{self._bucket_name}"):
             try:
@@ -358,10 +385,11 @@ class NATSKVStore(KVStorePort):
     async def exists(self, key: str) -> bool:
         """Check if a key exists."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("exists")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         try:
             await self._kv.get(safe_key)
@@ -373,7 +401,7 @@ class NATSKVStore(KVStorePort):
     async def keys(self, prefix: str = "") -> list[str]:
         """List all keys with optional prefix filter."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("keys")
 
         try:
             all_keys = await self._kv.keys()
@@ -434,11 +462,12 @@ class NATSKVStore(KVStorePort):
             raise ValueError("Cannot specify both key and prefix")
 
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("watch")
 
         # Set up watch based on key or prefix
         if key:
-            safe_key = self._sanitize_key(key)
+            sanitized_key = self._sanitize_key(key)
+            safe_key = sanitized_key.sanitized
             # Watch only this specific key, don't include history
             watcher = await self._kv.watch(safe_key, include_history=False)
         elif prefix:
@@ -538,7 +567,9 @@ class NATSKVStore(KVStorePort):
                 event = KVWatchEvent(operation="PURGE", entry=None)
             else:
                 # Log unknown operation for debugging
-                print(f"Unknown KV watch operation: {operation} for key: {original_key}")
+                self._logger.warning(
+                    f"Unknown KV watch operation: {operation} for key: {original_key}"
+                )
                 continue  # Skip unknown operations
 
             yield event
@@ -546,10 +577,11 @@ class NATSKVStore(KVStorePort):
     async def history(self, key: str, limit: int = 10) -> list[KVEntry]:
         """Get revision history for a key."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("history")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         try:
             # Get history from NATS KV
@@ -593,10 +625,11 @@ class NATSKVStore(KVStorePort):
     async def purge(self, key: str) -> None:
         """Purge all revisions of a key."""
         if not self._kv:
-            raise Exception("KV store not connected")
+            raise KVNotConnectedError("purge")
 
         # Sanitize key
-        safe_key = self._sanitize_key(key)
+        sanitized_key = self._sanitize_key(key)
+        safe_key = sanitized_key.sanitized
 
         await self._kv.purge(safe_key)
         self._metrics.increment("kv.purge")

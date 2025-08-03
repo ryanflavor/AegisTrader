@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -33,19 +34,19 @@ class TestNATSAdapterInitialization:
         assert adapter._connections == []
         assert adapter._js is None
 
-    @patch("aegis_sdk.infrastructure.nats_adapter.MetricsAdapter")
-    def test_init_creates_metrics(self, mock_metrics_adapter):
+    @patch("aegis_sdk.infrastructure.nats_adapter.InMemoryMetrics")
+    def test_init_creates_metrics(self, mock_in_memory_metrics):
         """Test that initialization gets metrics instance."""
         mock_metrics = Mock()
         mock_metrics.gauge = Mock()
         mock_metrics.increment = Mock()
         mock_metrics.timer = Mock()
         mock_metrics.get_all = Mock()
-        mock_metrics_adapter.return_value = mock_metrics
+        mock_in_memory_metrics.return_value = mock_metrics
 
         adapter = NATSAdapter()
         assert adapter._metrics == mock_metrics
-        mock_metrics_adapter.assert_called_once()
+        mock_in_memory_metrics.assert_called_once()
 
 
 class TestNATSAdapterConnection:
@@ -614,9 +615,9 @@ class TestNATSAdapterRPC:
         # Get the registered callback
         wrapper = mock_nc.subscribe.call_args[1]["cb"]
 
-        # Create message with string data (not bytes)
+        # Create message with string data (not bytes) - should be bytes
         mock_msg = Mock()
-        mock_msg.data = '{"message_id": "123", "method": "test", "params": {"string": "data"}}'
+        mock_msg.data = b'{"message_id": "123", "method": "test", "params": {"string": "data"}}'
         mock_msg.respond = AsyncMock()
 
         # Call wrapper
@@ -684,10 +685,10 @@ class TestNATSAdapterRPC:
         mock_nc.is_connected = True
         adapter._connections = [mock_nc]
 
-        # Create mock response with string data (not bytes)
+        # Create mock response with string data (not bytes) - should be bytes
         mock_response = Mock()
         mock_response.data = (
-            '{"correlation_id": "123", "success": true, "result": {"test": "data"}}'
+            b'{"correlation_id": "123", "success": true, "result": {"test": "data"}}'
         )
 
         mock_nc.request = AsyncMock(return_value=mock_response)
@@ -953,10 +954,11 @@ class TestNATSAdapterEvents:
         # Get the registered callback
         wrapper = mock_js.subscribe.call_args[1]["cb"]
 
-        # Create message with string data (not bytes)
+        # Create message with string data (not bytes) - should be bytes
         mock_msg = Mock()
-        mock_msg.data = '{"message_id": "123", "domain": "test", "event_type": "created", "payload": {"data": "string"}}'
+        mock_msg.data = b'{"message_id": "123", "domain": "test", "event_type": "created", "payload": {"data": "string"}}'
         mock_msg.ack = AsyncMock()
+        mock_msg.nak = AsyncMock()
 
         # Call wrapper
         await wrapper(mock_msg)
@@ -1309,10 +1311,11 @@ class TestNATSAdapterCommands:
         await adapter.register_command_handler("test_service", "process", handler)
         wrapper = mock_js.subscribe.call_args.kwargs["cb"]
 
-        # Create mock message with string data (not bytes)
+        # Create mock message with string data (not bytes) - should be bytes
         mock_msg = Mock()
-        mock_msg.data = '{"message_id": "123", "command": "process", "target": "test_service", "payload": {"string": "data"}}'
+        mock_msg.data = b'{"message_id": "123", "command": "process", "target": "test_service", "payload": {"string": "data"}}'
         mock_msg.ack = AsyncMock()
+        mock_msg.nak = AsyncMock()
         mock_nc.publish = AsyncMock()
 
         # Call wrapper
@@ -1622,3 +1625,331 @@ class TestNATSAdapterIntegration:
 
         # Should not retry for non-JSON errors
         assert mock_js.publish.call_count == 1
+
+
+class TestNATSAdapterErrorScenarios:
+    """Test error scenarios and edge cases for NATS adapter - improving coverage."""
+
+    @pytest.mark.asyncio
+    @patch("aegis_sdk.infrastructure.nats_adapter.nats.connect")
+    @patch.dict(os.environ, {"NATS_JS_DOMAIN": "test-domain"})
+    async def test_connect_with_jetstream_domain(self, mock_connect):
+        """Test connecting with JetStream domain from environment - covers line 70."""
+        # Setup mocks
+        mock_nc = AsyncMock(spec=NATSClient)
+        mock_js = Mock(spec=JetStreamContext)
+        mock_nc.jetstream.return_value = mock_js
+        mock_connect.return_value = mock_nc
+
+        adapter = NATSAdapter(pool_size=1)
+        adapter._metrics = Mock()
+        adapter._metrics.gauge = Mock()
+        adapter._ensure_streams = AsyncMock()
+
+        await adapter.connect(["nats://localhost:4222"])
+
+        # Verify JetStream was created with domain
+        mock_nc.jetstream.assert_called_once_with(domain="test-domain")
+        assert adapter._js == mock_js
+
+    @pytest.mark.asyncio
+    async def test_rpc_handler_fallback_deserialization(self):
+        """Test RPC handler with fallback JSON deserialization - covers lines 154-155."""
+        adapter = NATSAdapter(use_msgpack=True)
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_nc = AsyncMock(spec=NATSClient)
+        adapter._connections = [mock_nc]
+
+        # Create handler
+        handler = AsyncMock(return_value={"result": "success"})
+
+        # Register handler
+        await adapter.register_rpc_handler("test_service", "test_method", handler)
+        wrapper = mock_nc.subscribe.call_args[1]["cb"]
+
+        # Create message with JSON data that will fail msgpack deserialization
+        # This will trigger the fallback to JSON parsing
+        mock_msg = Mock()
+        # Valid JSON but not msgpack
+        mock_msg.data = b'{"message_id": "123", "method": "test", "params": {"key": "value"}}'
+        mock_msg.respond = AsyncMock()
+
+        # Call wrapper
+        await wrapper(mock_msg)
+
+        # Verify handler was called with params
+        handler.assert_called_once_with({"key": "value"})
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_target_parsing_single_part(self):
+        """Test RPC call with single-part target - covers lines 201-202."""
+        adapter = NATSAdapter()
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_nc = AsyncMock(spec=NATSClient)
+        mock_nc.is_connected = True
+        adapter._connections = [mock_nc]
+
+        # Mock response
+        mock_response = Mock()
+        mock_response.data = b'{"correlation_id": "123", "success": true, "result": "ok"}'
+        mock_nc.request = AsyncMock(return_value=mock_response)
+
+        # Make request with single-part target
+        request = RPCRequest(
+            method="test_method",
+            target="singleservice",  # Single part, no dots
+        )
+
+        await adapter.call_rpc(request)
+
+        # Verify the subject was constructed correctly
+        mock_nc.request.assert_called_once()
+        subject = mock_nc.request.call_args[0][0]
+        assert subject == "rpc.singleservice.test_method"
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_no_target(self):
+        """Test RPC call with no target - covers lines 208-209."""
+        adapter = NATSAdapter()
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_nc = AsyncMock(spec=NATSClient)
+        mock_nc.is_connected = True
+        adapter._connections = [mock_nc]
+
+        # Mock response
+        mock_response = Mock()
+        mock_response.data = b'{"correlation_id": "123", "success": true, "result": "ok"}'
+        mock_nc.request = AsyncMock(return_value=mock_response)
+
+        # Make request with no target
+        request = RPCRequest(
+            method="test_method",
+            target=None,  # No target
+        )
+
+        await adapter.call_rpc(request)
+
+        # Verify the subject was constructed with "unknown" service
+        mock_nc.request.assert_called_once()
+        subject = mock_nc.request.call_args[0][0]
+        assert subject == "rpc.unknown.test_method"
+
+    @pytest.mark.asyncio
+    async def test_publish_event_json_serialization(self):
+        """Test event publishing with JSON serialization - covers line 305."""
+        adapter = NATSAdapter(use_msgpack=False)  # Force JSON
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_js = AsyncMock(spec=JetStreamContext)
+        adapter._js = mock_js
+        mock_js.publish = AsyncMock(return_value=Mock(stream="EVENTS", seq=1))
+
+        event = Event(
+            domain="test",
+            event_type="created",
+            payload={"data": "test"},
+        )
+
+        await adapter.publish_event(event)
+
+        # Verify JSON encoding was used
+        mock_js.publish.assert_called_once()
+        published_data = mock_js.publish.call_args[0][1]
+        # Should be bytes from JSON encoding
+        assert isinstance(published_data, bytes)
+        # Can decode as JSON
+        decoded = json.loads(published_data.decode())
+        assert decoded["domain"] == "test"
+        assert decoded["event_type"] == "created"
+
+    @pytest.mark.asyncio
+    async def test_send_command_progress_handler_json(self):
+        """Test command progress handler with JSON data - covers line 413."""
+        adapter = NATSAdapter(use_msgpack=False)
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_js = AsyncMock(spec=JetStreamContext)
+        adapter._js = mock_js
+        mock_nc = AsyncMock(spec=NATSClient)
+        adapter._connections = [mock_nc]
+
+        # Mock initial command publish
+        mock_js.publish = AsyncMock(return_value=Mock(stream="COMMANDS", seq=123))
+
+        # We'll capture the progress handler when subscribe is called
+        progress_handler = None
+        completion_handler = None
+
+        async def capture_subscribe(subject, cb=None, **kwargs):
+            nonlocal progress_handler, completion_handler
+            if "progress" in subject:
+                progress_handler = cb
+            elif "callback" in subject:
+                completion_handler = cb
+            return Mock()
+
+        # Return mock subscriptions with unsubscribe method
+        mock_sub = Mock()
+        mock_sub.unsubscribe = AsyncMock()
+
+        async def capture_subscribe_with_mock(subject, cb=None, **kwargs):
+            nonlocal progress_handler, completion_handler
+            if "progress" in subject:
+                progress_handler = cb
+            elif "callback" in subject:
+                completion_handler = cb
+            return mock_sub
+
+        mock_nc.subscribe = AsyncMock(side_effect=capture_subscribe_with_mock)
+
+        # Start command sending in background
+        command = Command(command="test", target="service")
+        send_task = asyncio.create_task(adapter.send_command(command, track_progress=True))
+
+        # Wait for subscriptions
+        await asyncio.sleep(0.01)
+
+        # Simulate progress update with JSON data
+        progress_msg = Mock()
+        progress_msg.data = b'{"progress": 50, "message": "halfway"}'
+        await progress_handler(progress_msg)
+
+        # Simulate completion
+        completion_msg = Mock()
+        completion_msg.data = b'{"status": "completed", "result": "done"}'
+        await completion_handler(completion_msg)
+
+        # Get result
+        result = await send_task
+        assert result["status"] == "completed"
+        assert result["result"] == "done"
+
+    @pytest.mark.asyncio
+    async def test_send_command_completion_handler_json(self):
+        """Test command completion handler with JSON data - covers line 420."""
+        adapter = NATSAdapter(use_msgpack=True)  # Use msgpack but receive JSON
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_js = AsyncMock(spec=JetStreamContext)
+        adapter._js = mock_js
+        mock_nc = AsyncMock(spec=NATSClient)
+        adapter._connections = [mock_nc]
+
+        # Mock initial command publish
+        mock_js.publish = AsyncMock(return_value=Mock(stream="COMMANDS", seq=123))
+
+        # Capture handlers
+        completion_handler = None
+
+        # Return mock subscription with unsubscribe method
+        mock_sub = Mock()
+        mock_sub.unsubscribe = AsyncMock()
+
+        async def capture_subscribe(subject, cb=None, **kwargs):
+            nonlocal completion_handler
+            if "callback" in subject:
+                completion_handler = cb
+            return mock_sub
+
+        mock_nc.subscribe = AsyncMock(side_effect=capture_subscribe)
+
+        # Start command sending
+        command = Command(command="test", target="service")
+        send_task = asyncio.create_task(adapter.send_command(command, track_progress=True))
+
+        # Wait for subscriptions
+        await asyncio.sleep(0.01)
+
+        # Simulate completion with non-msgpack data (JSON)
+        completion_msg = Mock()
+        # This is JSON, not msgpack, so it will use the else branch
+        completion_msg.data = b'{"status": "completed", "result": {"key": "value"}}'
+        await completion_handler(completion_msg)
+
+        # Get result
+        result = await send_task
+        assert result["status"] == "completed"
+        assert result["result"]["key"] == "value"
+
+    @pytest.mark.asyncio
+    async def test_rpc_handler_exception_in_deserialize(self):
+        """Test RPC handler with exception during deserialization."""
+        adapter = NATSAdapter(use_msgpack=True)
+        adapter._metrics = Mock()
+        timer_context = Mock()
+        timer_context.__enter__ = Mock(return_value=None)
+        timer_context.__exit__ = Mock(return_value=False)
+        adapter._metrics.timer = Mock(return_value=timer_context)
+        adapter._metrics.increment = Mock()
+
+        mock_nc = AsyncMock(spec=NATSClient)
+        adapter._connections = [mock_nc]
+
+        # Create handler
+        handler = AsyncMock()
+
+        # Register handler
+        await adapter.register_rpc_handler("test_service", "test_method", handler)
+        wrapper = mock_nc.subscribe.call_args[1]["cb"]
+
+        # Create message with invalid data that will fail both msgpack and JSON
+        mock_msg = Mock()
+        mock_msg.data = b"\x00\x01\x02\x03invalid"  # Invalid for both formats
+        mock_msg.respond = AsyncMock()
+
+        # Call wrapper - should handle the error gracefully
+        await wrapper(mock_msg)
+
+        # Verify error response was sent
+        mock_msg.respond.assert_called_once()
+        response_data = mock_msg.respond.call_args[0][0]
+
+        # Decode response - handle both msgpack and JSON
+        if isinstance(response_data, bytes):
+            try:
+                # Try msgpack first
+                from aegis_sdk.infrastructure.serialization import detect_and_deserialize
+
+                response = detect_and_deserialize(response_data, RPCResponse)
+                response = response.model_dump()
+            except Exception:
+                # Fallback to JSON
+                response = json.loads(response_data.decode())
+        else:
+            response = response_data
+
+        assert response["success"] is False
+        assert "error" in response
