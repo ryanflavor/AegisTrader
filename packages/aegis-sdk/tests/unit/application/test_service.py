@@ -1,7 +1,7 @@
 """Tests for the service module."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -950,20 +950,43 @@ class TestServiceRegistration:
             enable_registration=True,
         )
 
-        await service.start()
+        # Mock time to avoid real sleeps in exponential backoff
+        with patch("asyncio.sleep") as mock_sleep:
+            # Create an event to signal when unhealthy status is set
+            unhealthy_event = asyncio.Event()
+            original_set_status = service.set_status
 
-        # Wait for enough failures with exponential backoff:
-        # First failure: 2^1 + jitter (≈2-3s)
-        # Second failure: 2^2 + jitter (≈4-5s)
-        # Third failure: 2^3 + jitter (≈8-9s)
-        # Total wait time needed: ~15-17 seconds
-        await asyncio.sleep(17)
+            def set_status_with_signal(status):
+                original_set_status(status)
+                if status == "UNHEALTHY":
+                    unhealthy_event.set()
 
-        # Should mark service as unhealthy after 3 consecutive failures
-        assert service._info.status == "UNHEALTHY"
+            service.set_status = set_status_with_signal
 
-        # Should log warnings
-        assert mock_logger.warning.call_count >= 3
+            await service.start()
+
+            # Let the heartbeat loop run through failures
+            # The mock sleep will make it run instantly
+            for _ in range(10):  # Allow enough iterations for 3 failures
+                await asyncio.sleep(0.01)  # Small real delay for task switching
+                if unhealthy_event.is_set():
+                    break
+
+            # Should mark service as unhealthy after 3 consecutive failures
+            assert service._info.status == "UNHEALTHY"
+
+            # Should log warnings
+            assert mock_logger.warning.call_count >= 3
+
+            # Verify exponential backoff was used (2^1, 2^2, 2^3)
+            sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+            # Filter out heartbeat interval sleeps (0.01) and look for backoff sleeps
+            backoff_sleeps = [s for s in sleep_calls if s > 1]
+            assert len(backoff_sleeps) >= 3
+            # Check that backoff values increase exponentially (with jitter)
+            assert 1.5 < backoff_sleeps[0] < 3.5  # ~2 seconds + jitter
+            assert 3.5 < backoff_sleeps[1] < 5.5  # ~4 seconds + jitter
+            assert 7.5 < backoff_sleeps[2] < 11  # ~8 seconds + jitter (capped at 10)
 
         await service.stop()
 
@@ -992,16 +1015,17 @@ class TestServiceRegistration:
             enable_registration=True,
         )
 
-        await service.start()
+        with patch("asyncio.sleep"):
+            await service.start()
 
-        # Wait for failures and recovery with exponential backoff:
-        # First failure: 2^1 + jitter (≈2-3s)
-        # Second failure: 2^2 + jitter (≈4-5s)
-        # Third call succeeds
-        await asyncio.sleep(8)
+            # Let the heartbeat loop run through failures and recovery
+            for _ in range(20):  # Give enough iterations
+                await asyncio.sleep(0.01)  # Small real delay for task switching
+                if call_count >= 3:
+                    break
 
-        # Should have recovered
-        assert call_count >= 3
+            # Should have recovered
+            assert call_count >= 3
 
         await service.stop()
 
@@ -1170,7 +1194,6 @@ class TestServiceRegistration:
     @pytest.mark.asyncio
     async def test_exponential_backoff_calculation(self, mock_message_bus, mock_logger):
         """Test exponential backoff calculation in heartbeat loop."""
-        # This is a bit tricky to test directly, but we can verify the behavior
         service = Service(
             "test-service",
             mock_message_bus,
@@ -1182,13 +1205,22 @@ class TestServiceRegistration:
         # Configure to always fail
         mock_message_bus.send_heartbeat.side_effect = Exception("Always fail")
 
-        await service.start()
+        with patch("asyncio.sleep") as mock_sleep:
+            await service.start()
 
-        # Wait for failures with exponential backoff
-        await asyncio.sleep(15)  # Enough time for 3 failures with backoff
+            # Let heartbeat loop run through multiple failures
+            for _ in range(20):
+                await asyncio.sleep(0.01)  # Small real delay for task switching
+                if mock_logger.warning.call_count >= 3:
+                    break
 
-        # Should have logged multiple failures with increasing counts
-        assert mock_logger.warning.call_count >= 3
+            # Should have logged multiple failures with increasing counts
+            assert mock_logger.warning.call_count >= 3
+
+            # Verify exponential backoff pattern in sleep calls
+            sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+            backoff_sleeps = [s for s in sleep_calls if s > 1]
+            assert len(backoff_sleeps) >= 3
 
         await service.stop()
 
@@ -1310,14 +1342,18 @@ class TestServiceRegistration:
             enable_registration=False,
         )
 
-        await service.start()
+        with patch("asyncio.sleep"):
+            await service.start()
 
-        # Wait for 3 consecutive failures
-        await asyncio.sleep(15)
+            # Let heartbeat loop run until unhealthy
+            for _ in range(20):
+                await asyncio.sleep(0.01)  # Small real delay for task switching
+                if "UNHEALTHY" in status_changes:
+                    break
 
-        # Should have marked service as unhealthy
-        assert "UNHEALTHY" in status_changes
-        assert service._info.status == "UNHEALTHY"
+            # Should have marked service as unhealthy
+            assert "UNHEALTHY" in status_changes
+            assert service._info.status == "UNHEALTHY"
 
         await service.stop()
 
@@ -1360,18 +1396,24 @@ class TestServiceRegistration:
             enable_registration=False,
         )
 
-        await service.start()
+        with patch("asyncio.sleep"):
+            await service.start()
 
-        # Wait for 3 consecutive failures
-        await asyncio.sleep(15)
+            # Let heartbeat loop run until unhealthy
+            for _ in range(20):
+                await asyncio.sleep(0.01)  # Small real delay for task switching
+                captured = capsys.readouterr()
+                if "❌ Heartbeat error (3/3): Always fail" in captured.out:
+                    break
 
-        # Should have marked service as unhealthy
-        assert service._info.status == "UNHEALTHY"
+            # Should have marked service as unhealthy
+            assert service._info.status == "UNHEALTHY"
 
-        # Check console output for multiple errors
-        captured = capsys.readouterr()
-        assert "❌ Heartbeat error (1/3): Always fail" in captured.out
-        assert "❌ Heartbeat error (2/3): Always fail" in captured.out
-        assert "❌ Heartbeat error (3/3): Always fail" in captured.out
+            # Check console output for multiple errors
+            final_output = capsys.readouterr()
+            all_output = captured.out + final_output.out
+            assert "❌ Heartbeat error (1/3): Always fail" in all_output
+            assert "❌ Heartbeat error (2/3): Always fail" in all_output
+            assert "❌ Heartbeat error (3/3): Always fail" in all_output
 
         await service.stop()
