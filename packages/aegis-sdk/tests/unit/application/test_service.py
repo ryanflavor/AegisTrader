@@ -766,3 +766,446 @@ class TestServiceRegistration:
         assert "custom_method" in service._rpc_handlers
 
         await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_loop_consecutive_failures(
+        self, mock_message_bus, mock_service_registry, mock_logger
+    ):
+        """Test heartbeat loop handles consecutive failures and marks service unhealthy."""
+        # Configure message bus to fail on heartbeat
+        mock_message_bus.send_heartbeat.side_effect = Exception("Network error")
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            logger=mock_logger,
+            heartbeat_interval=0.01,  # Very fast for testing
+            enable_registration=True,
+        )
+
+        await service.start()
+
+        # Wait for enough failures with exponential backoff:
+        # First failure: 2^1 + jitter (≈2-3s)
+        # Second failure: 2^2 + jitter (≈4-5s)
+        # Third failure: 2^3 + jitter (≈8-9s)
+        # Total wait time needed: ~15-17 seconds
+        await asyncio.sleep(17)
+
+        # Should mark service as unhealthy after 3 consecutive failures
+        assert service._info.status == "UNHEALTHY"
+
+        # Should log warnings
+        assert mock_logger.warning.call_count >= 3
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_loop_recovery_after_failure(
+        self, mock_message_bus, mock_service_registry
+    ):
+        """Test heartbeat loop recovers after failures."""
+        # Configure to fail twice then succeed
+        call_count = 0
+
+        async def send_heartbeat_with_failures(*args):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise Exception("Transient failure")
+            # Success on third call
+
+        mock_message_bus.send_heartbeat = send_heartbeat_with_failures
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            heartbeat_interval=0.01,
+            enable_registration=True,
+        )
+
+        await service.start()
+
+        # Wait for failures and recovery with exponential backoff:
+        # First failure: 2^1 + jitter (≈2-3s)
+        # Second failure: 2^2 + jitter (≈4-5s)
+        # Third call succeeds
+        await asyncio.sleep(8)
+
+        # Should have recovered
+        assert call_count >= 3
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_register_instance_failure_propagates(
+        self, mock_message_bus, mock_service_registry, mock_logger
+    ):
+        """Test that registration failure during start propagates correctly."""
+        # Configure registry to fail during initial registration
+        mock_service_registry.register.side_effect = Exception("Registry unavailable")
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            logger=mock_logger,
+            enable_registration=True,
+        )
+
+        # Should raise exception during start
+        with pytest.raises(Exception) as exc_info:
+            await service.start()
+
+        assert "Registry unavailable" in str(exc_info.value)
+
+        # Logger should have logged the error
+        mock_logger.error.assert_called_once()
+        assert "Failed to register service instance" in mock_logger.error.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_update_registry_status_failure_handled(
+        self, mock_message_bus, mock_service_registry, mock_logger
+    ):
+        """Test that registry status update failures are handled gracefully."""
+        # Configure registry to fail on update_heartbeat
+        mock_service_registry.update_heartbeat.side_effect = Exception("Update failed")
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            logger=mock_logger,
+            enable_registration=True,
+        )
+
+        await service.start()
+
+        # Change status - should trigger update
+        service.set_status("STANDBY")
+
+        # Give async task time to run
+        await asyncio.sleep(0.1)
+
+        # Should log warning about failure
+        mock_logger.warning.assert_called()
+        assert "Failed to update registry status" in str(mock_logger.warning.call_args)
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_status_update_cancels_previous_task(
+        self, mock_message_bus, mock_service_registry
+    ):
+        """Test that status updates cancel previous update tasks."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            enable_registration=True,
+        )
+
+        await service.start()
+
+        # Set status multiple times quickly
+        service.set_status("STANDBY")
+        first_task = service._status_update_task
+
+        # Give the task a moment to start
+        await asyncio.sleep(0.01)
+
+        service.set_status("UNHEALTHY")
+        second_task = service._status_update_task
+
+        # Wait for cancellation to propagate
+        await asyncio.sleep(0.01)
+
+        # First task should be cancelled
+        assert first_task.cancelled() or first_task.done()
+        assert first_task != second_task
+
+        await service.stop()
+
+    def test_register_rpc_method_invalid_name(self, mock_message_bus):
+        """Test register_rpc_method with invalid method name."""
+        service = Service("test-service", mock_message_bus)
+
+        async def handler(params):
+            return {}
+
+        with pytest.raises(ValueError) as exc_info:
+            asyncio.run(service.register_rpc_method("123-invalid", handler))
+
+        assert "Invalid method name" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_loop_shutdown_handling(self, mock_message_bus):
+        """Test heartbeat loop properly checks shutdown event."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            heartbeat_interval=0.05,
+            enable_registration=False,
+        )
+
+        await service.start()
+
+        # Verify heartbeat task is running
+        assert service._heartbeat_task is not None
+        assert not service._heartbeat_task.done()
+
+        # Set shutdown event
+        service._shutdown_event.set()
+
+        # Heartbeat should exit soon
+        await asyncio.sleep(0.1)
+
+        # Task should complete (not be cancelled)
+        assert service._heartbeat_task.done()
+
+    @pytest.mark.asyncio
+    async def test_service_start_time_tracking(self, mock_message_bus, mock_service_registry):
+        """Test that service tracks start time correctly."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            enable_registration=True,
+        )
+
+        # Start time should be None initially
+        assert service._start_time is None
+
+        await service.start()
+
+        # Start time should be set
+        assert service._start_time is not None
+
+        # Check metadata includes start time
+        assert service._service_instance is not None
+        assert "start_time" in service._service_instance.metadata
+        assert service._service_instance.metadata["start_time"] is not None
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_stop_without_start(self, mock_message_bus):
+        """Test stopping a service that was never started."""
+        service = Service("test-service", mock_message_bus)
+
+        # Should handle gracefully
+        await service.stop()
+
+        # Shutdown event should be set
+        assert service._shutdown_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_exponential_backoff_calculation(self, mock_message_bus, mock_logger):
+        """Test exponential backoff calculation in heartbeat loop."""
+        # This is a bit tricky to test directly, but we can verify the behavior
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            logger=mock_logger,
+            heartbeat_interval=0.01,
+            enable_registration=False,
+        )
+
+        # Configure to always fail
+        mock_message_bus.send_heartbeat.side_effect = Exception("Always fail")
+
+        await service.start()
+
+        # Wait for failures with exponential backoff
+        await asyncio.sleep(15)  # Enough time for 3 failures with backoff
+
+        # Should have logged multiple failures with increasing counts
+        assert mock_logger.warning.call_count >= 3
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_register_instance_no_registry(self, mock_message_bus):
+        """Test _register_instance returns early when no registry."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=None,  # No registry
+            enable_registration=True,
+        )
+
+        # Should not raise even with no registry
+        await service._register_instance()
+
+    @pytest.mark.asyncio
+    async def test_register_instance_no_service_instance(
+        self, mock_message_bus, mock_service_registry
+    ):
+        """Test _register_instance returns early when no service instance."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            enable_registration=False,  # This prevents _service_instance creation
+        )
+
+        # Manually clear service instance
+        service._service_instance = None
+
+        # Should not raise
+        await service._register_instance()
+
+    @pytest.mark.asyncio
+    async def test_update_registry_heartbeat_no_registry(self, mock_message_bus):
+        """Test _update_registry_heartbeat returns early when no registry."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=None,
+            enable_registration=True,
+        )
+
+        # Create service instance manually
+        from aegis_sdk.domain.models import ServiceInstance
+
+        service._service_instance = ServiceInstance(
+            service_name="test-service",
+            instance_id=service.instance_id,
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Should not raise
+        await service._update_registry_heartbeat()
+
+    @pytest.mark.asyncio
+    async def test_update_registry_heartbeat_no_service_instance(
+        self, mock_message_bus, mock_service_registry
+    ):
+        """Test _update_registry_heartbeat returns early when no service instance."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            enable_registration=False,
+        )
+
+        # Should not raise
+        await service._update_registry_heartbeat()
+
+    @pytest.mark.asyncio
+    async def test_update_registry_status_no_registry(self, mock_message_bus):
+        """Test _update_registry_status returns early when no registry."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=None,
+            enable_registration=True,
+        )
+
+        # Should not raise
+        await service._update_registry_status("STANDBY")
+
+    @pytest.mark.asyncio
+    async def test_update_registry_status_no_service_instance(
+        self, mock_message_bus, mock_service_registry
+    ):
+        """Test _update_registry_status returns early when no service instance."""
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_registry=mock_service_registry,
+            enable_registration=False,
+        )
+
+        # Should not raise
+        await service._update_registry_status("STANDBY")
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_marks_unhealthy_after_max_failures(self, mock_message_bus):
+        """Test that heartbeat loop marks service unhealthy after max consecutive failures."""
+        # Track status changes
+        status_changes = []
+
+        class TrackingService(Service):
+            def set_status(self, status: str) -> None:
+                status_changes.append(status)
+                super().set_status(status)
+
+        # Configure to always fail
+        mock_message_bus.send_heartbeat.side_effect = Exception("Always fail")
+
+        service = TrackingService(
+            "test-service",
+            mock_message_bus,
+            heartbeat_interval=0.01,
+            enable_registration=False,
+        )
+
+        await service.start()
+
+        # Wait for 3 consecutive failures
+        await asyncio.sleep(15)
+
+        # Should have marked service as unhealthy
+        assert "UNHEALTHY" in status_changes
+        assert service._info.status == "UNHEALTHY"
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_error_without_logger(self, mock_message_bus, capsys):
+        """Test heartbeat error handling without logger uses print."""
+        # Configure message bus to fail
+        mock_message_bus.send_heartbeat.side_effect = Exception("Network error")
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            logger=None,  # No logger
+            heartbeat_interval=0.01,
+            enable_registration=False,
+        )
+
+        await service.start()
+
+        # Let it fail once
+        await asyncio.sleep(0.1)
+
+        # Check console output
+        captured = capsys.readouterr()
+        assert "❌ Heartbeat error (1/3): Network error" in captured.out
+
+        await service.stop()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_marks_unhealthy_without_logger(self, mock_message_bus, capsys):
+        """Test heartbeat marks unhealthy and prints to console without logger."""
+        # Configure to always fail
+        mock_message_bus.send_heartbeat.side_effect = Exception("Always fail")
+
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            logger=None,  # No logger
+            heartbeat_interval=0.01,
+            enable_registration=False,
+        )
+
+        await service.start()
+
+        # Wait for 3 consecutive failures
+        await asyncio.sleep(15)
+
+        # Should have marked service as unhealthy
+        assert service._info.status == "UNHEALTHY"
+
+        # Check console output for multiple errors
+        captured = capsys.readouterr()
+        assert "❌ Heartbeat error (1/3): Always fail" in captured.out
+        assert "❌ Heartbeat error (2/3): Always fail" in captured.out
+        assert "❌ Heartbeat error (3/3): Always fail" in captured.out
+
+        await service.stop()

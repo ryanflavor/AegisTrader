@@ -191,7 +191,7 @@ class KVServiceRegistry(ServiceRegistryPort):
                 if "lastHeartbeat" in data and "last_heartbeat" not in data:
                     data["last_heartbeat"] = data.pop("lastHeartbeat")
                 if "stickyActiveGroup" in data and "sticky_active_group" not in data:
-                    data["sticky_active_group"] = data.pop("stickyActiveGroup", None)
+                    data["sticky_active_group"] = data.pop("stickyActiveGroup")
 
                 return ServiceInstance(**data)
 

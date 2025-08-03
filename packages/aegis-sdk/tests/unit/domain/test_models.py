@@ -21,6 +21,16 @@ from aegis_sdk.domain.models import (
 
 
 class TestMessage:
+    """Test cases for Message model."""
+
+    def test_message_timestamp_validation_invalid(self):
+        """Test timestamp validation with invalid format."""
+        with pytest.raises(ValidationError) as exc_info:
+            Message(message_id="123", trace_id="456", timestamp="not-a-timestamp")
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+
+class TestMessageOriginal:
     """Test cases for Message base model."""
 
     def test_message_default_values(self):
@@ -92,6 +102,23 @@ class TestMessage:
 class TestRPCRequest:
     """Test cases for RPCRequest model."""
 
+    def test_rpc_request_method_validation_empty_string(self):
+        """Test method validation with empty string after stripping."""
+        with pytest.raises(ValidationError) as exc_info:
+            RPCRequest(method="   ")
+        assert "Method name cannot be empty" in str(exc_info.value)
+
+    def test_rpc_request_method_validation_non_string(self):
+        """Test method validation with non-string input."""
+        # The strict mode will catch non-string values before the validator
+        with pytest.raises(ValidationError) as exc_info:
+            RPCRequest(method=123)
+        assert "type=string_type" in str(exc_info.value)
+
+
+class TestRPCRequestOriginal:
+    """Test cases for RPCRequest model."""
+
     def test_rpc_request_basic(self):
         """Test basic RPCRequest creation."""
         request = RPCRequest(method="get_user")
@@ -148,6 +175,22 @@ class TestRPCRequest:
 class TestRPCResponse:
     """Test cases for RPCResponse model."""
 
+    def test_rpc_response_error_consistency_validation(self):
+        """Test error consistency validation."""
+        # Success=True with error should fail
+        with pytest.raises(ValidationError) as exc_info:
+            RPCResponse(success=True, error="Some error")
+        assert "Error must be None when success is True" in str(exc_info.value)
+
+        # Success=False without error should fail
+        with pytest.raises(ValidationError) as exc_info:
+            RPCResponse(success=False, error=None)
+        assert "Error message required when success is False" in str(exc_info.value)
+
+
+class TestRPCResponseOriginal:
+    """Test cases for RPCResponse model."""
+
     def test_rpc_response_success(self):
         """Test successful RPC response."""
         response = RPCResponse(result={"user_id": 123, "name": "John"})
@@ -185,6 +228,24 @@ class TestRPCResponse:
 
 
 class TestEvent:
+    """Test cases for Event model."""
+
+    def test_event_version_validation_invalid(self):
+        """Test version validation with invalid format."""
+        invalid_versions = [
+            "1",  # Missing minor version
+            "v1.0.0",  # Has 'v' prefix
+            "1.0.0.1",  # Too many parts
+            "1.a.0",  # Non-numeric
+            "1.0-beta",  # Has suffix
+        ]
+        for invalid_version in invalid_versions:
+            with pytest.raises(ValidationError) as exc_info:
+                Event(domain="test", event_type="test.event", version=invalid_version)
+            assert "Invalid version format" in str(exc_info.value)
+
+
+class TestEventOriginal:
     """Test cases for Event model."""
 
     def test_event_basic(self):
@@ -236,6 +297,23 @@ class TestEvent:
 
 
 class TestCommand:
+    """Test cases for Command model."""
+
+    def test_command_validation_empty_string(self):
+        """Test command validation with empty string after stripping."""
+        with pytest.raises(ValidationError) as exc_info:
+            Command(command="   ")
+        assert "Command name cannot be empty" in str(exc_info.value)
+
+    def test_command_validation_non_string(self):
+        """Test command validation with non-string input."""
+        # The strict mode will catch non-string values before the validator
+        with pytest.raises(ValidationError) as exc_info:
+            Command(command=123)
+        assert "type=string_type" in str(exc_info.value)
+
+
+class TestCommandOriginal:
     """Test cases for Command model."""
 
     def test_command_basic(self):
@@ -306,6 +384,30 @@ class TestCommand:
 
 
 class TestServiceInfo:
+    """Test cases for ServiceInfo model."""
+
+    def test_service_info_version_validation_invalid(self):
+        """Test version validation with invalid format."""
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInfo(
+                service_name="test",
+                instance_id="123",
+                version="1.0",  # Missing patch version
+            )
+        assert "Invalid version format" in str(exc_info.value)
+
+    def test_service_info_timestamp_validation_invalid(self):
+        """Test timestamp validation with invalid format."""
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInfo(service_name="test", instance_id="123", registered_at="not-a-timestamp")
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+        with pytest.raises(ValidationError) as exc_info:
+            ServiceInfo(service_name="test", instance_id="123", last_heartbeat="invalid-date")
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+
+class TestServiceInfoOriginal:
     """Test cases for ServiceInfo model."""
 
     def test_service_info_basic(self):
@@ -443,6 +545,34 @@ class TestModelIntegration:
 class TestKVEntry:
     """Test cases for KVEntry model."""
 
+    def test_kv_entry_timestamp_validation_invalid(self):
+        """Test timestamp validation with invalid format."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at="not-a-timestamp",
+                updated_at="2025-01-01T00:00:00Z",
+            )
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+    def test_kv_entry_timestamp_order_validation(self):
+        """Test validation that updated_at cannot be before created_at."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVEntry(
+                key="test",
+                value="data",
+                revision=1,
+                created_at="2025-01-01T12:00:00Z",
+                updated_at="2025-01-01T11:00:00Z",  # Before created_at
+            )
+        assert "updated_at cannot be before created_at" in str(exc_info.value)
+
+
+class TestKVEntryOriginal:
+    """Test cases for KVEntry model."""
+
     def test_kventry_basic(self):
         """Test basic KVEntry creation."""
         now = datetime.now(UTC).isoformat()
@@ -574,6 +704,16 @@ class TestKVEntry:
 class TestKVOptions:
     """Test cases for KVOptions model."""
 
+    def test_kv_options_exclusivity_validation(self):
+        """Test that create_only and update_only are mutually exclusive."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVOptions(create_only=True, update_only=True)
+        assert "create_only and update_only are mutually exclusive" in str(exc_info.value)
+
+
+class TestKVOptionsOriginal:
+    """Test cases for KVOptions model."""
+
     def test_kvoptions_defaults(self):
         """Test KVOptions with default values."""
         options = KVOptions()
@@ -619,6 +759,25 @@ class TestKVOptions:
 
 
 class TestKVWatchEvent:
+    """Test cases for KVWatchEvent model."""
+
+    def test_kv_watch_event_timestamp_validation_invalid(self):
+        """Test timestamp validation with invalid format."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVWatchEvent(operation="PUT", timestamp="not-a-timestamp")
+        assert "Invalid ISO timestamp format" in str(exc_info.value)
+
+    def test_kv_watch_event_entry_consistency_validation(self):
+        """Test that PUT operation requires an entry."""
+        with pytest.raises(ValidationError) as exc_info:
+            KVWatchEvent(
+                operation="PUT",
+                entry=None,  # PUT requires an entry
+            )
+        assert "PUT operation requires an entry" in str(exc_info.value)
+
+
+class TestKVWatchEventOriginal:
     """Test cases for KVWatchEvent model."""
 
     def test_kvwatchevent_put_operation(self):
@@ -1032,3 +1191,229 @@ class TestServiceInstance:
         # Force stale by setting old heartbeat
         instance.last_heartbeat = datetime.now(UTC) - timedelta(seconds=120)
         assert instance.is_stale(60) is True  # Now stale with 60s threshold
+
+    def test_service_instance_mark_unhealthy(self):
+        """Test mark_unhealthy method in detail."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Initially active
+        assert instance.status == "ACTIVE"
+        assert instance.is_active() is True
+        assert instance.is_healthy() is True
+
+        # Mark unhealthy
+        instance.mark_unhealthy()
+        assert instance.status == "UNHEALTHY"
+        assert instance.is_active() is False
+        assert instance.is_healthy() is False
+
+        # Mark unhealthy again (idempotent)
+        instance.mark_unhealthy()
+        assert instance.status == "UNHEALTHY"
+
+    def test_service_instance_update_heartbeat_with_custom_timestamp(self):
+        """Test update_heartbeat with custom timestamp."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Update with custom timestamp
+        custom_time = datetime.now(UTC) + timedelta(minutes=5)
+        instance.update_heartbeat(custom_time)
+        assert instance.last_heartbeat == custom_time
+
+        # Update with None (should use current time)
+        # Set old heartbeat to past time to ensure new time is greater
+        instance.last_heartbeat = datetime.now(UTC) - timedelta(seconds=10)
+        old_heartbeat = instance.last_heartbeat
+
+        instance.update_heartbeat(None)
+        assert instance.last_heartbeat > old_heartbeat
+        assert instance.last_heartbeat <= datetime.now(UTC)
+
+    def test_service_instance_seconds_since_heartbeat_accuracy(self):
+        """Test seconds_since_heartbeat calculation accuracy."""
+        # Create instance with specific heartbeat time
+        past_time = datetime.now(UTC) - timedelta(seconds=30.5)
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=past_time.isoformat(),
+        )
+
+        # Check seconds calculation
+        seconds = instance.seconds_since_heartbeat()
+        # Should be approximately 30.5 seconds (with small tolerance for execution time)
+        assert 30.0 <= seconds <= 31.0
+
+        # Test with very recent heartbeat
+        instance.update_heartbeat()
+        seconds = instance.seconds_since_heartbeat()
+        assert 0.0 <= seconds <= 0.1
+
+    def test_service_instance_is_stale_various_thresholds(self):
+        """Test is_stale with various threshold values."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Fresh instance - not stale for any reasonable threshold
+        assert instance.is_stale(1) is False
+        assert instance.is_stale(10) is False
+        assert instance.is_stale(60) is False
+        assert instance.is_stale(3600) is False
+
+        # Set heartbeat to 45 seconds ago
+        instance.last_heartbeat = datetime.now(UTC) - timedelta(seconds=45)
+
+        # Test various thresholds
+        assert instance.is_stale(30) is True  # Stale for 30s threshold
+        assert instance.is_stale(40) is True  # Stale for 40s threshold
+        assert instance.is_stale(50) is False  # Not stale for 50s threshold
+        assert instance.is_stale(60) is False  # Not stale for 60s threshold
+
+        # Test with exact threshold (edge case)
+        instance.last_heartbeat = datetime.now(UTC) - timedelta(seconds=60)
+        assert instance.is_stale(60) is True  # Greater than or equal to threshold, is stale
+        assert instance.is_stale(61) is False  # Not stale for slightly higher threshold
+
+    def test_service_instance_should_be_active_no_sticky_group(self):
+        """Test should_be_active when no sticky group is configured."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            sticky_active_group=None,  # No sticky group
+        )
+
+        # Without sticky group, should_be_active depends only on health
+        assert instance.should_be_active() is True  # ACTIVE status
+
+        instance.status = "STANDBY"
+        assert instance.should_be_active() is True  # STANDBY is healthy
+
+        instance.status = "UNHEALTHY"
+        assert instance.should_be_active() is False  # UNHEALTHY is not
+
+    def test_service_instance_should_be_active_with_sticky_group(self):
+        """Test should_be_active when sticky group is configured."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            sticky_active_group="group-primary",
+        )
+
+        # With sticky group, currently returns health status (TODO: implement full logic)
+        assert instance.should_be_active() is True  # ACTIVE status
+
+        instance.status = "STANDBY"
+        assert instance.should_be_active() is True  # STANDBY is healthy
+
+        instance.status = "UNHEALTHY"
+        assert instance.should_be_active() is False  # UNHEALTHY is not
+
+        # Test with empty string sticky group
+        instance.sticky_active_group = ""
+        instance.status = "ACTIVE"
+        assert instance.should_be_active() is True  # Empty string is falsy
+
+    def test_service_instance_heartbeat_timezone_handling(self):
+        """Test heartbeat handles different timezone scenarios correctly."""
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+        )
+
+        # Update with current UTC time
+        utc_time = datetime.now(UTC)
+        instance.update_heartbeat(utc_time)
+        assert instance.last_heartbeat.tzinfo is not None
+        assert instance.last_heartbeat.tzinfo == UTC
+
+        # Verify seconds calculation works with UTC
+        seconds = instance.seconds_since_heartbeat()
+        assert seconds >= 0
+        assert seconds < 1  # Should be very recent
+
+    def test_service_instance_parse_heartbeat_edge_cases(self):
+        """Test parse_heartbeat field validator edge cases."""
+        # Test with datetime object that has non-UTC timezone
+        eastern_tz = datetime.now().astimezone().tzinfo  # Get local timezone
+        eastern_time = datetime.now(eastern_tz)
+
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=eastern_time,
+        )
+
+        # Should be converted to UTC
+        assert instance.last_heartbeat.tzinfo == UTC
+
+        # Test with invalid type (should raise TypeError from validator)
+        with pytest.raises(TypeError) as exc_info:
+            ServiceInstance(
+                service_name="test-service",
+                instance_id="test-123",
+                version="1.0.0",
+                status="ACTIVE",
+                last_heartbeat=12345,  # Invalid type
+            )
+        assert "Expected datetime or str, got int" in str(exc_info.value)
+
+    def test_service_instance_parse_heartbeat_timezone_naive(self):
+        """Test parse_heartbeat with timezone-naive datetime."""
+        # Test with timezone-naive datetime
+        naive_time = datetime(2025, 1, 1, 12, 0, 0)  # No timezone
+
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=naive_time,
+        )
+
+        # Should be treated as UTC
+        assert instance.last_heartbeat.tzinfo == UTC
+        assert instance.last_heartbeat.year == 2025
+        assert instance.last_heartbeat.month == 1
+        assert instance.last_heartbeat.day == 1
+        assert instance.last_heartbeat.hour == 12
+
+    def test_service_instance_parse_heartbeat_string_timezone_naive(self):
+        """Test parse_heartbeat with timezone-naive string."""
+        # Test with timezone-naive ISO string (no Z or timezone)
+        naive_string = "2025-01-01T12:00:00"
+
+        instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=naive_string,
+        )
+
+        # Should be treated as UTC
+        assert instance.last_heartbeat.tzinfo == UTC
+        assert instance.last_heartbeat.isoformat() == "2025-01-01T12:00:00+00:00"

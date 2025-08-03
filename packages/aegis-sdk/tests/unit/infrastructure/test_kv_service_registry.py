@@ -1,5 +1,6 @@
 """Unit tests for KV-based service registry implementation."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -303,3 +304,313 @@ class TestKVServiceRegistry:
         # Should still raise error
         with pytest.raises(KVStoreError):
             await registry.register(instance, ttl_seconds=30)
+
+    @pytest.mark.asyncio
+    async def test_register_invalid_ttl(self, mock_kv_store, sample_instance):
+        """Test registration with invalid TTL value."""
+        registry = KVServiceRegistry(mock_kv_store)
+
+        # Zero TTL
+        with pytest.raises(ValueError) as exc_info:
+            await registry.register(sample_instance, ttl_seconds=0)
+        assert "TTL must be positive" in str(exc_info.value)
+
+        # Negative TTL
+        with pytest.raises(ValueError) as exc_info:
+            await registry.register(sample_instance, ttl_seconds=-10)
+        assert "TTL must be positive" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_update_heartbeat_kv_store_error(
+        self, mock_kv_store, mock_logger, sample_instance
+    ):
+        """Test heartbeat update with KVStoreError."""
+        # Make get raise KVStoreError
+        mock_kv_store.get.side_effect = KVStoreError(
+            "KV connection lost", operation="get", key="test"
+        )
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        with pytest.raises(KVStoreError):
+            await registry.update_heartbeat(sample_instance, ttl_seconds=30)
+
+    @pytest.mark.asyncio
+    async def test_update_heartbeat_generic_error(
+        self, mock_kv_store, mock_logger, sample_instance
+    ):
+        """Test heartbeat update with generic error."""
+        # Make get raise generic exception
+        mock_kv_store.get.side_effect = Exception("Network error")
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        with pytest.raises(KVStoreError) as exc_info:
+            await registry.update_heartbeat(sample_instance, ttl_seconds=30)
+
+        assert "Failed to update heartbeat" in str(exc_info.value)
+        mock_logger.warning.assert_called_once()
+        assert "Failed to update heartbeat" in mock_logger.warning.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_update_heartbeat_re_register_with_logger(
+        self, mock_kv_store, mock_logger, sample_instance
+    ):
+        """Test heartbeat update re-registration with logger."""
+        # Entry doesn't exist
+        mock_kv_store.get.return_value = None
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        await registry.update_heartbeat(sample_instance, ttl_seconds=30)
+
+        # Should log re-registration
+        await asyncio.sleep(0)  # Allow async logger call to complete
+        assert mock_logger.info.called
+        # Check if the log message was about re-registration
+        info_calls = [str(call) for call in mock_logger.info.call_args_list]
+        assert any("Re-registering lost service instance" in call for call in info_calls)
+
+    @pytest.mark.asyncio
+    async def test_deregister_error_handling(self, mock_kv_store, mock_logger):
+        """Test deregistration error handling."""
+        mock_kv_store.delete.side_effect = Exception("Delete failed")
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        with pytest.raises(KVStoreError) as exc_info:
+            await registry.deregister("test-service", "test-123")
+
+        assert "Failed to deregister instance" in str(exc_info.value)
+        mock_logger.error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_instance_error_handling(self, mock_kv_store, mock_logger):
+        """Test get_instance error handling."""
+        mock_kv_store.get.side_effect = Exception("Get failed")
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        # Should return None on error
+        instance = await registry.get_instance("test-service", "test-123")
+        assert instance is None
+
+        # Should log error
+        mock_logger.error.assert_called_once()
+        assert "Failed to get service instance" in mock_logger.error.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_get_instance_invalid_data_type(self, mock_kv_store):
+        """Test get_instance with non-dict value."""
+        # Mock entry with non-dict value
+        entry = MagicMock()
+        entry.value = "not a dict"
+        mock_kv_store.get.return_value = entry
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        instance = await registry.get_instance("test-service", "test-123")
+        assert instance is None
+
+    @pytest.mark.asyncio
+    async def test_get_instance_mixed_case_fields(self, mock_kv_store):
+        """Test get_instance with mixed camelCase and snake_case fields."""
+        entry = MagicMock()
+        entry.value = {
+            "serviceName": "test-service",
+            "instance_id": "test-123",  # Mixed: snake_case
+            "version": "1.0.0",
+            "status": "ACTIVE",
+            "lastHeartbeat": "2025-01-01T00:00:00Z",
+            "sticky_active_group": "primary",  # Mixed: snake_case
+        }
+        mock_kv_store.get.return_value = entry
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        instance = await registry.get_instance("test-service", "test-123")
+
+        assert instance is not None
+        assert instance.service_name == "test-service"
+        assert instance.instance_id == "test-123"
+        assert instance.sticky_active_group == "primary"
+
+    @pytest.mark.asyncio
+    async def test_list_instances_error_handling(self, mock_kv_store, mock_logger):
+        """Test list_instances error handling."""
+        mock_kv_store.keys.side_effect = Exception("Keys failed")
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        # Should return empty list on error
+        instances = await registry.list_instances("test-service")
+        assert instances == []
+
+        # Should log error
+        mock_logger.error.assert_called_once()
+        assert "Failed to list service instances" in mock_logger.error.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_list_instances_invalid_key_format(self, mock_kv_store):
+        """Test list_instances with invalid key format."""
+        # Mock keys with invalid format
+        mock_kv_store.keys.return_value = [
+            "service-instances.test-service",  # Missing instance ID
+            "invalid-key",  # Completely invalid
+            "service-instances.test-service.valid-instance",  # Valid
+        ]
+
+        # Only mock the valid instance
+        entry = MagicMock()
+        entry.value = {
+            "serviceName": "test-service",
+            "instanceId": "valid-instance",
+            "version": "1.0.0",
+            "status": "ACTIVE",
+            "lastHeartbeat": "2025-01-01T00:00:00Z",
+        }
+        mock_kv_store.get.return_value = entry
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        instances = await registry.list_instances("test-service")
+
+        # Should only return the valid instance
+        assert len(instances) == 1
+        assert instances[0].instance_id == "valid-instance"
+
+    @pytest.mark.asyncio
+    async def test_list_instances_get_failure(self, mock_kv_store):
+        """Test list_instances when get_instance fails."""
+        # Mock keys
+        mock_kv_store.keys.return_value = [
+            "service-instances.test-service.inst-1",
+            "service-instances.test-service.inst-2",
+        ]
+
+        # First get succeeds, second fails
+        entry1 = MagicMock()
+        entry1.value = {
+            "serviceName": "test-service",
+            "instanceId": "inst-1",
+            "version": "1.0.0",
+            "status": "ACTIVE",
+            "lastHeartbeat": "2025-01-01T00:00:00Z",
+        }
+        mock_kv_store.get.side_effect = [entry1, Exception("Get failed")]
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        instances = await registry.list_instances("test-service")
+
+        # Should only return successful instance
+        assert len(instances) == 1
+        assert instances[0].instance_id == "inst-1"
+
+    @pytest.mark.asyncio
+    async def test_list_all_services_error_handling(self, mock_kv_store, mock_logger):
+        """Test list_all_services error handling."""
+        mock_kv_store.keys.side_effect = Exception("Keys failed")
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        # Should return empty dict on error
+        services = await registry.list_all_services()
+        assert services == {}
+
+        # Should log error
+        mock_logger.error.assert_called_once()
+        assert "Failed to list all services" in mock_logger.error.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_list_all_services_invalid_keys(self, mock_kv_store):
+        """Test list_all_services with invalid key formats."""
+        # Mix of valid and invalid keys
+        mock_kv_store.keys.return_value = [
+            "service-instances",  # Too short
+            "service-instances.service-a",  # Missing instance
+            "service-instances.service-a.inst-1",  # Valid
+            "other-prefix.service-b.inst-1",  # Wrong prefix
+        ]
+
+        # Only mock the valid instance
+        entry = MagicMock()
+        entry.value = {
+            "serviceName": "service-a",
+            "instanceId": "inst-1",
+            "version": "1.0.0",
+            "status": "ACTIVE",
+            "lastHeartbeat": "2025-01-01T00:00:00Z",
+        }
+
+        # Mock get to return entry only for valid key
+        async def get_side_effect(key):
+            if key == "service-instances.service-a.inst-1":
+                return entry
+            return None
+
+        mock_kv_store.get.side_effect = get_side_effect
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        services = await registry.list_all_services()
+
+        # Should only have the valid service
+        assert len(services) == 1
+        assert "service-a" in services
+        assert len(services["service-a"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_update_heartbeat_with_debug_logger(
+        self, mock_kv_store, mock_logger, sample_instance
+    ):
+        """Test successful heartbeat update with debug logging."""
+        # Mock existing entry
+        entry = MagicMock()
+        entry.value = {"test": "data"}
+        mock_kv_store.get.return_value = entry
+
+        # Add debug logger method
+        mock_logger.debug = AsyncMock()
+
+        registry = KVServiceRegistry(mock_kv_store, mock_logger)
+
+        await registry.update_heartbeat(sample_instance, ttl_seconds=30)
+
+        # Should log debug message
+        mock_logger.debug.assert_called_once()
+        assert "Heartbeat updated" in mock_logger.debug.call_args[0][0]
+
+    def test_make_key_format(self):
+        """Test key generation format."""
+        registry = KVServiceRegistry(MagicMock())
+
+        key = registry._make_key("my-service", "instance-123")
+        assert key == "service-instances.my-service.instance-123"
+
+        # Test with special characters
+        key = registry._make_key("service_name", "inst_id")
+        assert key == "service-instances.service_name.inst_id"
+
+    @pytest.mark.asyncio
+    async def test_get_instance_sticky_active_group_camelcase(self, mock_kv_store):
+        """Test get_instance with stickyActiveGroup in camelCase."""
+        entry = MagicMock()
+        entry.value = {
+            "serviceName": "test-service",
+            "instanceId": "test-123",
+            "version": "1.0.0",
+            "status": "ACTIVE",
+            "lastHeartbeat": "2025-01-01T00:00:00Z",
+            "stickyActiveGroup": "group-primary",  # camelCase field
+        }
+        mock_kv_store.get.return_value = entry
+
+        registry = KVServiceRegistry(mock_kv_store)
+
+        instance = await registry.get_instance("test-service", "test-123")
+
+        assert instance is not None
+        assert instance.service_name == "test-service"
+        assert instance.instance_id == "test-123"
+        assert instance.sticky_active_group == "group-primary"
