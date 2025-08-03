@@ -1,16 +1,19 @@
 """Tests for the service module."""
 
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from aegis_sdk.application.service import Service
+from aegis_sdk.domain.exceptions import ServiceUnavailableError
 from aegis_sdk.domain.models import (
     Event,
     RPCRequest,
     ServiceInfo,
+    ServiceInstance,
 )
+from aegis_sdk.ports.service_discovery import SelectionStrategy
 
 
 class TestServiceInitialization:
@@ -189,7 +192,7 @@ class TestRPCMethods:
 
     @pytest.mark.asyncio
     async def test_call_rpc_success(self, mock_message_bus):
-        """Test successful RPC call."""
+        """Test successful RPC call without discovery."""
         service = Service("test-service", mock_message_bus)
 
         # Configure mock response
@@ -199,8 +202,10 @@ class TestRPCMethods:
         mock_response.error = None
         mock_message_bus.call_rpc.return_value = mock_response
 
-        # Make RPC call
-        result = await service.call_rpc("user-service", "get_user", {"id": 123})
+        # Make RPC call with discovery disabled
+        result = await service.call_rpc(
+            "user-service", "get_user", {"id": 123}, discovery_enabled=False
+        )
 
         assert result == {"user": "john"}
 
@@ -224,11 +229,172 @@ class TestRPCMethods:
         mock_response.error = "Method not found"
         mock_message_bus.call_rpc.return_value = mock_response
 
-        # Make RPC call
+        # Make RPC call with discovery disabled
         with pytest.raises(Exception) as exc_info:
-            await service.call_rpc("user-service", "unknown_method")
+            await service.call_rpc("user-service", "unknown_method", discovery_enabled=False)
 
         assert "RPC failed: Method not found" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_with_discovery(self, mock_message_bus):
+        """Test RPC call with service discovery."""
+        # Create mock discovery
+        mock_discovery = MagicMock()
+        mock_discovery.select_instance = AsyncMock()
+        mock_discovery.invalidate_cache = AsyncMock()
+
+        # Create service with discovery
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_discovery=mock_discovery,
+        )
+
+        # Configure mock instance
+        from datetime import UTC, datetime
+
+        mock_instance = ServiceInstance(
+            service_name="user-service",
+            instance_id="user-service-abc123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+        )
+        mock_discovery.select_instance.return_value = mock_instance
+
+        # Configure mock response
+        mock_response = MagicMock()
+        mock_response.success = True
+        mock_response.result = {"user": "john"}
+        mock_message_bus.call_rpc.return_value = mock_response
+
+        # Make RPC call
+        result = await service.call_rpc("user-service", "get_user", {"id": 123})
+
+        assert result == {"user": "john"}
+
+        # Verify discovery was used
+        mock_discovery.select_instance.assert_called_once_with(
+            "user-service",
+            strategy=SelectionStrategy.ROUND_ROBIN,
+            preferred_instance_id=None,
+        )
+
+        # Verify request used discovered instance
+        call_args = mock_message_bus.call_rpc.call_args[0][0]
+        assert call_args.target == "user-service-abc123"
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_with_discovery_no_instances(self, mock_message_bus):
+        """Test RPC call when no healthy instances available."""
+        # Create mock discovery
+        mock_discovery = MagicMock()
+        mock_discovery.select_instance = AsyncMock(return_value=None)
+
+        # Create service with discovery
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_discovery=mock_discovery,
+        )
+
+        # Make RPC call
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            await service.call_rpc("user-service", "get_user")
+
+        assert exc_info.value.service_name == "user-service"
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_with_discovery_failure_invalidates_cache(self, mock_message_bus):
+        """Test that RPC failures invalidate discovery cache."""
+        # Create mock discovery
+        mock_discovery = MagicMock()
+        mock_discovery.select_instance = AsyncMock()
+        mock_discovery.invalidate_cache = AsyncMock()
+
+        # Create service with discovery
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_discovery=mock_discovery,
+        )
+
+        # Configure mock instance
+        from datetime import UTC, datetime
+
+        mock_instance = ServiceInstance(
+            service_name="user-service",
+            instance_id="user-service-abc123",
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+        )
+        mock_discovery.select_instance.return_value = mock_instance
+
+        # Configure mock error response
+        mock_response = MagicMock()
+        mock_response.success = False
+        mock_response.error = "Service unavailable"
+        mock_message_bus.call_rpc.return_value = mock_response
+
+        # Make RPC call
+        with pytest.raises(Exception) as exc_info:
+            await service.call_rpc("user-service", "get_user")
+
+        assert "RPC failed: Service unavailable" in str(exc_info.value)
+
+        # Verify cache was invalidated
+        mock_discovery.invalidate_cache.assert_called_once_with("user-service")
+
+    @pytest.mark.asyncio
+    async def test_call_rpc_direct_instance_id(self, mock_message_bus):
+        """Test RPC call with direct instance ID bypasses discovery."""
+        # Create mock discovery
+        mock_discovery = MagicMock()
+        mock_discovery.select_instance = AsyncMock()
+
+        # Create service with discovery
+        service = Service(
+            "test-service",
+            mock_message_bus,
+            service_discovery=mock_discovery,
+        )
+
+        # Configure mock response
+        mock_response = MagicMock()
+        mock_response.success = True
+        mock_response.result = {"ok": True}
+        mock_message_bus.call_rpc.return_value = mock_response
+
+        # Make RPC call with instance ID
+        result = await service.call_rpc("user-service-abc123def", "health_check")
+
+        assert result == {"ok": True}
+
+        # Verify discovery was NOT used
+        mock_discovery.select_instance.assert_not_called()
+
+        # Verify request used direct instance ID
+        call_args = mock_message_bus.call_rpc.call_args[0][0]
+        assert call_args.target == "user-service-abc123def"
+
+    def test_is_service_name(self, mock_message_bus):
+        """Test service name vs instance ID detection."""
+        service = Service("test-service", mock_message_bus)
+
+        # Service names
+        assert service._is_service_name("user-service") is True
+        assert service._is_service_name("order-service") is True
+        assert service._is_service_name("payment") is True
+
+        # Instance IDs
+        assert service._is_service_name("user-service-a1b2c3d4") is False
+        assert service._is_service_name("order-service-deadbeef") is False
+        assert service._is_service_name("payment-123456") is False
+
+        # Edge cases
+        assert service._is_service_name("service-with-many-parts") is True
+        assert service._is_service_name("service-short") is True  # Short hex not considered ID
 
 
 class TestEventMethods:

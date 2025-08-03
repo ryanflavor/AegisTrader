@@ -59,6 +59,27 @@ class RPCError(AegisError):
             self.details["method"] = method
 
 
+class ServiceUnavailableError(ServiceError):
+    """Raised when a service is unavailable or has no healthy instances."""
+
+    def __init__(self, service_name: str):
+        super().__init__(
+            f"Service '{service_name}' is unavailable - no healthy instances found",
+            details={"service_name": service_name},
+        )
+        self.service_name = service_name
+
+
+class DiscoveryError(ServiceError):
+    """Base exception for service discovery errors."""
+
+    def __init__(self, message: str, service_name: str | None = None):
+        super().__init__(message)
+        self.service_name = service_name
+        if service_name:
+            self.details["service_name"] = service_name
+
+
 class CommandError(AegisError):
     """Command processing errors."""
 

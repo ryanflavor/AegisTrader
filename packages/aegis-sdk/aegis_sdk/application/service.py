@@ -7,10 +7,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from ..domain.exceptions import ServiceUnavailableError
 from ..domain.models import Command, Event, RPCRequest, ServiceInfo, ServiceInstance
 from ..domain.patterns import SubjectPatterns
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
+from ..ports.service_discovery import SelectionStrategy, ServiceDiscoveryPort
 from ..ports.service_registry import ServiceRegistryPort
 
 
@@ -24,6 +26,7 @@ class Service:
         instance_id: str | None = None,
         version: str = "1.0.0",
         service_registry: ServiceRegistryPort | None = None,
+        service_discovery: ServiceDiscoveryPort | None = None,
         logger: LoggerPort | None = None,
         registry_ttl: int = 30,  # 30 seconds default TTL
         heartbeat_interval: int = 10,  # 10 seconds default heartbeat interval
@@ -37,6 +40,7 @@ class Service:
             instance_id: Optional instance ID (auto-generated if not provided)
             version: Service version
             service_registry: Optional service registry implementation
+            service_discovery: Optional service discovery implementation
             logger: Optional logger implementation
             registry_ttl: TTL for registry entries in seconds (default: 30)
             heartbeat_interval: Heartbeat interval in seconds (default: 10)
@@ -57,6 +61,7 @@ class Service:
 
         # Dependencies
         self._registry = service_registry
+        self._discovery = service_discovery
         self._logger = logger
 
         # Registry configuration
@@ -182,22 +187,84 @@ class Service:
         return decorator
 
     async def call_rpc(
-        self, service: str, method: str, params: dict[str, Any] | None = None
+        self,
+        service: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+        discovery_enabled: bool = True,
+        selection_strategy: SelectionStrategy = SelectionStrategy.ROUND_ROBIN,
+        preferred_instance_id: str | None = None,
     ) -> Any:
-        """Call RPC method on another service."""
+        """Call RPC method on another service.
+
+        Args:
+            service: Target service name or instance ID
+            method: RPC method name
+            params: Optional method parameters
+            discovery_enabled: Whether to use service discovery (default: True)
+            selection_strategy: Instance selection strategy (default: ROUND_ROBIN)
+            preferred_instance_id: Preferred instance for sticky selection
+
+        Returns:
+            RPC response result
+
+        Raises:
+            Exception: If RPC call fails or no healthy instances available
+        """
+        target = service
+
+        # Use service discovery if enabled and available
+        if discovery_enabled and self._discovery and self._is_service_name(service):
+            instance = await self._discovery.select_instance(
+                service,
+                strategy=selection_strategy,
+                preferred_instance_id=preferred_instance_id,
+            )
+            if not instance:
+                raise ServiceUnavailableError(service)
+            target = instance.instance_id
+
+            if self._logger:
+                self._logger.debug(
+                    "Selected instance for RPC",
+                    service=service,
+                    instance=target,
+                    method=method,
+                )
+
         request = RPCRequest(
             method=method,
             params=params or {},
             source=self.instance_id,
-            target=service,
+            target=target,
         )
 
-        response = await self._bus.call_rpc(request)
+        try:
+            response = await self._bus.call_rpc(request)
+            if not response.success:
+                raise Exception(f"RPC failed: {response.error}")
+            return response.result
+        except Exception:
+            # Invalidate cache on any failure if using discovery
+            if discovery_enabled and self._discovery and self._is_service_name(service):
+                await self._discovery.invalidate_cache(service)
+            raise
 
-        if not response.success:
-            raise Exception(f"RPC failed: {response.error}")
+    def _is_service_name(self, target: str) -> bool:
+        """Check if target looks like a service name vs instance ID.
 
-        return response.result
+        Service names follow a specific pattern while instance IDs
+        typically include random suffixes.
+        """
+        # Simple heuristic: instance IDs contain hyphens followed by hex chars
+        # e.g., "order-service-a1b2c3d4" vs "order-service"
+        parts = target.split("-")
+        if len(parts) >= 2:
+            # Check if last part looks like a hex suffix
+            last_part = parts[-1]
+            if len(last_part) >= 6 and all(c in "0123456789abcdef" for c in last_part.lower()):
+                return False  # Looks like an instance ID
+        return True  # Looks like a service name
 
     # Event Methods
     def subscribe(self, pattern: str, durable: bool = True) -> Callable[[Callable], Callable]:
