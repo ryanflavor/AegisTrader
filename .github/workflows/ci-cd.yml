@@ -43,18 +43,21 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
+          # Install aegis-sdk first
+          if [ -f packages/aegis-sdk/requirements.txt ]; then
+            pip install -r packages/aegis-sdk/requirements.txt
+          fi
+          if [ -f packages/aegis-sdk/requirements-dev.txt ]; then
+            pip install -r packages/aegis-sdk/requirements-dev.txt
+          fi
+          # Install aegis-sdk in editable mode
+          pip install -e packages/aegis-sdk
           # Install dependencies for each service
           if [ -f apps/monitor-api/requirements.txt ]; then
             pip install -r apps/monitor-api/requirements.txt
           fi
           if [ -f apps/monitor-api/requirements-dev.txt ]; then
             pip install -r apps/monitor-api/requirements-dev.txt
-          fi
-          if [ -f packages/aegis-sdk/requirements.txt ]; then
-            pip install -r packages/aegis-sdk/requirements.txt
-          fi
-          if [ -f packages/aegis-sdk/requirements-dev.txt ]; then
-            pip install -r packages/aegis-sdk/requirements-dev.txt
           fi
 
       - name: Set up pre-commit
