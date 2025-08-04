@@ -60,9 +60,11 @@ class DetailedHealthResponse(BaseModel):
 router = APIRouter()
 
 # Import and include service registry routes
+from .service_instance_routes import router as instance_router  # noqa: E402
 from .service_routes import router as service_router  # noqa: E402
 
 router.include_router(service_router)
+router.include_router(instance_router)
 
 
 @router.get("/health", response_model=HealthResponse)

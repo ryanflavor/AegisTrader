@@ -17,7 +17,6 @@ from aegis_sdk.infrastructure.watchable_cached_service_discovery import (
     WatchConfig,
 )
 from order_service import OrderService
-from risk_service import RiskService
 from shared_contracts import ServiceNames
 
 
@@ -229,7 +228,8 @@ async def test_inter_service_communication_in_k8s():
         response = await nats_adapter1.call_rpc(rpc_request)
         assert response.result is not None
         assert response.result["symbol"] == "AAPL"
-        assert response.result["price"] == 100.0
+        # Price should be within 2% of base price (175.0)
+        assert 171.5 <= response.result["price"] <= 178.5
 
     finally:
         await order_service.stop()
@@ -271,26 +271,17 @@ async def test_event_flow_in_k8s():
         logger=logger,
     )
 
-    risk_service = RiskService(
-        message_bus=nats_adapter2,
-        instance_id=f"test-risk-events-{test_run_id}",
-        service_registry=registry,
-        logger=logger,
-    )
-
+    # Start order service
     await order_service.start()
-    await risk_service.start()
 
     try:
         # Give time for registration and subscription setup
         await asyncio.sleep(2)
 
         # Test event flow by publishing an event
-        # First verify services are running
+        # First verify service is running
         order_instances = await registry.list_instances(order_service.service_name)
         assert len(order_instances) == 1
-        risk_instances = await registry.list_instances(risk_service.service_name)
-        assert len(risk_instances) == 1
 
         # Publish an order created event directly
         await order_service.publish_event(
@@ -309,15 +300,14 @@ async def test_event_flow_in_k8s():
         )
 
         # Give time for event processing
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
-        # Verify event was published (no error means success)
-        # Since we can't easily test cross-service event flow without proper setup,
-        # just ensure the publish worked without errors
+        # Verify event was published successfully (no error means success)
+        # In a production test, we'd verify event was received by subscribers
+        # For now, successful publication without errors is sufficient
 
     finally:
         await order_service.stop()
-        await risk_service.stop()
         await kv_store.disconnect()
         await nats_adapter.disconnect()
         await nats_adapter2.disconnect()

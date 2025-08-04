@@ -132,6 +132,13 @@ class OrderService(Service):
                 if self._metrics:
                     self._metrics.increment("orders.created")
 
+                # Log order creation
+                if self._logger:
+                    self._logger.info(
+                        f"🎯 Created order: {order.order_id} - Symbol: {order.symbol}, "
+                        f"Quantity: {order.quantity}, Side: {order.side.value}"
+                    )
+
                 # Emit order created event
                 domain, event_type = parse_event_pattern(EventPatterns.ORDER_CREATED)
                 await self.publish_event(

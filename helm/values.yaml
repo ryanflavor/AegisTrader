@@ -176,7 +176,7 @@ order-service:
     targetMemoryUtilizationPercentage: 80
   env:
     - name: SERVICE_TYPE
-      value: "ORDER"
+      value: "order"
     - name: NATS_URL
       value: "nats://aegis-trader-nats:4222"
     - name: SERVICE_NAME
@@ -250,7 +250,7 @@ pricing-service:
     targetMemoryUtilizationPercentage: 80
   env:
     - name: SERVICE_TYPE
-      value: "PRICING"
+      value: "pricing"
     - name: NATS_URL
       value: "nats://aegis-trader-nats:4222"
     - name: SERVICE_NAME
@@ -324,7 +324,7 @@ risk-service:
     targetMemoryUtilizationPercentage: 80
   env:
     - name: SERVICE_TYPE
-      value: "RISK"
+      value: "risk"
     - name: NATS_URL
       value: "nats://aegis-trader-nats:4222"
     - name: SERVICE_NAME

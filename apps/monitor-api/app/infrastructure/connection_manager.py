@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from ..domain.exceptions import KVStoreException
+from ..ports.service_instance_repository import ServiceInstanceRepositoryPort
 from ..ports.service_registry_kv_store import ServiceRegistryKVStorePort
 
 if TYPE_CHECKING:
@@ -29,16 +30,26 @@ class ConnectionManager:
         """
         self.config = config
         self._kv_store: ServiceRegistryKVStorePort | None = None
+        self._instance_repository: ServiceInstanceRepositoryPort | None = None
+        self._raw_kv = None
 
     async def startup(self) -> None:
         """Initialize all connections during application startup."""
         try:
             # Initialize KV Store connection using AegisSDK
             from .aegis_sdk_kv_adapter import AegisSDKKVAdapter
+            from .service_instance_repository_adapter import ServiceInstanceRepositoryAdapter
 
             self._kv_store = AegisSDKKVAdapter()
             await self._kv_store.connect(self.config.nats_url)
-            logger.info("Successfully connected to NATS KV Store")
+
+            # Store raw KV for instance repository
+            self._raw_kv = self._kv_store._kv
+
+            # Initialize instance repository
+            self._instance_repository = ServiceInstanceRepositoryAdapter(self._raw_kv)
+
+            logger.info("Successfully connected to NATS KV Store and initialized repositories")
         except Exception as e:
             logger.error(f"Failed to initialize connections: {e}")
             raise KVStoreException(f"Failed to initialize connections: {e}") from e
@@ -65,6 +76,33 @@ class ConnectionManager:
         if not self._kv_store:
             raise KVStoreException("KV Store not initialized. Call startup() first.")
         return self._kv_store
+
+    @property
+    def instance_repository(self) -> ServiceInstanceRepositoryPort:
+        """Get the service instance repository.
+
+        Returns:
+            ServiceInstanceRepositoryPort: The instance repository
+
+        Raises:
+            KVStoreException: If not initialized
+        """
+        if not self._instance_repository:
+            raise KVStoreException("Instance repository not initialized. Call startup() first.")
+        return self._instance_repository
+
+    async def get_kv_store(self):
+        """Get the raw KV Store instance for direct operations.
+
+        Returns:
+            The underlying KV Store instance
+
+        Note:
+            This method is deprecated. Use the repository pattern instead.
+        """
+        if not self._raw_kv:
+            raise KVStoreException("KV Store not initialized. Call startup() first.")
+        return self._raw_kv
 
 
 # Global instance managed by the application lifecycle

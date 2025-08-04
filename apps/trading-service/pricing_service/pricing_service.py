@@ -193,6 +193,9 @@ class PricingService(Service):
                 )
                 self._metrics.increment("events.price_quoted.published")
 
+        # Store reference to get_price for use in price update loop
+        self._get_price = get_price
+
         # Start price update task
         self._price_update_task = asyncio.create_task(self._price_update_loop())
 
@@ -206,12 +209,8 @@ class PricingService(Service):
                 # Pick a random symbol to update
                 symbol = random.choice(list(self._base_prices.keys()))  # nosec
 
-                # Get current price
-                price_data = await self.call_rpc(
-                    self.instance_id,  # Call self
-                    "get_price",
-                    {"symbol": symbol},
-                )
+                # Get current price by calling the stored get_price method
+                price_data = await self._get_price({"symbol": symbol})
 
                 # Emit price update event
                 domain, event_type = parse_event_pattern(EventPatterns.PRICE_UPDATED)

@@ -238,17 +238,27 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
             assert self._kv_store is not None  # Type guard for mypy
             keys = await self._kv_store.keys()
 
-            # Get all values
+            # Get all values, but skip service instances
             for key in keys:
+                # Skip service instance keys (they start with "service-instances_")
+                if key.startswith("service-instances_"):
+                    continue
+
                 entry = await self._kv_store.get(key)
                 if entry and entry.value:
-                    if isinstance(entry.value, dict):
-                        services.append(ServiceDefinition(**entry.value))
-                    else:
-                        data = (
-                            json.loads(entry.value) if isinstance(entry.value, str) else entry.value
-                        )
-                        services.append(ServiceDefinition(**data))
+                    try:
+                        if isinstance(entry.value, dict):
+                            services.append(ServiceDefinition(**entry.value))
+                        else:
+                            data = (
+                                json.loads(entry.value)
+                                if isinstance(entry.value, str)
+                                else entry.value
+                            )
+                            services.append(ServiceDefinition(**data))
+                    except Exception as e:
+                        logger.warning(f"Failed to parse service definition for key '{key}': {e}")
+                        continue
 
             logger.info(f"Listed {len(services)} service definitions")
             return services

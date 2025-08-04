@@ -234,3 +234,63 @@ class ServiceDefinition(BaseModel):
         data["created_at"] = self.created_at.isoformat()
         data["updated_at"] = self.updated_at.isoformat()
         return data
+
+
+class ServiceInstance(BaseModel):
+    """Domain model representing a running service instance."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    service_name: str = Field(
+        ...,
+        description="Service name this instance belongs to",
+        pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$",
+        min_length=3,
+        max_length=64,
+    )
+    instance_id: str = Field(
+        ...,
+        description="Unique instance identifier",
+        min_length=1,
+        max_length=100,
+    )
+    version: str = Field(
+        ...,
+        description="Service version",
+        pattern=r"^\d+\.\d+\.\d+$",
+    )
+    status: Literal["ACTIVE", "UNHEALTHY", "STANDBY"] = Field(
+        ...,
+        description="Current instance status",
+    )
+    last_heartbeat: datetime = Field(
+        ...,
+        description="Last heartbeat timestamp",
+    )
+    sticky_active_group: str | None = Field(
+        None,
+        description="Sticky session group identifier",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional instance metadata",
+    )
+
+    @field_validator("last_heartbeat", mode="before")
+    @classmethod
+    def parse_timestamp(cls, v: Any) -> datetime:
+        """Parse timestamp from various formats."""
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, str):
+            # Handle ISO format with Z or timezone
+            try:
+                return datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError as e:
+                raise ValueError(f"Invalid timestamp format: {v}") from e
+        raise ValueError(f"Invalid timestamp format: {v}")
+
+    @field_serializer("last_heartbeat")
+    def serialize_datetime(self, value: datetime) -> str:
+        """Serialize datetime to ISO format string."""
+        return value.isoformat()

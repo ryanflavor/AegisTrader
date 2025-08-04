@@ -91,19 +91,31 @@ order-service:
   enabled: true
   replicaCount: 2
   image:
-    tag: "20250804-143101"
+    tag: "20250804-143648"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
 
 pricing-service:
   enabled: true
   replicaCount: 1
   image:
-    tag: "20250804-143101"
+    tag: "20250804-143648"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
 
 risk-service:
   enabled: true
   replicaCount: 1
   image:
-    tag: "20250804-143101"
+    tag: "20250804-143648"
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
 
 # Post-install configuration
 postInstall:

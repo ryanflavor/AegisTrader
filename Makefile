@@ -16,10 +16,18 @@ help: ## 显示帮助信息
 	@echo ''
 	@echo '🚀 快速开始:'
 	@echo '  make deploy              # 部署环境 (使用已有镜像)'
-	@echo '  make update              # 更新部署 (构建新镜像)'
+	@echo '  make update              # 更新部署 (构建所有镜像)'
 	@echo '  make forward-start       # 启动端口转发 (非阻塞)'
 	@echo '  make forward-stop        # 停止端口转发'
 	@echo '  make status              # 查看 K8s 资源状态'
+	@echo ''
+	@echo '⚡ 快速更新 (修改代码后):'
+	@echo '  make update-api          # 只更新 Monitor API'
+	@echo '  make update-ui           # 只更新 Monitor UI'
+	@echo '  make update-trading      # 更新所有交易服务'
+	@echo '  make update-order        # 只更新订单服务'
+	@echo '  make update-pricing      # 只更新定价服务'
+	@echo '  make update-risk         # 只更新风险服务'
 	@echo ''
 	@echo '📦 部署管理:'
 	@echo '╭────────────────────┬────────────────────────────────────╮'
@@ -56,6 +64,9 @@ help: ## 显示帮助信息
 	@awk 'BEGIN {FS = ":.*?## "} /^shell-api:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.*?## "} /^shell-ui:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.*?## "} /^nats-cli:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^registry-status:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^restart-all:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^watch:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo '╰────────────────────┴────────────────────────────────────╯'
 	@echo ''
 	@echo '🔧 构建命令:'
@@ -101,7 +112,7 @@ deploy: ## 一键部署环境（使用现有镜像）
 	@echo "🔗 使用 'make forward' 访问服务"
 
 .PHONY: update
-update: ## 更新部署
+update: ## 更新部署（构建所有服务）
 	@# 设置版本并导出给子任务
 	@export VERSION=$$(date +%Y%m%d-%H%M%S) && \
 	echo "🔄 更新 AegisTrader..." && \
@@ -114,6 +125,67 @@ update: ## 更新部署
 		-f $(HELM_DIR)/values-test.yaml \
 		--wait --timeout 3m
 	@echo "✅ 更新完成!"
+
+.PHONY: update-api
+update-api: ## 快速更新 Monitor API
+	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
+	echo "🔄 更新 Monitor API (版本: $$VERSION)..." && \
+	docker-compose build monitor-api && \
+	docker tag $(DOCKER_API_IMAGE):latest $(DOCKER_API_IMAGE):$$VERSION && \
+	docker save $(DOCKER_API_IMAGE):$$VERSION | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import - && \
+	kubectl set image deployment/$(API_SERVICE_NAME) monitor-api=$(DOCKER_API_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl rollout status deployment/$(API_SERVICE_NAME) -n $(K8S_NAMESPACE) --timeout=2m
+	@echo "✅ Monitor API 更新完成!"
+
+.PHONY: update-ui
+update-ui: ## 快速更新 Monitor UI
+	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
+	echo "🔄 更新 Monitor UI (版本: $$VERSION)..." && \
+	docker-compose build monitor-ui && \
+	docker tag $(DOCKER_UI_IMAGE):latest $(DOCKER_UI_IMAGE):$$VERSION && \
+	docker save $(DOCKER_UI_IMAGE):$$VERSION | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import - && \
+	kubectl set image deployment/$(UI_SERVICE_NAME) monitor-ui=$(DOCKER_UI_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl rollout status deployment/$(UI_SERVICE_NAME) -n $(K8S_NAMESPACE) --timeout=2m
+	@echo "✅ Monitor UI 更新完成!"
+
+.PHONY: update-trading
+update-trading: ## 快速更新所有交易服务
+	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
+	echo "🔨 构建交易服务镜像 (版本: $$VERSION)..." && \
+	docker-compose build trading-service && \
+	docker tag $(DOCKER_TRADING_IMAGE):latest $(DOCKER_TRADING_IMAGE):$$VERSION && \
+	docker save $(DOCKER_TRADING_IMAGE):$$VERSION | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import - && \
+	echo "📦 更新所有交易服务..." && \
+	kubectl set image deployment/$(HELM_RELEASE_NAME)-order-service order-service=$(DOCKER_TRADING_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl set image deployment/$(HELM_RELEASE_NAME)-pricing-service pricing-service=$(DOCKER_TRADING_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl set image deployment/$(HELM_RELEASE_NAME)-risk-service risk-service=$(DOCKER_TRADING_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl rollout status deployment/$(HELM_RELEASE_NAME)-order-service -n $(K8S_NAMESPACE) --timeout=2m && \
+	kubectl rollout status deployment/$(HELM_RELEASE_NAME)-pricing-service -n $(K8S_NAMESPACE) --timeout=2m && \
+	kubectl rollout status deployment/$(HELM_RELEASE_NAME)-risk-service -n $(K8S_NAMESPACE) --timeout=2m
+	@echo "✅ 交易服务更新完成!"
+
+.PHONY: update-order
+update-order: ## 快速更新订单服务
+	@$(MAKE) -f Makefile update-single-trading SERVICE=order
+
+.PHONY: update-pricing
+update-pricing: ## 快速更新定价服务
+	@$(MAKE) -f Makefile update-single-trading SERVICE=pricing
+
+.PHONY: update-risk
+update-risk: ## 快速更新风险服务
+	@$(MAKE) -f Makefile update-single-trading SERVICE=risk
+
+.PHONY: update-single-trading
+update-single-trading: ## 更新单个交易服务（内部使用）
+	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
+	echo "🔄 更新 $(SERVICE) 服务 (版本: $$VERSION)..." && \
+	docker-compose build trading-service && \
+	docker tag $(DOCKER_TRADING_IMAGE):latest $(DOCKER_TRADING_IMAGE):$$VERSION && \
+	docker save $(DOCKER_TRADING_IMAGE):$$VERSION | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import - && \
+	kubectl set image deployment/$(HELM_RELEASE_NAME)-$(SERVICE)-service $(SERVICE)-service=$(DOCKER_TRADING_IMAGE):$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl rollout status deployment/$(HELM_RELEASE_NAME)-$(SERVICE)-service -n $(K8S_NAMESPACE) --timeout=2m
+	@echo "✅ $(SERVICE) 服务更新完成!"
 
 .PHONY: build-images
 build-images: ## 构建并标记版本化镜像
@@ -293,3 +365,30 @@ test: ## 测试服务
 		curl -s http://localhost:$(API_PORT)/health | jq . || echo "❌ API 健康检查失败"
 	@echo ""
 	@echo "✅ 测试完成"
+
+.PHONY: registry-status
+registry-status: ## 查看服务注册表状态
+	@echo "📊 服务注册表状态:"
+	@echo ""
+	@echo "注册的服务实例:"
+	@kubectl exec -n $(K8S_NAMESPACE) deployment/$(NATS_SERVICE_NAME)-box -- \
+		nats kv ls $(NATS_KV_BUCKET) 2>/dev/null | grep service-instances | \
+		sed 's/service-instances_/  ✓ /' | sed 's/_/\//g' || echo "  (无服务实例)"
+	@echo ""
+	@echo "服务定义:"
+	@kubectl exec -n $(K8S_NAMESPACE) deployment/$(NATS_SERVICE_NAME)-box -- \
+		nats kv ls $(NATS_KV_BUCKET) 2>/dev/null | grep -v service-instances | \
+		sed 's/^/  ✓ /' || echo "  (无服务定义)"
+
+.PHONY: restart-all
+restart-all: ## 重启所有服务
+	@echo "🔄 重启所有服务..."
+	@kubectl rollout restart deployment -n $(K8S_NAMESPACE) -l app.kubernetes.io/instance=$(HELM_RELEASE_NAME)
+	@echo "⏳ 等待服务就绪..."
+	@kubectl rollout status deployment -n $(K8S_NAMESPACE) -l app.kubernetes.io/instance=$(HELM_RELEASE_NAME) --timeout=3m
+	@echo "✅ 所有服务已重启"
+
+.PHONY: watch
+watch: ## 监视服务状态变化
+	@echo "👀 监视服务状态 (按 Ctrl+C 退出)..."
+	@watch -n 2 'kubectl get pods -n $(K8S_NAMESPACE) | grep -E "(NAME|order|pricing|risk|monitor)" | grep -v Terminating'
