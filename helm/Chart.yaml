@@ -1,12 +1,13 @@
 apiVersion: v2
 name: aegis-trader
-description: AegisTrader - Complete trading system deployment
+description: AegisTrader - Complete trading system deployment with optimized structure
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"
 keywords:
   - trading
   - nats
+  - microservices
   - fastapi
   - nextjs
 home: https://github.com/AegisTrader
@@ -15,21 +16,56 @@ maintainers:
     email: support@aegistrader.io
 
 dependencies:
+  # NATS messaging infrastructure
   - name: nats
     version: "~1.3.0"
     repository: https://nats-io.github.io/k8s/helm/charts/
     condition: nats.enabled
     tags:
       - messaging
-  - name: monitor-api
-    version: "1.0.1"
-    repository: "file://./charts/monitor-api"
-    condition: monitor-api.enabled
-    tags:
-      - backend
+
+  # Monitor UI - custom chart for Next.js
   - name: monitor-ui
     version: "1.0.1"
     repository: "file://./charts/monitor-ui"
     condition: monitor-ui.enabled
     tags:
       - frontend
+
+  # Monitor API using base microservice chart
+  - name: base-microservice
+    alias: monitor-api
+    version: "1.0.0"
+    repository: "file://./charts/base-microservice"
+    condition: monitor-api.enabled
+    tags:
+      - backend
+      - api
+
+  # Trading Services using base microservice chart
+  - name: base-microservice
+    alias: order-service
+    version: "1.0.0"
+    repository: "file://./charts/base-microservice"
+    condition: order-service.enabled
+    tags:
+      - backend
+      - trading
+
+  - name: base-microservice
+    alias: pricing-service
+    version: "1.0.0"
+    repository: "file://./charts/base-microservice"
+    condition: pricing-service.enabled
+    tags:
+      - backend
+      - trading
+
+  - name: base-microservice
+    alias: risk-service
+    version: "1.0.0"
+    repository: "file://./charts/base-microservice"
+    condition: risk-service.enabled
+    tags:
+      - backend
+      - trading

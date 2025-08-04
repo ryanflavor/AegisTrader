@@ -1,0 +1,14 @@
+apiVersion: v2
+name: base-microservice
+description: Base Helm chart for AegisTrader microservices
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - microservice
+  - base
+  - template
+home: https://github.com/AegisTrader
+maintainers:
+  - name: AegisTrader Team
+    email: support@aegistrader.io

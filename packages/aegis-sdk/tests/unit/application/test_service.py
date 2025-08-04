@@ -280,9 +280,9 @@ class TestRPCMethods:
             preferred_instance_id=None,
         )
 
-        # Verify request used discovered instance
+        # Verify request used service name (not instance ID) for discovery-enabled calls
         call_args = mock_message_bus.call_rpc.call_args[0][0]
-        assert call_args.target == "user-service-abc123"
+        assert call_args.target == "user-service"
 
     @pytest.mark.asyncio
     async def test_call_rpc_with_discovery_no_instances(self, mock_message_bus):

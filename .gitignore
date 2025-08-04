@@ -243,3 +243,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+helm-legacy/

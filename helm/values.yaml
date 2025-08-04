@@ -2,26 +2,19 @@
 # This is a YAML-formatted file
 # Declare variables to be passed into your templates
 
-# Create namespace
-createNamespace: false
-
+# Global configuration
 global:
-  # Global image pull secrets
   imagePullSecrets: []
-  # Global storage class
   storageClass: ""
-  # Environment: development, staging, production
   environment: development
 
 # NATS Configuration
 nats:
   enabled: true
-  # NATS configuration following the subchart structure
   config:
     cluster:
       enabled: true
       replicas: 3
-    # JetStream configuration - this is the correct path for the NATS subchart
     jetstream:
       enabled: true
       fileStore:
@@ -30,16 +23,13 @@ nats:
         pvc:
           enabled: true
           size: 10Gi
-          storageClassName: "" # Uses default if empty
+          storageClassName: ""
       memoryStore:
         enabled: false
         maxSize: 1Gi
-  # Container configuration
   container:
     env:
-      # Go memory limit for efficiency (leave ~1GiB for OS)
       GOMEMLIMIT: 7GiB
-    # Resource limits and security context for NATS container
     merge:
       resources:
         requests:
@@ -55,12 +45,9 @@ nats:
         capabilities:
           drop:
             - ALL
-  # Service configuration
   service:
     type: ClusterIP
-  # Pod configuration
   podTemplate:
-    # Security context for pod
     merge:
       spec:
         securityContext:
@@ -69,26 +56,24 @@ nats:
           runAsUser: 1000
           seccompProfile:
             type: RuntimeDefault
-    # Topology spread for HA
     topologySpreadConstraints:
       kubernetes.io/hostname:
         maxSkew: 1
         whenUnsatisfiable: DoNotSchedule
-  # Monitoring configuration
   promExporter:
-    enabled: false # Enable for production monitoring
+    enabled: false
 
-# Management Service (FastAPI) Configuration
+# Monitor API Configuration
 monitor-api:
   enabled: true
   replicaCount: 1
   image:
     repository: aegistrader-monitor-api
     pullPolicy: IfNotPresent
-    tag: "1.0.1"
+    tag: "latest"
   service:
-    type: ClusterIP
-    port: 8100
+    port: 8200  # Changed to avoid conflict with existing deployment
+  containerPort: 8200
   resources:
     requests:
       cpu: 1000m
@@ -96,44 +81,35 @@ monitor-api:
     limits:
       cpu: 1000m
       memory: 2Gi
-  probes:
-    liveness:
-      enabled: true
-      httpGet:
-        path: /health
-        port: http
-      initialDelaySeconds: 10
-      periodSeconds: 10
-    readiness:
-      enabled: true
-      httpGet:
-        path: /ready
-        port: http
-      initialDelaySeconds: 30
-      periodSeconds: 5
-    startup:
-      enabled: true
-      httpGet:
-        path: /health
-        port: http
-      initialDelaySeconds: 0
-      periodSeconds: 10
-      failureThreshold: 60
-  env:
-    # NATS_URL 将在部署模板中动态生成
-    NATS_KV_BUCKET: "service-registry"
+  configMap:
+    data:
+      API_PORT: "8200"
+      NATS_URL: "nats://aegis-v2-nats:4222"
+      NATS_KV_BUCKET: "service-registry"
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-v2-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
 
-# Monitor UI (Next.js) Configuration
+# Monitor UI Configuration
 monitor-ui:
   enabled: true
   replicaCount: 1
   image:
     repository: aegistrader-monitor-ui
     pullPolicy: IfNotPresent
-    tag: "1.0.1"
+    tag: "latest"
   service:
     type: ClusterIP
-    port: 3100
+    port: 3200  # Changed to avoid conflict with existing deployment
   resources:
     requests:
       cpu: 500m
@@ -141,53 +117,121 @@ monitor-ui:
     limits:
       cpu: 500m
       memory: 1Gi
-  probes:
-    liveness:
-      enabled: true
-      httpGet:
-        path: /
-        port: http
-      initialDelaySeconds: 10
-      periodSeconds: 10
-    readiness:
-      enabled: true
-      httpGet:
-        path: /
-        port: http
-      initialDelaySeconds: 10
-      periodSeconds: 5
+
+# Trading Services Configuration
+order-service:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: aegistrader-trading-service
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    port: 8080
+  containerPort: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   env:
-    # NEXT_PUBLIC_API_URL will be set by values.deployment.yaml
-  ingress:
-    enabled: false
-    className: ""
-    annotations: {}
-      # kubernetes.io/ingress.class: nginx
-      # kubernetes.io/tls-acme: "true"
-    hosts:
-      - host: aegis-trader.local
-        paths:
-          - path: /
-            pathType: Prefix
-    tls: []
-    #  - secretName: aegis-trader-tls
-    #    hosts:
-    #      - aegis-trader.local
-  # Probes already defined in subchart values.yaml
+    - name: SERVICE_TYPE
+      value: "ORDER"
+    - name: NATS_URL
+      value: "nats://aegis-v2-nats:4222"
+    - name: SERVICE_NAME
+      value: "order-service"
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-v2-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
 
-# Service Registry Configuration
-serviceRegistry:
-  # Create KV bucket for service registry
-  createBucket: true
-  bucketName: service-registry
-  # Bucket configuration
-  bucket:
-    replicas: 3
-    ttl: 0 # No TTL by default
-    maxBytes: 1073741824 # 1GB
-    maxMsgs: -1 # Unlimited
-    maxMsgSize: 1048576 # 1MB
+pricing-service:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: aegistrader-trading-service
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    port: 8080
+  containerPort: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    - name: SERVICE_TYPE
+      value: "PRICING"
+    - name: NATS_URL
+      value: "nats://aegis-v2-nats:4222"
+    - name: SERVICE_NAME
+      value: "pricing-service"
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-v2-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
 
-# Development overrides
-# NOTE: For development, use values.dev.yaml or values.local.yaml files
-# to override specific settings
+risk-service:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: aegistrader-trading-service
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  service:
+    port: 8080
+  containerPort: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    - name: SERVICE_TYPE
+      value: "RISK"
+    - name: NATS_URL
+      value: "nats://aegis-v2-nats:4222"
+    - name: SERVICE_NAME
+      value: "risk-service"
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-v2-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+
+# Post-install configuration
+postInstall:
+  createKvBucket:
+    enabled: true
+    bucketName: service-registry

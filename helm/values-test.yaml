@@ -1,0 +1,103 @@
+# Test values combining dev overrides
+global:
+  environment: development
+
+# NATS with clustering disabled for single node
+nats:
+  enabled: true
+  config:
+    cluster:
+      enabled: false
+      replicas: 1
+    jetstream:
+      enabled: true
+      fileStore:
+        enabled: true
+        dir: /data
+        pvc:
+          enabled: true
+          size: 1Gi
+  container:
+    merge:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: 512Mi
+        limits:
+          cpu: "500m"
+          memory: 1Gi
+
+# Monitor API with correct image tag
+monitor-api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aegistrader-monitor-api
+    pullPolicy: IfNotPresent
+    tag: "20250804-114418"
+  service:
+    port: 8100
+  containerPort: 8100
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  configMap:
+    data:
+      API_PORT: "8100"
+      NATS_URL: "nats://aegis-trader-nats:4222"
+      NATS_KV_BUCKET: "service-registry"
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-trader-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+
+# Monitor UI with correct image tag
+monitor-ui:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aegistrader-monitor-ui
+    pullPolicy: IfNotPresent
+    tag: "20250804-114418"
+  service:
+    type: ClusterIP
+    port: 3100
+  waitForApiPort: 8100  # Must match monitor-api port
+  env:
+    NEXT_PUBLIC_API_URL: "http://aegis-trader-monitor-api:8100"
+    PORT: "3100"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+# Trading services disabled for now
+order-service:
+  enabled: false
+
+pricing-service:
+  enabled: false
+
+risk-service:
+  enabled: false
+
+# Post-install configuration
+postInstall:
+  createKvBucket:
+    enabled: true
+    bucketName: service-registry

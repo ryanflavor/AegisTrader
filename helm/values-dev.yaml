@@ -1,0 +1,76 @@
+# Development environment overrides
+global:
+  environment: development
+
+# Use existing images from current deployment
+monitor-api:
+  image:
+    tag: "20250803-151359"  # Use existing image version
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+monitor-ui:
+  image:
+    tag: "20250803-151359"  # Use existing image version
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+# Reduce resource requirements for local development
+nats:
+  config:
+    cluster:
+      enabled: false  # Disable clustering for single node
+      replicas: 1  # Single node for dev
+  container:
+    merge:
+      resources:
+        requests:
+          cpu: "200m"
+          memory: 512Mi
+        limits:
+          cpu: "500m"
+          memory: 1Gi
+
+# Reduce trading services for dev (disabled for initial test)
+order-service:
+  enabled: false  # Disable until trading service image is built
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+pricing-service:
+  enabled: false  # Disable until trading service image is built
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+risk-service:
+  enabled: false  # Disable until trading service image is built
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

@@ -1,110 +1,52 @@
-{{- if and .Values.nats.enabled .Values.serviceRegistry.createBucket }}
+{{- if .Values.postInstall.createKvBucket.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: {{ include "aegis-trader.fullname" . }}-create-kv-bucket
   labels:
     {{- include "aegis-trader.labels" . | nindent 4 }}
-    app.kubernetes.io/component: nats-kv-setup
   annotations:
-    # Removed helm hooks to avoid circular dependency with --wait
-    # The job will run as a normal Kubernetes resource
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   template:
     metadata:
-      name: {{ include "aegis-trader.fullname" . }}-create-kv-bucket
       labels:
         {{- include "aegis-trader.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: nats-kv-setup
+        app.kubernetes.io/component: post-install-job
     spec:
       restartPolicy: OnFailure
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
-        seccompProfile:
-          type: RuntimeDefault
       containers:
-      - name: create-kv-bucket
-        image: natsio/nats-box:latest
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          capabilities:
-            drop:
-            - ALL
-        resources:
-          requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
-        command:
-        - sh
-        - -c
-        - |
-          set -eo pipefail
-          NATS_URL="{{ include "aegis-trader.natsUrl" . }}"
-          BUCKET="{{ .Values.serviceRegistry.bucketName }}"
+        - name: create-kv-bucket
+          image: natsio/nats-box:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for NATS to be ready..."
+              until nats server check connection --server=nats://{{ .Release.Name }}-nats:4222; do
+                echo "NATS not ready, waiting..."
+                sleep 2
+              done
+              echo "NATS is ready!"
 
-          # Wait for NATS to be ready
-          echo "Waiting for NATS to be ready..."
-          MAX_WAIT=60
-          WAIT_COUNT=0
-
-          while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-            if nats server check connection --server="$NATS_URL" 2>/dev/null; then
-              echo "NATS is reachable"
-              break
-            fi
-            WAIT_COUNT=$((WAIT_COUNT + 1))
-            echo "Waiting for NATS... ($WAIT_COUNT/$MAX_WAIT)"
-            sleep 1
-          done
-
-          # Check if JetStream is enabled
-          echo "Checking JetStream status..."
-          # JetStream is configured with domain "aegis" in our setup
-          echo "JetStream is enabled with domain 'aegis'"
-
-          # Try to create bucket with retries
-          MAX_RETRIES=10
-          RETRY_COUNT=0
-
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES to check/create KV bucket..."
-
-            # Check if bucket exists (with JetStream domain)
-            if nats kv ls --server="$NATS_URL" --js-domain=aegis 2>/dev/null | grep -q "^${BUCKET}$"; then
-              echo "KV bucket '$BUCKET' already exists"
-              exit 0
-            fi
-
-            # Try to create bucket (with JetStream domain)
-            if nats kv add "$BUCKET" --server="$NATS_URL" --js-domain=aegis \
-              --replicas={{ .Values.serviceRegistry.bucket.replicas }} \
-              --max-bucket-size={{ int .Values.serviceRegistry.bucket.maxBytes }} \
-              --max-value-size={{ int .Values.serviceRegistry.bucket.maxMsgSize }} \
-              {{- if gt (int .Values.serviceRegistry.bucket.ttl) 0 }}
-              --ttl={{ .Values.serviceRegistry.bucket.ttl }}s \
-              {{- end }}
-              {{- if .Values.serviceRegistry.bucket.markerTTL }}
-              --marker-ttl={{ .Values.serviceRegistry.bucket.markerTTL }}s \
-              {{- end }}
-              --description="Service registry for AegisTrader" 2>/dev/null; then
-              echo "KV bucket '$BUCKET' created successfully"
-              echo "Per-key TTL is {{ if .Values.serviceRegistry.bucket.markerTTL }}enabled with marker TTL of {{ .Values.serviceRegistry.bucket.markerTTL }}s{{ else }}disabled{{ end }}"
-              exit 0
-            fi
-
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-              echo "Failed to create bucket, retrying in 5 seconds..."
-              sleep 5
-            fi
-          done
-
-          echo "Failed to create KV bucket after $MAX_RETRIES attempts"
-          exit 1
+              # Check if bucket already exists
+              if nats kv ls --server=nats://{{ .Release.Name }}-nats:4222 | grep -q "{{ .Values.postInstall.createKvBucket.bucketName }}"; then
+                echo "KV bucket '{{ .Values.postInstall.createKvBucket.bucketName }}' already exists"
+              else
+                echo "Creating KV bucket '{{ .Values.postInstall.createKvBucket.bucketName }}'..."
+                nats kv add {{ .Values.postInstall.createKvBucket.bucketName }} \
+                  --server=nats://{{ .Release.Name }}-nats:4222 \
+                  --replicas=3 \
+                  --ttl=60s
+                echo "KV bucket created successfully"
+              fi
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
 {{- end }}

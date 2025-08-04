@@ -1,7 +1,0 @@
-# Patch to enable per-message TTL in NATS JetStream
-nats:
-  config:
-    jetstream:
-      merge:
-        # Enable per-message TTL
-        allow_msg_ttl: true

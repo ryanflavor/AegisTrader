@@ -212,6 +212,7 @@ class Service:
             Exception: If RPC call fails or no healthy instances available
         """
         target = service
+        original_service_name = service
 
         # Use service discovery if enabled and available
         if discovery_enabled and self._discovery and self._is_service_name(service):
@@ -232,11 +233,17 @@ class Service:
                     method=method,
                 )
 
+        # For discovery-enabled calls, we need to pass the original service name
+        # so the NATSAdapter can construct the correct RPC subject
         request = RPCRequest(
             method=method,
             params=params or {},
             source=self.instance_id,
-            target=target,
+            target=(
+                original_service_name
+                if discovery_enabled and self._discovery and self._is_service_name(service)
+                else target
+            ),
         )
 
         try:

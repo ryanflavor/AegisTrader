@@ -1,53 +1,51 @@
-Thank you for installing {{ .Chart.Name }}.
+Thank you for installing {{ .Chart.Name }}!
 
-Your release is named {{ .Release.Name }}.
+Your release is named: {{ .Release.Name }}
+Chart version: {{ .Chart.Version }}
+App version: {{ .Chart.AppVersion }}
 
-To learn more about the release, try:
+To get started with AegisTrader:
 
-  $ helm status {{ .Release.Name }}
-  $ helm get values {{ .Release.Name }}
+1. Check the deployment status:
+   kubectl get all -n {{ .Release.Namespace }}
 
-{{- if .Values.nats.enabled }}
+2. Wait for all pods to be ready:
+   kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }} --timeout=300s
 
-NATS Cluster:
-  The NATS cluster has been deployed with {{ .Values.nats.replicas }} replicas.
+3. Port forward to access services locally:
+   {{- if index .Values "monitor-api" "enabled" }}
+   # Monitor API
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-monitor-api {{ index .Values "monitor-api" "service" "port" }}:{{ index .Values "monitor-api" "service" "port" }}
+   {{- end }}
 
-  To connect to NATS from within the cluster:
-    URL: {{ include "aegis-trader.natsUrl" . }}
+   {{- if index .Values "monitor-ui" "enabled" }}
+   # Monitor UI
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-monitor-ui {{ index .Values "monitor-ui" "service" "port" }}:{{ index .Values "monitor-ui" "service" "port" }}
+   {{- end }}
 
-  To check NATS cluster status:
-    $ kubectl exec -it {{ .Release.Name }}-nats-0 -- nats server check jetstream
+   # NATS
+   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ .Release.Name }}-nats 4222:4222
+
+4. Access the services:
+   {{- if index .Values "monitor-ui" "enabled" }}
+   Monitor UI: http://localhost:{{ index .Values "monitor-ui" "service" "port" }}
+   {{- end }}
+   {{- if index .Values "monitor-api" "enabled" }}
+   Monitor API: http://localhost:{{ index .Values "monitor-api" "service" "port" }}/docs
+   {{- end }}
+
+5. Check service logs:
+   kubectl logs -f -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} --all-containers=true --prefix=true
+
+Trading Services Status:
+{{- if index .Values "order-service" "enabled" }}
+- Order Service: ENABLED ({{ index .Values "order-service" "replicaCount" }} replicas)
+{{- end }}
+{{- if index .Values "pricing-service" "enabled" }}
+- Pricing Service: ENABLED ({{ index .Values "pricing-service" "replicaCount" }} replicas)
+{{- end }}
+{{- if index .Values "risk-service" "enabled" }}
+- Risk Service: ENABLED ({{ index .Values "risk-service" "replicaCount" }} replicas)
 {{- end }}
 
-{{- if index .Values "monitor-api" "enabled" }}
-
-Management Service (FastAPI):
-  The Management Service is running on port {{ index .Values "monitor-api" "service" "port" }}.
-
-  Internal URL: {{ include "aegis-trader.monitorApiUrl" . }}
-
-  To check service health:
-    $ kubectl exec -it deploy/{{ .Release.Name }}-monitor-api -- curl http://localhost:{{ index .Values "monitor-api" "service" "port" }}/health
-{{- end }}
-
-{{- if index .Values "monitor-ui" "enabled" }}
-
-Monitor UI (Next.js):
-  The Monitor UI is running on port {{ index .Values "monitor-ui" "service" "port" }}.
-
-  {{- if index .Values "monitor-ui" "ingress" "enabled" }}
-  External Access:
-    {{- range $host := index .Values "monitor-ui" "ingress" "hosts" }}
-    http{{ if index $.Values "monitor-ui" "ingress" "tls" }}s{{ end }}://{{ $host.host }}{{ range $path := $host.paths }}{{ $path.path }}{{ end }}
-    {{- end }}
-  {{- else }}
-
-  To access the UI locally:
-    $ kubectl port-forward svc/{{ .Release.Name }}-monitor-ui {{ index .Values "monitor-ui" "service" "port" }}:{{ index .Values "monitor-ui" "service" "port" }}
-
-  Then visit http://localhost:{{ index .Values "monitor-ui" "service" "port" }} in your browser.
-  {{- end }}
-{{- end }}
-
-To get more information about your deployment:
-  $ kubectl get all -l app.kubernetes.io/instance={{ .Release.Name }}
+For more information, visit: https://github.com/AegisTrader

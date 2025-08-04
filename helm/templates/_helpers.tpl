@@ -7,8 +7,6 @@ Expand the name of the chart.
 
 {{/*
 Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-If release name contains chart name it will be used as a full name.
 */}}
 {{- define "aegis-trader.fullname" -}}
 {{- if .Values.fullnameOverride }}
@@ -51,39 +49,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Create the namespace name
 */}}
-{{- define "aegis-trader.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "aegis-trader.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
-{{- end }}
-
-{{/*
-Get NATS service URL
-*/}}
-{{- define "aegis-trader.natsUrl" -}}
-{{- $natsPort := 4222 }}
-{{- if .Values.nats }}
-  {{- if .Values.nats.nats }}
-    {{- if .Values.nats.nats.service }}
-      {{- if .Values.nats.nats.service.ports }}
-        {{- if .Values.nats.nats.service.ports.client }}
-          {{- $natsPort = .Values.nats.nats.service.ports.client.port | default 4222 }}
-        {{- end }}
-      {{- end }}
-    {{- end }}
-  {{- end }}
-{{- end }}
-{{- printf "nats://%s-nats:%v" .Release.Name (int $natsPort) }}
-{{- end }}
-
-{{/*
-Get Monitor API service URL
-*/}}
-{{- define "aegis-trader.monitorApiUrl" -}}
-{{- $apiPort := index .Values "monitor-api" "service" "port" | default 8100 }}
-{{- printf "http://%s-monitor-api:%d" .Release.Name $apiPort }}
+{{- define "aegis-trader.namespace" -}}
+{{- default .Release.Namespace .Values.namespace }}
 {{- end }}
