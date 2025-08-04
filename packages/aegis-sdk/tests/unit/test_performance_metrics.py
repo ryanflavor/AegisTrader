@@ -28,10 +28,10 @@ class PerformanceMetrics:
         self.memory_samples: list[float] = []
 
 
-@pytest.mark.asyncio
 class TestPerformanceMetrics:
     """Test performance characteristics without external dependencies."""
 
+    @pytest.mark.asyncio
     async def test_rpc_latency_simulation(self):
         """Simulate and measure RPC latency with mocked NATS."""
         metrics = PerformanceMetrics()
@@ -103,6 +103,7 @@ class TestPerformanceMetrics:
         assert p99 < 10.0, f"P99 latency {p99:.3f}ms exceeds reasonable threshold"
         assert mean < 5.0, f"Mean latency {mean:.3f}ms exceeds reasonable threshold"
 
+    @pytest.mark.asyncio
     async def test_event_publishing_simulation(self):
         """Simulate event publishing throughput."""
         PerformanceMetrics()
@@ -155,6 +156,7 @@ class TestPerformanceMetrics:
         # Verify throughput is reasonable for mocked environment
         assert events_per_second > 5000, f"Throughput {events_per_second:,.0f} below threshold"
 
+    @pytest.mark.asyncio
     async def test_memory_footprint_estimation(self):
         """Estimate memory usage per service instance."""
         metrics = PerformanceMetrics()
@@ -223,6 +225,7 @@ class TestPerformanceMetrics:
         # Verify memory usage is reasonable
         assert avg_per_service < 50, f"Memory usage {avg_per_service:.1f}MB exceeds threshold"
 
+    @pytest.mark.asyncio
     async def test_concurrent_operations_performance(self):
         """Test performance under concurrent load."""
         # Mock adapter with connection pool

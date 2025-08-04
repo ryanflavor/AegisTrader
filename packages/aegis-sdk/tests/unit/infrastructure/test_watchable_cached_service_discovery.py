@@ -26,6 +26,7 @@ class MockKVStore(KVStorePort):
     def __init__(self):
         self.watch_events = []
         self._connected = False
+        self._watch_cancelled = False
 
     async def connect(self, bucket: str, ttl: int | None = None) -> None:
         self._connected = True
@@ -62,14 +63,24 @@ class MockKVStore(KVStorePort):
 
     async def watch(self, key: str | None = None, prefix: str | None = None):
         """Mock watch that yields predefined events."""
-        for event in self.watch_events:
+        # Clear watch events after use to prevent re-yielding
+        events_to_yield = self.watch_events[:]
+        self.watch_events = []
+
+        for event in events_to_yield:
             yield event
             await asyncio.sleep(0.01)  # Small delay to simulate real behavior
 
-        # If no events or all events consumed, wait indefinitely (like real watch)
-        # This prevents the watch from completing and causing a tight retry loop
-        while True:
-            await asyncio.sleep(1.0)
+        # If no events or all events consumed, wait until cancelled
+        # Use a shorter sleep to be more responsive to cancellation
+        try:
+            while not self._watch_cancelled:
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            # Clean shutdown when cancelled
+            pass
+        finally:
+            self._watch_cancelled = False
 
     async def history(self, key: str, limit: int = 10) -> list[KVEntry]:
         return []
@@ -235,20 +246,30 @@ class TestWatchableCachedServiceDiscovery:
             watch=WatchConfig(enabled=True),
         )
 
-        async with WatchableCachedServiceDiscovery(
+        discovery = WatchableCachedServiceDiscovery(
             basic_discovery, mock_kv_store, config, mock_metrics, mock_logger
-        ) as discovery:
+        )
+
+        try:
+            # Start watch manually
+            discovery._start_watch()
+
             # Populate cache
             await discovery.discover_instances("test-service")
 
             # Wait for watch events to be processed
-            await asyncio.sleep(0.5)
+            # Events should be processed quickly
+            await asyncio.sleep(0.05)
 
             # Check that cache was invalidated (logger calls)
+            # The events should trigger cache invalidation
+            info_logs = [str(call) for call in mock_logger.info.call_args_list]
             assert any(
-                "Cache invalidated due to watch event" in str(call)
-                for call in mock_logger.info.call_args_list
-            )
+                "Cache invalidated due to watch event" in log for log in info_logs
+            ), f"Expected cache invalidation log not found. Logs: {info_logs}"
+        finally:
+            # Stop the watch task
+            await discovery.stop_watch()
 
     async def test_watch_reconnection_logic(self, mock_registry, mock_logger, mock_metrics):
         """Test watch reconnection on failures."""
@@ -257,7 +278,8 @@ class TestWatchableCachedServiceDiscovery:
 
         async def failing_watch(*args, **kwargs):
             raise Exception("Connection lost")
-            yield  # Make it a generator
+            if False:  # This makes it a generator without yielding
+                yield
 
         failing_kv_store.watch = failing_watch
 
@@ -435,10 +457,12 @@ class TestWatchableCachedServiceDiscovery:
         async def slow_watch(*args, **kwargs):
             try:
                 while True:
-                    await asyncio.sleep(10)  # Never yields
-                    yield  # Make it a generator
+                    await asyncio.sleep(0.1)  # Small delay to avoid CPU spin
+                    # Never yields any events
             except asyncio.CancelledError:
                 raise
+            if False:  # This makes it a generator without yielding
+                yield
 
         slow_kv_store.watch = slow_watch
 
@@ -500,15 +524,23 @@ class TestWatchableCachedServiceDiscovery:
         # Create a KV store that fails once then succeeds
         failing_kv_store = MockKVStore()
         call_count = 0
+        continue_watch = True
 
         async def intermittent_watch(*args, **kwargs):
-            nonlocal call_count
+            nonlocal call_count, continue_watch
             call_count += 1
             if call_count == 1:
                 raise Exception("First call fails")
-            # Second call succeeds but returns no events
-            return
-            yield  # Make it a generator
+            # Second call succeeds - create a proper async generator
+            # that completes after _watch_kv_store enters the loop
+            if call_count == 2:
+                # Yield nothing to let the async for loop start
+                # Then complete to trigger the reset
+                return
+            # For subsequent calls, keep running until stopped
+            while continue_watch:
+                await asyncio.sleep(0.01)
+            yield  # Makes this an async generator
 
         failing_kv_store.watch = intermittent_watch
 
@@ -516,7 +548,7 @@ class TestWatchableCachedServiceDiscovery:
         config = WatchableCacheConfig(
             watch=WatchConfig(
                 enabled=True,
-                reconnect_delay=0.1,
+                reconnect_delay=0.05,  # Shorter delay for faster test
                 max_reconnect_attempts=5,
             ),
         )
@@ -525,15 +557,34 @@ class TestWatchableCachedServiceDiscovery:
             basic_discovery, failing_kv_store, config, mock_metrics, mock_logger
         )
 
-        # Wait for the failure and reconnect
-        await asyncio.sleep(0.3)
+        try:
+            # Start the watch manually
+            discovery._start_watch()
 
-        # Check that attempts were incremented then reset
-        # After first failure, attempts should be 1
-        # After successful reconnect, should be 0
-        assert discovery._reconnect_attempts == 0
+            # Wait for first failure
+            await asyncio.sleep(0.02)
 
-        await discovery.stop_watch()
+            # After first failure, attempts should be 1
+            assert discovery._reconnect_attempts == 1
+
+            # Wait for reconnect delay and successful second call
+            await asyncio.sleep(0.08)
+
+            # The second call completes immediately, resetting attempts
+            # Wait a bit for the reset to happen
+            await asyncio.sleep(0.05)
+
+            # After successful watch completion, attempts should be reset
+            assert discovery._reconnect_attempts == 0
+
+            # Verify we had at least 2 calls (might be in 3rd by now)
+            assert call_count >= 2
+
+        finally:
+            # Stop watching
+            continue_watch = False
+            # Ensure we stop the watch task
+            await discovery.stop_watch()
 
     async def test_stop_watch_returns_early_if_no_task(
         self, mock_registry, mock_kv_store, mock_logger, mock_metrics
