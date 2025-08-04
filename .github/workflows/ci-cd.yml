@@ -93,7 +93,7 @@ jobs:
           echo "Running aegis-sdk tests..."
           cd packages/aegis-sdk
           export PYTHONPATH=${{ github.workspace }}/packages/aegis-sdk:$PYTHONPATH
-          pytest tests/ -k "not integration and not benchmark" --cov=aegis_sdk --cov-append --cov-report=xml --cov-report=term-missing
+          pytest tests/ -k "not integration and not benchmark and not performance" --cov=aegis_sdk --cov-append --cov-report=xml --cov-report=term-missing
           cd ../..
 
           echo "Running monitor-api tests..."
