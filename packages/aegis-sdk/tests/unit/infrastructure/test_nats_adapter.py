@@ -746,10 +746,10 @@ class TestNATSAdapterEvents:
 
         # Should use JetStream
         mock_js.subscribe.assert_called_once()
-        call_args = mock_js.subscribe.call_args
-        assert call_args.args[0] == "events.user.created"
-        assert call_args.kwargs["durable"] == "test-durable"
-        assert call_args.kwargs["manual_ack"] is True
+        call_kwargs = mock_js.subscribe.call_args.kwargs
+        assert call_kwargs["subject"] == "events.user.created"
+        assert call_kwargs["durable"] == "test-durable"
+        assert call_kwargs["manual_ack"] is True
 
     @pytest.mark.asyncio
     async def test_subscribe_event_no_jetstream(self):

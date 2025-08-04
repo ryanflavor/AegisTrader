@@ -101,8 +101,10 @@ class TestServiceLifecycle:
             "test-service", "test_method", test_handler
         )
 
-        # Verify event subscription
+        # Verify event subscription with mode parameter
         mock_message_bus.subscribe_event.assert_called_once()
+        call_args = mock_message_bus.subscribe_event.call_args
+        assert call_args.kwargs["mode"] == "compete"  # Default mode
 
         # Verify command handler registration
         mock_message_bus.register_command_handler.assert_called_once_with(
@@ -409,7 +411,10 @@ class TestEventMethods:
             pass
 
         assert "order.created" in service._event_handlers
-        assert handle_order_created in service._event_handlers["order.created"]
+        handlers = service._event_handlers["order.created"]
+        assert len(handlers) == 1
+        assert handlers[0][0] == handle_order_created
+        assert handlers[0][1] == "compete"  # Default mode
 
     def test_subscribe_multiple_handlers(self, mock_message_bus):
         """Test multiple handlers for same event pattern."""
@@ -424,8 +429,9 @@ class TestEventMethods:
             pass
 
         assert len(service._event_handlers["user.*"]) == 2
-        assert handler1 in service._event_handlers["user.*"]
-        assert handler2 in service._event_handlers["user.*"]
+        handler_funcs = [h[0] for h in service._event_handlers["user.*"]]
+        assert handler1 in handler_funcs
+        assert handler2 in handler_funcs
 
     @pytest.mark.asyncio
     async def test_publish_event(self, mock_message_bus):
@@ -892,7 +898,10 @@ class TestServiceRegistration:
         # Check handler was registered with full pattern
         expected_pattern = "events.order.created"
         assert expected_pattern in service._event_handlers
-        assert handler in service._event_handlers[expected_pattern]
+        handlers = service._event_handlers[expected_pattern]
+        assert len(handlers) == 1
+        assert handlers[0][0] == handler
+        assert handlers[0][1] == "compete"  # Default mode
 
     @pytest.mark.asyncio
     async def test_emit_event_helper(self, mock_message_bus):

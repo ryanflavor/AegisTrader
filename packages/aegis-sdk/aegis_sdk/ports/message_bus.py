@@ -41,9 +41,16 @@ class MessageBusPort(ABC):
     # Event Operations
     @abstractmethod
     async def subscribe_event(
-        self, pattern: str, handler: Callable, durable: str | None = None
+        self, pattern: str, handler: Callable, durable: str | None = None, mode: str = "compete"
     ) -> None:
-        """Subscribe to events matching pattern."""
+        """Subscribe to events matching pattern.
+
+        Args:
+            pattern: Event pattern to subscribe to
+            handler: Handler function for events
+            durable: Durable subscription name
+            mode: Subscription mode - "compete" (load balanced) or "broadcast" (all instances)
+        """
         ...
 
     @abstractmethod

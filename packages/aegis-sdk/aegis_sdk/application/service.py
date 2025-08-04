@@ -72,7 +72,7 @@ class Service:
 
         # Handler registries
         self._rpc_handlers: dict[str, Callable] = {}
-        self._event_handlers: dict[str, list[Callable]] = {}
+        self._event_handlers: dict[str, list[tuple[Callable, str]]] = {}  # (handler, mode)
         self._command_handlers: dict[str, Callable] = {}
 
         # Health management
@@ -113,12 +113,12 @@ class Service:
             await self._bus.register_rpc_handler(self.service_name, method, handler)
 
         # Register all event handlers
-        for pattern, handlers in self._event_handlers.items():
-            for handler in handlers:
+        for pattern, handler_tuples in self._event_handlers.items():
+            for handler, mode in handler_tuples:
                 durable_name = (
                     f"{self.service_name}-{pattern.replace('*', 'star').replace('.', '-')}"
                 )
-                await self._bus.subscribe_event(pattern, handler, durable_name)
+                await self._bus.subscribe_event(pattern, handler, durable_name, mode=mode)
 
         # Register all command handlers
         for command_name, handler in self._command_handlers.items():
@@ -274,23 +274,32 @@ class Service:
         return True  # Looks like a service name
 
     # Event Methods
-    def subscribe(self, pattern: str, durable: bool = True) -> Callable[[Callable], Callable]:
+    def subscribe(self, pattern: str, mode: str = "compete") -> Callable[[Callable], Callable]:
         """Decorator to subscribe to events.
+
+        Args:
+            pattern: Event pattern to subscribe to
+            mode: "compete" (default) - load balanced, only one instance processes
+                  "broadcast" - all instances receive the event
 
         Example:
             @service.subscribe("order.*")
             async def handle_order_event(event: Event):
                 print(f"Order event: {event.event_type}")
+
+            @service.subscribe("config.updated", mode="broadcast")
+            async def handle_config_update(event: Event):
+                print("Config updated on all instances")
         """
+        # Validate mode
+        valid_modes = ["compete", "broadcast"]
+        if mode not in valid_modes:
+            raise ValueError(f"Invalid mode: {mode}. Must be one of {valid_modes}")
 
         def decorator(handler: Callable) -> Callable:
             if pattern not in self._event_handlers:
                 self._event_handlers[pattern] = []
-            self._event_handlers[pattern].append(handler)
-
-            # Durable subscription name will be created during registration
-
-            # Registration will happen in start()
+            self._event_handlers[pattern].append((handler, mode))
 
             return handler
 
@@ -533,19 +542,27 @@ class Service:
         """
         self._command_handlers[command_name] = handler
 
-    async def subscribe_event(self, domain: str, event_type: str, handler: Callable) -> None:
+    async def subscribe_event(
+        self, domain: str, event_type: str, handler: Callable, mode: str = "compete"
+    ) -> None:
         """Subscribe to an event pattern.
 
         Args:
             domain: The event domain
             event_type: The event type (can include wildcards)
             handler: The handler function
+            mode: Subscription mode - "compete" (load balanced) or "broadcast" (all instances)
         """
+        # Validate mode
+        valid_modes = ["compete", "broadcast"]
+        if mode not in valid_modes:
+            raise ValueError(f"Invalid mode: {mode}. Must be one of {valid_modes}")
+
         # Use the full event pattern that matches SubjectPatterns.event()
         pattern = SubjectPatterns.event(domain, event_type)
         if pattern not in self._event_handlers:
             self._event_handlers[pattern] = []
-        self._event_handlers[pattern].append(handler)
+        self._event_handlers[pattern].append((handler, mode))
 
     async def emit_event(self, domain: str, event_type: str, payload: dict[str, Any]) -> None:
         """Emit an event.

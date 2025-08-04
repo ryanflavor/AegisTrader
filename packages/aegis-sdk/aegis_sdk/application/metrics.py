@@ -4,7 +4,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from .metrics_models import MetricsSnapshot, MetricsSummaryData
+from ..domain.metrics_models import MetricsSnapshot, MetricsSummaryData
 
 
 class MetricsSummary:

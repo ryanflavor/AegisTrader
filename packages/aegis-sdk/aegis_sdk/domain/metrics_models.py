@@ -1,12 +1,12 @@
-"""Pydantic models for metrics data."""
+"""Domain models for metrics data following DDD principles."""
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class MetricsSummaryData(BaseModel):
-    """Summary statistics for a metric."""
+    """Summary statistics for a metric - Value Object."""
 
-    model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True, frozen=True)
 
     count: int = Field(default=0, ge=0, description="Number of values recorded")
     average: float = Field(default=0.0, description="Average value")
@@ -18,7 +18,7 @@ class MetricsSummaryData(BaseModel):
 
 
 class MetricsSnapshot(BaseModel):
-    """Complete metrics snapshot."""
+    """Complete metrics snapshot - Entity representing system metrics at a point in time."""
 
     model_config = ConfigDict(extra="forbid", strict=True, validate_assignment=True)
 
