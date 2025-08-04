@@ -8,7 +8,14 @@ Domain models are free from any infrastructure dependencies.
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+)
 
 from ..utils.timezone import utc8_timestamp_factory
 
@@ -68,17 +75,13 @@ class SystemStatus(BaseModel):
 
     @field_validator("uptime_seconds")
     @classmethod
-    def validate_uptime(cls, v: float, info: Any) -> float:
-        """Validate uptime is consistent with timestamps."""
-        # In Pydantic v2, use info.data to access other field values during validation
-        if hasattr(info, "data") and info.data:
-            timestamp = info.data.get("timestamp")
-            start_time = info.data.get("start_time")
-            if timestamp and start_time:
-                expected_uptime = (timestamp - start_time).total_seconds()
-                # Allow small discrepancy due to processing time
-                if abs(v - expected_uptime) > 1.0:
-                    raise ValueError("Uptime inconsistent with timestamp difference")
+    def validate_uptime(cls, v: float, info: ValidationInfo) -> float:
+        """Validate uptime is positive and reasonable."""
+        if v < 0:
+            raise ValueError("Uptime cannot be negative")
+        # Basic sanity check - uptime shouldn't exceed 10 years
+        if v > 315576000:  # 10 years in seconds
+            raise ValueError("Uptime exceeds reasonable limit")
         return v
 
 
@@ -194,15 +197,27 @@ class ServiceDefinition(BaseModel):
         if isinstance(v, datetime):
             return v
         if isinstance(v, str):
+            # Require ISO 8601 format with time component
+            if not v:
+                raise ValueError("Timestamp cannot be empty")
+            # Must contain 'T' for ISO 8601 datetime format
+            if "T" not in v:
+                raise ValueError(
+                    f"Invalid timestamp format: {v}. "
+                    "Must be ISO 8601 format with time (e.g., 2024-01-01T00:00:00Z)"
+                )
             # Handle ISO format with Z or timezone
-            return datetime.fromisoformat(v.replace("Z", "+00:00"))
+            try:
+                return datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError as e:
+                raise ValueError(f"Invalid timestamp format: {v}") from e
         raise ValueError(f"Invalid timestamp format: {v}")
 
     @field_validator("updated_at")
     @classmethod
-    def validate_updated_after_created(cls, v: datetime, info: Any) -> datetime:
+    def validate_updated_after_created(cls, v: datetime, info: ValidationInfo) -> datetime:
         """Validate updated_at is not before created_at."""
-        if hasattr(info, "data") and info.data and "created_at" in info.data:
+        if info.data and "created_at" in info.data:
             created_at = info.data["created_at"]
             if v < created_at:
                 raise ValueError("updated_at cannot be before created_at")

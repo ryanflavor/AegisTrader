@@ -177,16 +177,16 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
 
             logger.info(f"Updated service definition: {key}")
 
-        except ValueError as e:
-            # Check if it's a revision mismatch
+        except ValueError:
+            # Re-raise ValueError for application layer to handle
+            raise
+        except Exception as e:
             error_msg = str(e)
-            if "Revision mismatch" in error_msg or "revision check failed" in error_msg:
+            # Check if it's a revision mismatch error from the SDK
+            if "Revision mismatch" in error_msg or "expected" in error_msg:
                 # Infrastructure reports generic error
                 # Application layer will translate to ConcurrentUpdateException
                 raise ValueError(f"Revision mismatch for key '{key}'") from e
-            # Re-raise other ValueErrors
-            raise
-        except Exception as e:
             logger.error(f"Failed to update key '{key}': {e}")
             raise KVStoreException(f"Failed to update key '{key}': {e}") from e
 

@@ -182,7 +182,10 @@ class TestAegisSDKKVAdapter:
         mock_entry = Mock()
         mock_entry.value = service_definition.model_dump()
         mock_kv_store.get = AsyncMock(return_value=mock_entry)
-        mock_kv_store.put = AsyncMock(side_effect=ValueError("revision check failed"))
+        # Simulate a revision mismatch error from the SDK (not ValueError)
+        mock_kv_store.put = AsyncMock(
+            side_effect=Exception("Revision mismatch for key 'test-service': expected 41, got 42")
+        )
 
         adapter._kv_store = mock_kv_store
         adapter._connected = True
@@ -190,7 +193,8 @@ class TestAegisSDKKVAdapter:
         # Act & Assert
         with pytest.raises(ValueError) as exc_info:
             await adapter.update("test-service", service_definition, revision=41)
-        assert "Revision mismatch" in str(exc_info.value)
+        # The adapter transforms revision mismatch exceptions to ValueError
+        assert str(exc_info.value) == "Revision mismatch for key 'test-service'"
 
     @pytest.mark.asyncio
     async def test_delete_existing_key(self, adapter: AegisSDKKVAdapter) -> None:

@@ -17,14 +17,15 @@ class TestServiceDefinition:
     def test_valid_service_definition(self) -> None:
         """Test creating a valid service definition."""
         # Arrange
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
         service_data = {
             "service_name": "payment-service",
             "owner": "payments-team",
             "description": "Handles payment processing",
             "version": "1.0.0",
-            "created_at": now,
-            "updated_at": now,
+            "created_at": now_iso,
+            "updated_at": now_iso,
         }
 
         # Act
@@ -35,6 +36,9 @@ class TestServiceDefinition:
         assert service.owner == "payments-team"
         assert service.description == "Handles payment processing"
         assert service.version == "1.0.0"
+        # Timestamps are parsed as datetime objects, not strings
+        assert isinstance(service.created_at, datetime)
+        assert isinstance(service.updated_at, datetime)
         assert service.created_at == now
         assert service.updated_at == now
 
@@ -154,16 +158,26 @@ class TestServiceDefinition:
             "version": "1.0.0",
         }
 
-        # Valid timestamps
+        # Valid timestamps - all should be parsed to datetime objects
         valid_timestamps = [
-            "2024-01-01T00:00:00Z",
-            "2024-01-01T00:00:00+00:00",
-            "2024-01-01T00:00:00.123456Z",
-            datetime.now(UTC).isoformat(),
+            ("2024-01-01T00:00:00Z", datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)),
+            ("2024-01-01T00:00:00+00:00", datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)),
+            ("2024-01-01T00:00:00.123456Z", datetime(2024, 1, 1, 0, 0, 0, 123456, tzinfo=UTC)),
         ]
-        for timestamp in valid_timestamps:
-            service = ServiceDefinition(created_at=timestamp, updated_at=timestamp, **base_data)
-            assert service.created_at == timestamp
+        for timestamp_str, expected_dt in valid_timestamps:
+            service = ServiceDefinition(
+                created_at=timestamp_str, updated_at=timestamp_str, **base_data
+            )
+            assert isinstance(service.created_at, datetime)
+            assert isinstance(service.updated_at, datetime)
+            assert service.created_at == expected_dt
+            assert service.updated_at == expected_dt
+
+        # Test with datetime object directly
+        now = datetime.now(UTC)
+        service = ServiceDefinition(created_at=now, updated_at=now, **base_data)
+        assert service.created_at == now
+        assert service.updated_at == now
 
         # Invalid timestamps
         invalid_timestamps = [
@@ -210,14 +224,15 @@ class TestServiceDefinition:
 
     def test_model_dump_json(self) -> None:
         """Test model serialization to JSON."""
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
         service = ServiceDefinition(
             service_name="test-service",
             owner="test-team",
             description="Test service",
             version="1.0.0",
-            created_at=now,
-            updated_at=now,
+            created_at=now_iso,
+            updated_at=now_iso,
         )
 
         # Test JSON serialization
@@ -225,15 +240,46 @@ class TestServiceDefinition:
         assert isinstance(json_str, str)
         assert "test-service" in json_str
         assert "test-team" in json_str
+        # Check that timestamps are serialized as ISO strings
+        assert now_iso in json_str
 
-        # Test dict dump
+        # Test dict dump - timestamps should be serialized as ISO strings
         data = service.model_dump()
         assert data["service_name"] == "test-service"
         assert data["owner"] == "test-team"
         assert data["description"] == "Test service"
         assert data["version"] == "1.0.0"
-        assert data["created_at"] == now
-        assert data["updated_at"] == now
+        # The model serializes datetime objects to ISO strings
+        assert data["created_at"] == now_iso
+        assert data["updated_at"] == now_iso
+
+    def test_to_iso_dict_method(self) -> None:
+        """Test the to_iso_dict method returns ISO formatted timestamps."""
+        now = datetime.now(UTC)
+        now_iso = now.isoformat()
+        service = ServiceDefinition(
+            service_name="test-service",
+            owner="test-team",
+            description="Test service",
+            version="1.0.0",
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
+
+        # Call to_iso_dict
+        iso_dict = service.to_iso_dict()
+
+        # Verify it's a dict with ISO timestamps
+        assert isinstance(iso_dict, dict)
+        assert iso_dict["service_name"] == "test-service"
+        assert iso_dict["owner"] == "test-team"
+        assert iso_dict["description"] == "Test service"
+        assert iso_dict["version"] == "1.0.0"
+        # Timestamps should be ISO strings
+        assert isinstance(iso_dict["created_at"], str)
+        assert isinstance(iso_dict["updated_at"], str)
+        assert iso_dict["created_at"] == now_iso
+        assert iso_dict["updated_at"] == now_iso
 
     def test_all_fields_required(self) -> None:
         """Test that all fields are required."""
