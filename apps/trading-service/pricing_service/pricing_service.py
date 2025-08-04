@@ -116,7 +116,7 @@ class PricingService(Service):
                 base_price = self._base_prices.get(symbol, 100.0)
 
                 # Add some random variation (-2% to +2%)
-                variation = random.uniform(0.98, 1.02)
+                variation = random.uniform(0.98, 1.02)  # nosec
                 current_price = round(base_price * variation, 2)
 
                 return {
@@ -204,7 +204,7 @@ class PricingService(Service):
                 await asyncio.sleep(5)
 
                 # Pick a random symbol to update
-                symbol = random.choice(list(self._base_prices.keys()))
+                symbol = random.choice(list(self._base_prices.keys()))  # nosec
 
                 # Get current price
                 price_data = await self.call_rpc(

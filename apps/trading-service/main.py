@@ -13,9 +13,9 @@ from aegis_sdk.infrastructure import (
     InMemoryMetrics,
     NATSAdapter,
     NATSKVStore,
-    SimpleLogger,
 )
 from aegis_sdk.infrastructure.kv_service_registry import KVServiceRegistry
+from aegis_sdk.infrastructure.simple_logger import SimpleLogger
 from order_service import OrderService
 from order_service.adapters import RemotePricingServiceAdapter
 from pricing_service import PricingService

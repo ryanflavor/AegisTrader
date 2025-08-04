@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class OrderSide(str, Enum):
@@ -51,6 +51,7 @@ class Order(BaseModel):
         strict=True,
         validate_assignment=True,
         arbitrary_types_allowed=False,
+        extra="forbid",  # Reject extra fields
     )
 
     order_id: str = Field(..., description="Unique order identifier", pattern=r"^ORD-\d{6}$")
@@ -92,3 +93,11 @@ class Order(BaseModel):
             if order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and v is None:
                 raise ValueError(f"Price is required for {order_type.value} orders")
         return v
+
+    @model_validator(mode="after")
+    def validate_order_consistency(self) -> Order:
+        """Validate order consistency after all fields are set."""
+        # Check price requirement for limit orders
+        if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and self.price is None:
+            raise ValueError(f"Price is required for {self.order_type.value} orders")
+        return self

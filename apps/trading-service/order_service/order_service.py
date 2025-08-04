@@ -73,7 +73,8 @@ class OrderService(Service):
         async def health(params: dict[str, Any]) -> dict[str, Any]:
             """Return service health status."""
             self._metrics.increment("rpc.health.calls")
-            self._metrics.gauge("orders.active", len(self._orders))
+            order_count = await self._order_repository.count()
+            self._metrics.gauge("orders.active", order_count)
             return {
                 "status": "healthy",
                 "service": self.service_name,
@@ -83,7 +84,7 @@ class OrderService(Service):
                     if self._start_time
                     else 0
                 ),
-                "order_count": len(self._orders),
+                "order_count": await self._order_repository.count(),
                 "metrics": self._metrics.get_all(),
             }
 

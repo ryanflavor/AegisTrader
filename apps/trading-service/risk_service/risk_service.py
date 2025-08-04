@@ -144,7 +144,7 @@ class RiskService(Service):
                 risk_score += 30
 
             # Random market risk factor
-            market_risk = random.uniform(0, 30)
+            market_risk = random.uniform(0, 30)  # nosec
             risk_score += market_risk
             if market_risk > 20:
                 risk_factors.append("HIGH_MARKET_VOLATILITY")
