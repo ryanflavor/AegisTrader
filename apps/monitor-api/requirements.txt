@@ -15,10 +15,3 @@ aegis-sdk
 python-json-logger==2.0.7
 structlog==24.4.0
 psutil==6.1.0
-
-# Development dependencies (optional, for testing)
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==6.0.0
-httpx==0.28.0
-testcontainers[nats]>=4.12.0
