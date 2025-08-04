@@ -102,10 +102,10 @@ jobs:
           pytest tests/ --cov=app --cov-append --cov-report=xml --cov-report=term-missing
           cd ../..
 
-          echo "Running trading-service tests..."
+          echo "Running trading-service tests (excluding K8s integration)..."
           cd apps/trading-service
           export PYTHONPATH=${{ github.workspace }}/apps/trading-service:$PYTHONPATH
-          pytest tests/ --cov=. --cov-append --cov-report=xml --cov-report=term-missing
+          pytest tests/ -k "not k8s" --cov=. --cov-append --cov-report=xml --cov-report=term-missing
           cd ../..
 
           echo "Running shared-contracts tests..."

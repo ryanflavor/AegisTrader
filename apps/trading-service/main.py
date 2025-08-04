@@ -71,13 +71,7 @@ class ServiceRunner:
         nats_url: str = "nats://localhost:4222",
     ) -> None:
         """Run the specified service type."""
-        print(f"🚀 Starting {service_type} service(s)...")
-
-        # Set up infrastructure
-        infra = await self.setup_infrastructure(nats_url)
-
-        # Create services based on type
-        services = []
+        # Validate service type first
         ServiceClass = {
             "order": OrderService,
             "pricing": PricingService,
@@ -86,6 +80,14 @@ class ServiceRunner:
 
         if not ServiceClass:
             raise ValueError(f"Unknown service type: {service_type}")
+
+        print(f"🚀 Starting {service_type} service(s)...")
+
+        # Set up infrastructure
+        infra = await self.setup_infrastructure(nats_url)
+
+        # Create services based on type
+        services = []
 
         # Create specified number of instances
         for i in range(instance_count):

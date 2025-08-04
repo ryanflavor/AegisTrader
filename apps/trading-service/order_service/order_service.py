@@ -263,7 +263,7 @@ class OrderService(Service):
                                 f"orders.risk_assessment.{risk_level_str.lower()}"
                             )
 
-                    except ValidationError as e:
+                    except (ValidationError, ValueError) as e:
                         if self._logger:
                             self._logger.error(
                                 f"Invalid risk level: {risk_level_str}", error=str(e)

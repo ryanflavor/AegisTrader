@@ -52,6 +52,28 @@ services:
     networks:
       - aegis-network
 
+  # Trading Service (Example services)
+  trading-service:
+    build:
+      context: .
+      dockerfile: apps/trading-service/Dockerfile
+      args:
+        - HTTP_PROXY=${HTTP_PROXY:-}
+        - HTTPS_PROXY=${HTTPS_PROXY:-}
+        - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1}
+    container_name: aegistrader-trading-service
+    image: aegistrader-trading-service
+    environment:
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVICE_TYPE=${SERVICE_TYPE:-ORDER}
+      - SERVICE_NAME=${SERVICE_NAME:-order-service}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - nats
+    networks:
+      - aegis-network
+
 networks:
   aegis-network:
     driver: bridge

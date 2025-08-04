@@ -2,10 +2,13 @@
 global:
   environment: development
 
-# Use existing images from current deployment
+# Monitor API with current deployment image
 monitor-api:
   image:
-    tag: "20250803-151359"  # Use existing image version
+    tag: "20250804-114418"  # Use existing image version
+  service:
+    port: 8100
+  containerPort: 8100
   resources:
     requests:
       cpu: 100m
@@ -13,10 +16,24 @@ monitor-api:
     limits:
       cpu: 500m
       memory: 512Mi
+  configMap:
+    data:
+      API_PORT: "8100"
+      NATS_URL: "nats://aegis-trader-nats:4222"
+      NATS_KV_BUCKET: "service-registry"
 
+# Monitor UI with current deployment image
 monitor-ui:
   image:
-    tag: "20250803-151359"  # Use existing image version
+    tag: "20250804-114418"  # Use existing image version
+  service:
+    port: 3100
+  waitForApiPort: 8100  # Must match monitor-api port
+  env:
+    - name: NEXT_PUBLIC_API_URL
+      value: "http://aegis-trader-monitor-api:8100"
+    - name: PORT
+      value: "3100"
   resources:
     requests:
       cpu: 100m
@@ -41,10 +58,12 @@ nats:
           cpu: "500m"
           memory: 1Gi
 
-# Reduce trading services for dev (disabled for initial test)
+# Trading services configuration for dev
 order-service:
-  enabled: false  # Disable until trading service image is built
-  replicaCount: 1
+  enabled: true
+  replicaCount: 2  # Reduced from 3 for dev
+  image:
+    tag: "20250803-151359"  # Will be updated when image is built
   resources:
     requests:
       cpu: 50m
@@ -54,8 +73,10 @@ order-service:
       memory: 256Mi
 
 pricing-service:
-  enabled: false  # Disable until trading service image is built
-  replicaCount: 1
+  enabled: true
+  replicaCount: 1  # Reduced from 2 for dev
+  image:
+    tag: "20250803-151359"  # Will be updated when image is built
   resources:
     requests:
       cpu: 50m
@@ -65,8 +86,10 @@ pricing-service:
       memory: 256Mi
 
 risk-service:
-  enabled: false  # Disable until trading service image is built
-  replicaCount: 1
+  enabled: true
+  replicaCount: 1  # Reduced from 2 for dev
+  image:
+    tag: "20250803-151359"  # Will be updated when image is built
   resources:
     requests:
       cpu: 50m

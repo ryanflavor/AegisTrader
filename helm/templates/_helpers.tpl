@@ -54,3 +54,14 @@ Create the namespace name
 {{- define "aegis-trader.namespace" -}}
 {{- default .Release.Namespace .Values.namespace }}
 {{- end }}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "aegis-trader.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "aegis-trader.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}

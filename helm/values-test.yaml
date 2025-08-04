@@ -86,15 +86,24 @@ monitor-ui:
       cpu: 300m
       memory: 512Mi
 
-# Trading services disabled for now
+# Trading services configuration
 order-service:
-  enabled: false
+  enabled: true
+  replicaCount: 2
+  image:
+    tag: "20250804-143101"
 
 pricing-service:
-  enabled: false
+  enabled: true
+  replicaCount: 1
+  image:
+    tag: "20250804-143101"
 
 risk-service:
-  enabled: false
+  enabled: true
+  replicaCount: 1
+  image:
+    tag: "20250804-143101"
 
 # Post-install configuration
 postInstall:

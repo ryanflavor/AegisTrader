@@ -1,6 +1,6 @@
 # Helm Refactored Makefile
-HELM_RELEASE_NAME ?= aegis-v2
-K8S_NAMESPACE ?= aegis-v2
+HELM_RELEASE_NAME ?= aegis-trader
+K8S_NAMESPACE ?= aegis-trader
 VERSION ?= $(shell date +%Y%m%d-%H%M%S)
 
 .PHONY: help
