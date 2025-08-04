@@ -62,6 +62,18 @@ jobs:
           if [ -f apps/monitor-api/requirements-dev.txt ]; then
             pip install -r apps/monitor-api/requirements-dev.txt
           fi
+          # Install trading-service dependencies
+          if [ -f apps/trading-service/requirements.txt ]; then
+            pip install -r apps/trading-service/requirements.txt
+          fi
+          if [ -f apps/trading-service/requirements-dev.txt ]; then
+            pip install -r apps/trading-service/requirements-dev.txt
+          fi
+          # Install shared-contracts in editable mode
+          if [ -f packages/shared-contracts/requirements.txt ]; then
+            pip install -r packages/shared-contracts/requirements.txt
+          fi
+          pip install -e packages/shared-contracts
 
       - name: Set up pre-commit
         run: |
@@ -88,6 +100,18 @@ jobs:
           cd apps/monitor-api
           export PYTHONPATH=${{ github.workspace }}/apps/monitor-api:$PYTHONPATH
           pytest tests/ --cov=app --cov-append --cov-report=xml --cov-report=term-missing
+          cd ../..
+
+          echo "Running trading-service tests..."
+          cd apps/trading-service
+          export PYTHONPATH=${{ github.workspace }}/apps/trading-service:$PYTHONPATH
+          pytest tests/ --cov=. --cov-append --cov-report=xml --cov-report=term-missing
+          cd ../..
+
+          echo "Running shared-contracts tests..."
+          cd packages/shared-contracts
+          export PYTHONPATH=${{ github.workspace }}/packages/shared-contracts:$PYTHONPATH
+          pytest tests/ --cov=. --cov-append --cov-report=xml --cov-report=term-missing
           cd ../..
 
           # Check overall coverage
