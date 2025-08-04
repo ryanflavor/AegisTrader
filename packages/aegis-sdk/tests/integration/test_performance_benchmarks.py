@@ -39,18 +39,31 @@ class BenchmarkMetrics:
 @pytest.fixture(scope="module")
 async def nats_container():
     """Start NATS server in container for benchmarks."""
-    with DockerCompose(
-        filepath=".",
-        compose_file_name="docker-compose.test.yml",
-        pull=True,
-        build=False,
-    ) as compose:
-        # Wait for NATS to be ready
-        await asyncio.sleep(2)
+    import os
+    import tempfile
 
-        # Get NATS port from docker-compose
-        port = compose.get_service_port("nats", 4222)
-        yield f"nats://localhost:{port}"
+    # Create temporary docker-compose file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+        f.write(DOCKER_COMPOSE_TEST)
+        compose_file = f.name
+
+    try:
+        with DockerCompose(
+            filepath=os.path.dirname(compose_file),
+            compose_file_name=os.path.basename(compose_file),
+            pull=True,
+            build=False,
+        ) as compose:
+            # Wait for NATS to be ready
+            await asyncio.sleep(2)
+
+            # Get NATS port from docker-compose
+            port = compose.get_service_port("nats", 4222)
+            yield f"nats://localhost:{port}"
+    finally:
+        # Clean up temporary file
+        if os.path.exists(compose_file):
+            os.unlink(compose_file)
 
 
 @pytest.fixture
@@ -431,9 +444,4 @@ services:
       retries: 5
 """
 
-# Write docker-compose.test.yml
-with open(
-    "/home/ryan/workspace/github/AegisTrader/packages/aegis-sdk/docker-compose.test.yml",
-    "w",
-) as f:
-    f.write(DOCKER_COMPOSE_TEST)
+# Docker compose content will be written when needed in test setup
