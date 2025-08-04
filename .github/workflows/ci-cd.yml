@@ -53,6 +53,11 @@ jobs:
           if [ -f packages/aegis-sdk/requirements-dev.txt ]; then
             pip install -r packages/aegis-sdk/requirements-dev.txt
           fi
+          # Install shared-contracts first (as it's a dependency)
+          if [ -f packages/shared-contracts/requirements.txt ]; then
+            pip install -r packages/shared-contracts/requirements.txt
+          fi
+          pip install -e packages/shared-contracts
           # Install aegis-sdk in editable mode
           pip install -e packages/aegis-sdk
           # Install dependencies for each service
@@ -69,11 +74,6 @@ jobs:
           if [ -f apps/trading-service/requirements-dev.txt ]; then
             pip install -r apps/trading-service/requirements-dev.txt
           fi
-          # Install shared-contracts in editable mode
-          if [ -f packages/shared-contracts/requirements.txt ]; then
-            pip install -r packages/shared-contracts/requirements.txt
-          fi
-          pip install -e packages/shared-contracts
 
       - name: Set up pre-commit
         run: |
