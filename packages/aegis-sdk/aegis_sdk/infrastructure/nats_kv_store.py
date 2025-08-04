@@ -16,7 +16,6 @@ from ..domain.exceptions import (
     KVTTLNotSupportedError,
 )
 from ..domain.models import KVEntry, KVOptions, KVWatchEvent
-from ..domain.value_objects import SanitizedKey
 from ..ports.kv_store import KVStorePort
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
@@ -57,22 +56,27 @@ class NATSKVStore(KVStorePort):
         # Keep mapping of sanitized to original keys for reverse lookup
         self._key_mapping: dict[str, str] = {}
 
-    def _sanitize_key(self, key: str) -> SanitizedKey:
-        """Create a sanitized key value object.
+    def _sanitize_key(self, key: str) -> tuple[str, str]:
+        """Sanitize a key for NATS compatibility.
 
         Args:
             key: The original key
 
         Returns:
-            SanitizedKey value object
+            Tuple of (original_key, sanitized_key)
         """
-        sanitized_key = SanitizedKey.create(key, sanitize=self._sanitize_keys)
+        from .key_sanitizer import KeySanitizer
+
+        if not self._sanitize_keys:
+            return key, key
+
+        sanitized = KeySanitizer.sanitize(key)
 
         # Store mapping for reverse lookup if key was sanitized
-        if sanitized_key.was_sanitized:
-            self._key_mapping[sanitized_key.sanitized] = sanitized_key.original
+        if key != sanitized:
+            self._key_mapping[sanitized] = key
 
-        return sanitized_key
+        return key, sanitized
 
     def _get_original_key(self, sanitized_key: str) -> str:
         """Get the original key from a sanitized key.
@@ -222,8 +226,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("get")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         with self._metrics.timer(f"kv.get.{self._bucket_name}"):
             try:
@@ -271,8 +274,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("put")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         with self._metrics.timer(f"kv.put.{self._bucket_name}"):
             try:
@@ -365,8 +367,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("delete")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         with self._metrics.timer(f"kv.delete.{self._bucket_name}"):
             try:
@@ -388,8 +389,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("exists")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         try:
             await self._kv.get(safe_key)
@@ -466,8 +466,7 @@ class NATSKVStore(KVStorePort):
 
         # Set up watch based on key or prefix
         if key:
-            sanitized_key = self._sanitize_key(key)
-            safe_key = sanitized_key.sanitized
+            original_key, safe_key = self._sanitize_key(key)
             # Watch only this specific key, don't include history
             watcher = await self._kv.watch(safe_key, include_history=False)
         elif prefix:
@@ -580,8 +579,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("history")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         try:
             # Get history from NATS KV
@@ -628,8 +626,7 @@ class NATSKVStore(KVStorePort):
             raise KVNotConnectedError("purge")
 
         # Sanitize key
-        sanitized_key = self._sanitize_key(key)
-        safe_key = sanitized_key.sanitized
+        original_key, safe_key = self._sanitize_key(key)
 
         await self._kv.purge(safe_key)
         self._metrics.increment("kv.purge")

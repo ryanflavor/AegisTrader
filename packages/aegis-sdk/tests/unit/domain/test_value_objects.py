@@ -8,7 +8,6 @@ from aegis_sdk.domain.value_objects import (
     InstanceId,
     MethodName,
     Priority,
-    SanitizedKey,
     ServiceName,
 )
 
@@ -510,91 +509,6 @@ class TestValueObjectEdgeCases:
         # Verify NotImplemented is returned (leads to TypeError)
         result = priority.__lt__("string")
         assert result == NotImplemented
-
-    def test_sanitized_key_creation(self):
-        """Test SanitizedKey creation and sanitization."""
-        # Test without sanitization
-        key = SanitizedKey.create("simple_key", sanitize=False)
-        assert key.original == "simple_key"
-        assert key.sanitized == "simple_key"
-        assert not key.was_sanitized
-
-        # Test with sanitization - spaces
-        key = SanitizedKey.create("key with spaces", sanitize=True)
-        assert key.original == "key with spaces"
-        assert key.sanitized == "key_with_spaces"
-        assert key.was_sanitized
-
-        # Test with multiple invalid characters
-        key = SanitizedKey.create("key.with*special>chars/and\\path:colon", sanitize=True)
-        assert key.original == "key.with*special>chars/and\\path:colon"
-        assert key.sanitized == "key_with_special_chars_and_path_colon"
-        assert key.was_sanitized
-
-        # Test with tabs
-        key = SanitizedKey.create("key\twith\ttabs", sanitize=True)
-        assert key.original == "key\twith\ttabs"
-        assert key.sanitized == "key_with_tabs"
-        assert key.was_sanitized
-
-    def test_sanitized_key_validation(self):
-        """Test SanitizedKey validation."""
-        # Empty original key should fail
-        with pytest.raises(ValidationError) as exc_info:
-            SanitizedKey(original="", sanitized="something")
-        assert "at least 1 character" in str(exc_info.value)
-
-        # Whitespace-only original key should fail
-        with pytest.raises(ValidationError) as exc_info:
-            SanitizedKey.create("   ", sanitize=True)
-        assert "cannot be empty or contain only whitespace" in str(exc_info.value)
-
-    def test_sanitized_key_equality_and_hash(self):
-        """Test SanitizedKey equality and hashing."""
-        key1 = SanitizedKey.create("test key", sanitize=True)
-        key2 = SanitizedKey.create("test key", sanitize=True)
-        key3 = SanitizedKey.create("test_key", sanitize=False)
-        key4 = SanitizedKey.create("other key", sanitize=True)
-
-        # Same original and sanitized
-        assert key1 == key2
-        assert hash(key1) == hash(key2)
-
-        # Different original but same sanitized
-        assert key1 != key3
-        assert hash(key1) != hash(key3)
-
-        # Different keys
-        assert key1 != key4
-
-        # Comparison with non-SanitizedKey
-        assert key1 != "test key"
-        assert key1 != {"original": "test key", "sanitized": "test_key"}
-        assert key1 is not None
-
-    def test_sanitized_key_string_operations(self):
-        """Test SanitizedKey string operations."""
-        key = SanitizedKey.create("test.key*value", sanitize=True)
-
-        # str() returns sanitized value
-        assert str(key) == "test_key_value"
-
-        # repr() shows both values
-        assert repr(key) == "SanitizedKey(original='test.key*value', sanitized='test_key_value')"
-
-    def test_sanitized_key_all_invalid_chars(self):
-        """Test sanitization of all NATS invalid characters."""
-        # Test each invalid character individually
-        for char in SanitizedKey.INVALID_CHARS:
-            key = SanitizedKey.create(f"prefix{char}suffix", sanitize=True)
-            assert key.sanitized == "prefix_suffix"
-            assert char not in key.sanitized
-
-        # Test all invalid characters together
-        all_invalid = "".join(SanitizedKey.INVALID_CHARS)
-        key = SanitizedKey.create(f"start{all_invalid}end", sanitize=True)
-        expected = "start" + ("_" * len(SanitizedKey.INVALID_CHARS)) + "end"
-        assert key.sanitized == expected
 
     def test_edge_case_combinations(self):
         """Test various edge case combinations."""

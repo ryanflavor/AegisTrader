@@ -31,7 +31,6 @@ from .models import (
     ServiceInstance,
 )
 from .patterns import SubjectPatterns
-from .value_objects import SanitizedKey
 
 __all__ = [
     # Exceptions
@@ -56,7 +55,6 @@ __all__ = [
     "RPCError",
     "RPCRequest",
     "RPCResponse",
-    "SanitizedKey",
     "SerializationError",
     "ServiceError",
     "ServiceInfo",
