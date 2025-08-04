@@ -4,11 +4,17 @@ This module defines all FastAPI routes, keeping the web framework
 concerns separate from the business logic.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ...application.monitoring_service import MonitoringService
 from .dependencies import get_monitoring_service
+from .service_instance_routes import router as instance_router
+from .service_routes import router as service_router
+
+logger = logging.getLogger(__name__)
 
 
 # Response models for API (DTOs)
@@ -59,12 +65,12 @@ class DetailedHealthResponse(BaseModel):
 # Create router
 router = APIRouter()
 
-# Import and include service registry routes
-from .service_instance_routes import router as instance_router  # noqa: E402
-from .service_routes import router as service_router  # noqa: E402
-
+# Include service registry routes
 router.include_router(service_router)
+logger.info(f"Included service_router with prefix: {service_router.prefix}")
+
 router.include_router(instance_router)
+logger.info(f"Included instance_router with prefix: {instance_router.prefix}")
 
 
 @router.get("/health", response_model=HealthResponse)

@@ -1,263 +1,388 @@
 """Unit tests for ServiceInstanceRepositoryAdapter.
 
-These tests verify the repository adapter behavior using mocks,
-ensuring proper translation between domain models and infrastructure.
+These tests verify the repository adapter implementation
+for service instance persistence and retrieval.
 """
+
+from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from app.domain.exceptions import KVStoreException
 from app.domain.models import ServiceInstance
-from app.infrastructure.service_instance_repository_adapter import (
-    ServiceInstanceRepositoryAdapter,
-)
+from app.infrastructure.service_instance_repository_adapter import ServiceInstanceRepositoryAdapter
 
-
-@pytest.fixture
-def mock_kv_store():
-    """Create a mock KV store for testing."""
-    return AsyncMock()
-
-
-@pytest.fixture
-def repository(mock_kv_store):
-    """Create a repository adapter with mocked dependencies."""
-    return ServiceInstanceRepositoryAdapter(mock_kv_store)
-
-
-@pytest.fixture
-def sample_instance_data():
-    """Create sample instance data as it would be stored in KV."""
-    return {
-        "service_name": "test-service",
-        "instance_id": "test-01",
-        "version": "1.0.0",
-        "status": "ACTIVE",
-        "last_heartbeat": datetime.now(UTC).isoformat(),
-        "metadata": {"region": "us-east-1"},
-    }
-
-
-def create_kv_entry(data):
-    """Helper to create a mock KV entry."""
-    entry = Mock()
-    entry.value = json.dumps(data).encode()
-    return entry
+if TYPE_CHECKING:
+    pass
 
 
 class TestServiceInstanceRepositoryAdapter:
     """Test cases for ServiceInstanceRepositoryAdapter."""
 
+    @pytest.fixture
+    def mock_kv_store(self) -> Mock:
+        """Create a mock KV store."""
+        kv = Mock()
+        kv.keys = AsyncMock()
+        kv.get = AsyncMock()
+        return kv
+
+    @pytest.fixture
+    def repository_adapter(self, mock_kv_store: Mock) -> ServiceInstanceRepositoryAdapter:
+        """Create a repository adapter instance."""
+        return ServiceInstanceRepositoryAdapter(mock_kv_store)
+
+    @pytest.fixture
+    def sample_instance(self) -> ServiceInstance:
+        """Create a sample service instance."""
+        return ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            host="localhost",
+            port=8080,
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+            metadata={"region": "us-east-1"},
+        )
+
+    def test_init(
+        self, repository_adapter: ServiceInstanceRepositoryAdapter, mock_kv_store: Mock
+    ) -> None:
+        """Test repository adapter initialization."""
+        assert repository_adapter._kv == mock_kv_store
+
     @pytest.mark.asyncio
-    async def test_get_all_instances_success(self, repository, mock_kv_store, sample_instance_data):
-        """Test successful retrieval of all instances."""
+    async def test_get_all_instances_success(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+        sample_instance: ServiceInstance,
+    ) -> None:
+        """Test successfully getting all instances."""
         # Arrange
-        mock_kv_store.keys.return_value = [
-            "service-instances.service-a.inst-1",
-            "service-instances.service-b.inst-1",
-        ]
+        instance_data = sample_instance.model_dump(mode="json")
+        instance_data["last_heartbeat"] = sample_instance.last_heartbeat.isoformat()
 
-        instance_data_a = {
-            **sample_instance_data,
-            "service_name": "service-a",
-            "instance_id": "inst-1",
-        }
-        instance_data_b = {
-            **sample_instance_data,
-            "service_name": "service-b",
-            "instance_id": "inst-1",
-        }
-
-        mock_kv_store.get.side_effect = [
-            create_kv_entry(instance_data_a),
-            create_kv_entry(instance_data_b),
-        ]
+        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        # Mock the entry object returned by get
+        mock_entry = Mock()
+        mock_entry.value = json.dumps(instance_data).encode()
+        mock_kv_store.get.return_value = mock_entry
 
         # Act
-        result = await repository.get_all_instances()
+        instances = await repository_adapter.get_all_instances()
 
         # Assert
-        assert len(result) == 2
-        assert all(isinstance(inst, ServiceInstance) for inst in result)
-        assert result[0].service_name == "service-a"
-        assert result[1].service_name == "service-b"
+        assert len(instances) == 1
+        assert instances[0].service_name == sample_instance.service_name
+        assert instances[0].instance_id == sample_instance.instance_id
+        mock_kv_store.keys.assert_called_once_with("service-instances.*")
+        mock_kv_store.get.assert_called_once_with("service-instances.test-service.test-123")
+
+    @pytest.mark.asyncio
+    async def test_get_all_instances_empty(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test getting all instances when none exist."""
+        # Arrange
+        mock_kv_store.keys.return_value = []
+
+        # Act
+        instances = await repository_adapter.get_all_instances()
+
+        # Assert
+        assert instances == []
         mock_kv_store.keys.assert_called_once_with("service-instances.*")
 
     @pytest.mark.asyncio
-    async def test_get_all_instances_with_invalid_data(self, repository, mock_kv_store):
-        """Test handling of invalid instance data."""
+    async def test_get_all_instances_kv_error(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test error handling when KV store fails."""
         # Arrange
-        mock_kv_store.keys.return_value = [
-            "service-instances.service-a.inst-1",
-            "service-instances.service-b.inst-1",
-        ]
-
-        # First entry is valid, second is invalid
-        valid_data = {
-            "service_name": "service-a",
-            "instance_id": "inst-1",
-            "version": "1.0.0",
-            "status": "ACTIVE",
-            "last_heartbeat": datetime.now(UTC).isoformat(),
-        }
-        invalid_entry = Mock()
-        invalid_entry.value = b"invalid json"
-
-        mock_kv_store.get.side_effect = [
-            create_kv_entry(valid_data),
-            invalid_entry,
-        ]
-
-        # Act
-        result = await repository.get_all_instances()
-
-        # Assert
-        assert len(result) == 1  # Only valid instance returned
-        assert result[0].service_name == "service-a"
-
-    @pytest.mark.asyncio
-    async def test_get_instances_by_service(self, repository, mock_kv_store, sample_instance_data):
-        """Test retrieval of instances for a specific service."""
-        # Arrange
-        service_name = "test-service"
-        mock_kv_store.keys.return_value = [
-            f"service-instances.{service_name}.inst-1",
-            f"service-instances.{service_name}.inst-2",
-        ]
-
-        instance_data_1 = {**sample_instance_data, "instance_id": "inst-1"}
-        instance_data_2 = {**sample_instance_data, "instance_id": "inst-2"}
-
-        mock_kv_store.get.side_effect = [
-            create_kv_entry(instance_data_1),
-            create_kv_entry(instance_data_2),
-        ]
-
-        # Act
-        result = await repository.get_instances_by_service(service_name)
-
-        # Assert
-        assert len(result) == 2
-        assert result[0].instance_id == "inst-1"
-        assert result[1].instance_id == "inst-2"
-        mock_kv_store.keys.assert_called_once_with(f"service-instances.{service_name}.*")
-
-    @pytest.mark.asyncio
-    async def test_get_instance_found(self, repository, mock_kv_store, sample_instance_data):
-        """Test retrieval of a specific instance that exists."""
-        # Arrange
-        service_name = "test-service"
-        instance_id = "test-01"
-        mock_kv_store.get.return_value = create_kv_entry(sample_instance_data)
-
-        # Act
-        result = await repository.get_instance(service_name, instance_id)
-
-        # Assert
-        assert result is not None
-        assert isinstance(result, ServiceInstance)
-        assert result.service_name == service_name
-        assert result.instance_id == instance_id
-        mock_kv_store.get.assert_called_once_with(f"service-instances.{service_name}.{instance_id}")
-
-    @pytest.mark.asyncio
-    async def test_get_instance_not_found(self, repository, mock_kv_store):
-        """Test retrieval of a non-existent instance."""
-        # Arrange
-        service_name = "test-service"
-        instance_id = "test-01"
-        mock_kv_store.get.return_value = None
-
-        # Act
-        result = await repository.get_instance(service_name, instance_id)
-
-        # Assert
-        assert result is None
-        mock_kv_store.get.assert_called_once_with(f"service-instances.{service_name}.{instance_id}")
-
-    @pytest.mark.asyncio
-    async def test_count_active_instances(self, repository, mock_kv_store, sample_instance_data):
-        """Test counting of active instances."""
-        # Arrange
-        instances_data = [
-            {**sample_instance_data, "status": "ACTIVE", "instance_id": "inst-1"},
-            {**sample_instance_data, "status": "UNHEALTHY", "instance_id": "inst-2"},
-            {**sample_instance_data, "status": "ACTIVE", "instance_id": "inst-3"},
-            {**sample_instance_data, "status": "STANDBY", "instance_id": "inst-4"},
-        ]
-
-        mock_kv_store.keys.return_value = [
-            f"service-instances.test-service.inst-{i + 1}" for i in range(4)
-        ]
-        mock_kv_store.get.side_effect = [create_kv_entry(data) for data in instances_data]
-
-        # Act
-        result = await repository.count_active_instances()
-
-        # Assert
-        assert result == 2  # Two ACTIVE instances
-
-    @pytest.mark.asyncio
-    async def test_get_instances_by_status_valid(
-        self, repository, mock_kv_store, sample_instance_data
-    ):
-        """Test retrieval of instances by valid status."""
-        # Arrange
-        instances_data = [
-            {**sample_instance_data, "status": "ACTIVE", "instance_id": "inst-1"},
-            {**sample_instance_data, "status": "UNHEALTHY", "instance_id": "inst-2"},
-            {**sample_instance_data, "status": "ACTIVE", "instance_id": "inst-3"},
-        ]
-
-        mock_kv_store.keys.return_value = [
-            f"service-instances.test-service.inst-{i + 1}" for i in range(3)
-        ]
-        mock_kv_store.get.side_effect = [create_kv_entry(data) for data in instances_data]
-
-        # Act
-        result = await repository.get_instances_by_status("ACTIVE")
-
-        # Assert
-        assert len(result) == 2
-        assert all(inst.status == "ACTIVE" for inst in result)
-
-    @pytest.mark.asyncio
-    async def test_get_instances_by_status_invalid(self, repository):
-        """Test retrieval with invalid status."""
-        # Act & Assert
-        with pytest.raises(ValueError) as exc_info:
-            await repository.get_instances_by_status("INVALID")
-
-        assert "Invalid status: INVALID" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_kv_store_error_handling(self, repository, mock_kv_store):
-        """Test proper error handling for KV store failures."""
-        # Arrange
-        mock_kv_store.keys.side_effect = Exception("Connection failed")
+        mock_kv_store.keys.side_effect = Exception("KV store error")
 
         # Act & Assert
         with pytest.raises(KVStoreException) as exc_info:
-            await repository.get_all_instances()
+            await repository_adapter.get_all_instances()
 
         assert "Failed to retrieve all instances" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_empty_key_value_handling(self, repository, mock_kv_store):
-        """Test handling of empty values from KV store."""
+    async def test_get_instances_by_service_success(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+        sample_instance: ServiceInstance,
+    ) -> None:
+        """Test getting instances by service name."""
         # Arrange
-        mock_kv_store.keys.return_value = ["service-instances.service-a.inst-1"]
+        instance_data = sample_instance.model_dump(mode="json")
+        instance_data["last_heartbeat"] = sample_instance.last_heartbeat.isoformat()
 
-        # Entry with None value
-        empty_entry = Mock()
-        empty_entry.value = None
-        mock_kv_store.get.return_value = empty_entry
+        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        # Mock the entry object returned by get
+        mock_entry = Mock()
+        mock_entry.value = json.dumps(instance_data).encode()
+        mock_kv_store.get.return_value = mock_entry
 
         # Act
-        result = await repository.get_all_instances()
+        instances = await repository_adapter.get_instances_by_service("test-service")
 
         # Assert
-        assert len(result) == 0  # Empty value is skipped
+        assert len(instances) == 1
+        assert instances[0].service_name == "test-service"
+        mock_kv_store.keys.assert_called_once_with("service-instances.test-service.*")
+
+    @pytest.mark.asyncio
+    async def test_get_instances_by_service_not_found(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test getting instances for non-existent service."""
+        # Arrange
+        mock_kv_store.keys.return_value = []
+
+        # Act
+        instances = await repository_adapter.get_instances_by_service("unknown-service")
+
+        # Assert
+        assert instances == []
+        mock_kv_store.keys.assert_called_once_with("service-instances.unknown-service.*")
+
+    @pytest.mark.asyncio
+    async def test_get_instance_success(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+        sample_instance: ServiceInstance,
+    ) -> None:
+        """Test getting a specific instance."""
+        # Arrange
+        instance_data = sample_instance.model_dump(mode="json")
+        instance_data["last_heartbeat"] = sample_instance.last_heartbeat.isoformat()
+
+        # Mock the entry object returned by get
+        mock_entry = Mock()
+        mock_entry.value = json.dumps(instance_data).encode()
+        mock_kv_store.get.return_value = mock_entry
+
+        # Act
+        instance = await repository_adapter.get_instance("test-service", "test-123")
+
+        # Assert
+        assert instance is not None
+        assert instance.service_name == "test-service"
+        assert instance.instance_id == "test-123"
+        mock_kv_store.get.assert_called_once_with("service-instances.test-service.test-123")
+
+    @pytest.mark.asyncio
+    async def test_get_instance_not_found(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test getting non-existent instance."""
+        # Arrange
+        # Mock None return for not found
+        mock_kv_store.get.return_value = None
+
+        # Act
+        instance = await repository_adapter.get_instance("test-service", "unknown-id")
+
+        # Assert
+        assert instance is None
+        mock_kv_store.get.assert_called_once_with("service-instances.test-service.unknown-id")
+
+    @pytest.mark.asyncio
+    async def test_get_instance_invalid_json(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test handling invalid JSON data."""
+        # Arrange
+        mock_kv_store.get.return_value = b"invalid json"
+
+        # Act
+        instance = await repository_adapter.get_instance("test-service", "test-123")
+
+        # Assert
+        assert instance is None
+
+    @pytest.mark.asyncio
+    async def test_count_active_instances(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test counting active instances."""
+        # Arrange
+        active_instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            host="localhost",
+            port=8080,
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+            metadata={},
+        )
+        inactive_instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-456",
+            host="localhost",
+            port=8081,
+            version="1.0.0",
+            status="STANDBY",
+            last_heartbeat=datetime.now(UTC),
+            metadata={},
+        )
+
+        active_data = active_instance.model_dump(mode="json")
+        active_data["last_heartbeat"] = active_instance.last_heartbeat.isoformat()
+        inactive_data = inactive_instance.model_dump(mode="json")
+        inactive_data["last_heartbeat"] = inactive_instance.last_heartbeat.isoformat()
+
+        mock_kv_store.keys.return_value = [
+            "service-instances.test-service.test-123",
+            "service-instances.test-service.test-456",
+        ]
+        mock_kv_store.get.side_effect = [
+            Mock(value=json.dumps(active_data).encode()),
+            Mock(value=json.dumps(inactive_data).encode()),
+        ]
+
+        # Act
+        count = await repository_adapter.count_active_instances()
+
+        # Assert
+        assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_count_active_instances_error(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test error handling when counting active instances."""
+        # Arrange
+        mock_kv_store.keys.side_effect = Exception("Count error")
+
+        # Act & Assert
+        with pytest.raises(KVStoreException) as exc_info:
+            await repository_adapter.count_active_instances()
+
+        assert "Failed to count active instances" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_instances_by_status_active(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test getting instances by ACTIVE status."""
+        # Arrange
+        active_instance = ServiceInstance(
+            service_name="test-service",
+            instance_id="test-123",
+            host="localhost",
+            port=8080,
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+            metadata={},
+        )
+
+        instance_data = active_instance.model_dump(mode="json")
+        instance_data["last_heartbeat"] = active_instance.last_heartbeat.isoformat()
+
+        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        # Mock the entry object returned by get
+        mock_entry = Mock()
+        mock_entry.value = json.dumps(instance_data).encode()
+        mock_kv_store.get.return_value = mock_entry
+
+        # Act
+        instances = await repository_adapter.get_instances_by_status("ACTIVE")
+
+        # Assert
+        assert len(instances) == 1
+        assert instances[0].status == "ACTIVE"
+
+    @pytest.mark.asyncio
+    async def test_get_instances_by_status_filters_correctly(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test that status filtering works correctly."""
+        # Arrange
+        active_instance = ServiceInstance(
+            service_name="service1",
+            instance_id="id1",
+            host="host1",
+            port=8080,
+            version="1.0.0",
+            status="ACTIVE",
+            last_heartbeat=datetime.now(UTC),
+            metadata={},
+        )
+        unhealthy_instance = ServiceInstance(
+            service_name="service2",
+            instance_id="id2",
+            host="host2",
+            port=8081,
+            version="1.0.0",
+            status="UNHEALTHY",
+            last_heartbeat=datetime.now(UTC),
+            metadata={},
+        )
+
+        active_data = active_instance.model_dump(mode="json")
+        active_data["last_heartbeat"] = active_instance.last_heartbeat.isoformat()
+        unhealthy_data = unhealthy_instance.model_dump(mode="json")
+        unhealthy_data["last_heartbeat"] = unhealthy_instance.last_heartbeat.isoformat()
+
+        mock_kv_store.keys.return_value = [
+            "service-instances.service1.id1",
+            "service-instances.service2.id2",
+        ]
+        mock_kv_store.get.side_effect = [
+            Mock(value=json.dumps(active_data).encode()),
+            Mock(value=json.dumps(unhealthy_data).encode()),
+        ]
+
+        # Act
+        instances = await repository_adapter.get_instances_by_status("UNHEALTHY")
+
+        # Assert
+        assert len(instances) == 1
+        assert instances[0].status == "UNHEALTHY"
+        assert instances[0].service_name == "service2"
+
+    @pytest.mark.asyncio
+    async def test_get_instances_by_status_error(
+        self,
+        repository_adapter: ServiceInstanceRepositoryAdapter,
+        mock_kv_store: Mock,
+    ) -> None:
+        """Test error handling when getting instances by status."""
+        # Arrange
+        mock_kv_store.keys.side_effect = Exception("Status query error")
+
+        # Act & Assert
+        with pytest.raises(KVStoreException) as exc_info:
+            await repository_adapter.get_instances_by_status("ACTIVE")
+
+        assert "Failed to get instances by status" in str(exc_info.value)

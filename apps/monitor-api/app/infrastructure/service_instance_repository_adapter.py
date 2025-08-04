@@ -30,13 +30,14 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
             kv_store: NATS KV Store instance
         """
         self._kv = kv_store
-        self._prefix = "service-instances"
+        self._prefix = "service-instances_"
 
     async def get_all_instances(self) -> list[ServiceInstance]:
         """Retrieve all service instances from the KV Store."""
         try:
             # List all keys with service-instances prefix
-            keys = await self._kv.keys(f"{self._prefix}.*")
+            all_keys = await self._kv.keys()
+            keys = [key for key in all_keys if key.startswith(self._prefix)]
 
             instances = []
             for key in keys:
@@ -66,7 +67,8 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
         """Retrieve all instances of a specific service."""
         try:
             # List keys for this service
-            keys = await self._kv.keys(f"{self._prefix}.{service_name}.*")
+            all_keys = await self._kv.keys()
+            keys = [key for key in all_keys if key.startswith(f"{self._prefix}{service_name}_")]
 
             instances = []
             for key in keys:
@@ -98,7 +100,7 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
         """Retrieve a specific service instance."""
         try:
             # Get the specific instance
-            key = f"{self._prefix}.{service_name}.{instance_id}"
+            key = f"{self._prefix}{service_name}_{instance_id}"
             entry = await self._kv.get(key)
 
             if not entry or not entry.value:

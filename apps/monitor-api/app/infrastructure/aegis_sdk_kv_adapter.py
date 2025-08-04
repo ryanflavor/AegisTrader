@@ -267,6 +267,17 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
             logger.error(f"Failed to list keys: {e}")
             raise KVStoreException(f"Failed to list keys: {e}") from e
 
+    @property
+    def raw_kv(self):
+        """Get the raw NATS KV Store for direct operations.
+
+        Returns:
+            The underlying NATS KV Store instance
+        """
+        if self._kv_store:
+            return self._kv_store._kv
+        return None
+
     async def get_with_revision(self, key: str) -> tuple[ServiceDefinition | None, int | None]:
         """Get a service definition with its revision number.
 

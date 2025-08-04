@@ -40,14 +40,20 @@ class ConnectionManager:
             from .aegis_sdk_kv_adapter import AegisSDKKVAdapter
             from .service_instance_repository_adapter import ServiceInstanceRepositoryAdapter
 
+            logger.info("Initializing KV Store connection...")
             self._kv_store = AegisSDKKVAdapter()
             await self._kv_store.connect(self.config.nats_url)
+            logger.info("KV Store connected successfully")
 
             # Store raw KV for instance repository
-            self._raw_kv = self._kv_store._kv
+            logger.info("Getting raw KV store...")
+            self._raw_kv = self._kv_store.raw_kv
+            logger.info(f"Raw KV store obtained: {self._raw_kv is not None}")
 
             # Initialize instance repository
+            logger.info("Initializing instance repository...")
             self._instance_repository = ServiceInstanceRepositoryAdapter(self._raw_kv)
+            logger.info(f"Instance repository initialized: {self._instance_repository is not None}")
 
             logger.info("Successfully connected to NATS KV Store and initialized repositories")
         except Exception as e:
