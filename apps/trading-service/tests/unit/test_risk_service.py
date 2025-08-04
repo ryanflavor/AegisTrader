@@ -379,3 +379,28 @@ class TestRiskService:
         mock_metrics.increment.assert_any_call("events.position_updated.published")
         mock_metrics.gauge.assert_any_call("positions.AAPL", 150)
         mock_metrics.gauge.assert_any_call("positions.AAPL", 75)
+
+    async def test_simulate_work_rpc(self, mock_message_bus, mock_metrics):
+        """Test simulate_work RPC handler."""
+        service = RiskService(
+            message_bus=mock_message_bus,
+            instance_id="risk-test-01",
+            metrics=mock_metrics,
+        )
+
+        await service.on_start()
+
+        # Get the handler
+        simulate_work_handler = service._rpc_handlers["simulate_work"]
+
+        # Test with default duration
+        result = await simulate_work_handler({})
+        assert result["work_completed"] is True
+        assert result["duration"] == 1.0
+        assert result["service"] == "risk-service"
+        assert result["instance"] == "risk-test-01"
+
+        # Test with custom duration
+        result = await simulate_work_handler({"duration": 0.01})
+        assert result["work_completed"] is True
+        assert result["duration"] == 0.01

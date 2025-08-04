@@ -157,6 +157,24 @@ class TestOrderModel:
         errors = exc_info.value.errors()
         assert any("price is required for limit" in str(error["msg"]).lower() for error in errors)
 
+    def test_stop_limit_order_requires_price(self):
+        """Test that stop limit orders require a price."""
+        with pytest.raises(ValidationError) as exc_info:
+            Order(
+                order_id="ORD-000009",
+                symbol="AAPL",
+                quantity=100.0,
+                side=OrderSide.BUY,
+                order_type=OrderType.STOP_LIMIT,
+                created_at=datetime.now(UTC),
+                instance_id="order-service-01",
+                # price missing
+            )
+        errors = exc_info.value.errors()
+        assert any(
+            "price is required for stop_limit" in str(error["msg"]).lower() for error in errors
+        )
+
     def test_risk_assessment_update(self):
         """Test updating order with risk assessment."""
         order = Order(

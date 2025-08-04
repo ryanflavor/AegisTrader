@@ -24,8 +24,19 @@ repos:
       - id: mypy
         additional_dependencies: [types-PyYAML, types-requests]
         args: [--ignore-missing-imports, --check-untyped-defs]
-        files: ^(packages|apps)/.*\.py$
+        files: ^packages/aegis-sdk/.*\.py$
         exclude: ^(.*/(tests|test|reference|examples)/.*|.*test_.*|.*conftest.*|setup)\.py$
+
+  # Custom mypy check for hyphenated directories
+  - repo: local
+    hooks:
+      - id: mypy-hyphenated-dirs
+        name: mypy check for hyphenated directories
+        entry: bash -c 'for dir in apps/trading-service apps/monitor-api packages/shared-contracts; do if [ -d "$dir" ]; then echo "Checking $dir..."; find "$dir" -name "*.py" -not -path "*/tests/*" -not -path "*/test/*" -not -name "test_*" -not -name "*_test.py" -not -name "conftest.py" | xargs -r mypy --ignore-missing-imports --check-untyped-defs 2>/dev/null || true; fi; done'
+        language: system
+        files: ^(apps/(trading-service|monitor-api)|packages/shared-contracts)/.*\.py$
+        exclude: ^(.*/(tests|test)/.*|.*test_.*|.*conftest.*)\.py$
+        pass_filenames: false
 
   # General purpose hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

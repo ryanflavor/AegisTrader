@@ -293,3 +293,98 @@ class TestPricingService:
         mock_message_bus.unregister_service.assert_called_once_with(
             service.service_name, service.instance_id
         )
+
+    async def test_simulate_work_rpc(self, mock_message_bus, mock_metrics):
+        """Test simulate_work RPC handler."""
+        service = PricingService(
+            message_bus=mock_message_bus,
+            instance_id="pricing-test-01",
+            metrics=mock_metrics,
+        )
+
+        # Set shutdown event to prevent price update task from running
+        service._shutdown_event.set()
+
+        await service.on_start()
+
+        # Get the handler
+        simulate_work_handler = service._rpc_handlers["simulate_work"]
+
+        # Test with default duration
+        result = await simulate_work_handler({})
+        assert result["work_completed"] is True
+        assert result["duration"] == 1.0
+        assert result["service"] == "pricing-service"
+        assert result["instance"] == "pricing-test-01"
+
+        # Test with custom duration
+        result = await simulate_work_handler({"duration": 0.01})
+        assert result["work_completed"] is True
+        assert result["duration"] == 0.01
+
+    async def test_price_update_background_task(self, mock_message_bus, mock_metrics):
+        """Test the periodic price update task."""
+        service = PricingService(
+            message_bus=mock_message_bus,
+            metrics=mock_metrics,
+        )
+
+        # Mock the internal methods
+        async def mock_call_rpc(instance_id, method, params):
+            return {
+                "symbol": params["symbol"],
+                "price": 100.0,
+                "bid": 99.5,
+                "ask": 100.5,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+
+        service.call_rpc = mock_call_rpc
+
+        # Start service but immediately signal shutdown
+        await service.on_start()
+
+        # Let the task run briefly
+        await asyncio.sleep(0.1)
+
+        # Signal shutdown and stop
+        service._shutdown_event.set()
+        await service.stop()
+
+        # The task should have exited cleanly
+        assert service._price_update_task.done()
+
+    async def test_price_update_task_error_handling(
+        self, mock_message_bus, mock_metrics, mock_logger
+    ):
+        """Test error handling in price update task."""
+        service = PricingService(
+            message_bus=mock_message_bus,
+            metrics=mock_metrics,
+            logger=mock_logger,
+        )
+
+        # Mock call_rpc to raise an error
+        async def mock_call_rpc_error(instance_id, method, params):
+            raise Exception("Test error")
+
+        service.call_rpc = mock_call_rpc_error
+
+        # Start the price update task manually
+        service._shutdown_event = asyncio.Event()
+        task = asyncio.create_task(service._emit_price_updates())
+
+        # Let it run briefly
+        await asyncio.sleep(0.1)
+
+        # Signal shutdown
+        service._shutdown_event.set()
+
+        # Wait for task to complete
+        try:
+            await task
+        except Exception:
+            pass
+
+        # Verify error was logged
+        mock_logger.error.assert_called_with("Price update error", error="Test error")

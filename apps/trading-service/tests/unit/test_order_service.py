@@ -24,8 +24,8 @@ class TestOrderService:
         assert service.service_name == "order-service"
         assert service.instance_id == "order-test-123"
         assert service.version == "1.0.0"
-        assert service._orders == {}
-        assert service._order_counter == 0
+        assert service._order_repository is not None
+        assert hasattr(service, "_pricing_service")
 
     async def test_on_start_registers_handlers(self, mock_message_bus, mock_metrics):
         """Test that on_start registers all RPC handlers."""
@@ -140,7 +140,7 @@ class TestOrderService:
             "symbol": "AAPL",
             "quantity": 100,
             "side": "BUY",
-            "order_type": "LIMIT",
+            "order_type": "MARKET",  # Changed to MARKET since we're not providing a price
         }
 
         result = await create_order_handler(params)
@@ -151,14 +151,15 @@ class TestOrderService:
         assert order["symbol"] == "AAPL"
         assert order["quantity"] == 100
         assert order["side"] == "BUY"
-        assert order["order_type"] == "LIMIT"
+        assert order["order_type"] == "MARKET"
         assert order["status"] == "PENDING"
         assert order["price"] == 150.0
         assert "created_at" in order
 
-        # Verify order is stored
-        assert len(service._orders) == 1
-        assert "ORD-000001" in service._orders
+        # Verify order is stored in repository
+        saved_order = await service._order_repository.get("ORD-000001")
+        assert saved_order is not None
+        assert saved_order.order_id == "ORD-000001"
 
         # Verify metrics
         mock_metrics.increment.assert_any_call("orders.created")
@@ -207,12 +208,22 @@ class TestOrderService:
             metrics=mock_metrics,
         )
 
-        # Add test order
-        service._orders["ORD-000001"] = {
-            "order_id": "ORD-000001",
-            "symbol": "AAPL",
-            "quantity": 100,
-        }
+        # Add test order to repository
+        from datetime import UTC, datetime
+
+        from order_service.domain_models import Order, OrderSide, OrderStatus, OrderType
+
+        order = Order(
+            order_id="ORD-000001",
+            symbol="AAPL",
+            quantity=100,
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+            instance_id=service.instance_id,
+        )
+        await service._order_repository.save(order)
 
         await service.on_start()
 
@@ -227,12 +238,14 @@ class TestOrderService:
         assert result["order"]["symbol"] == "AAPL"
 
         # Test missing order_id
-        with pytest.raises(ValueError, match="order_id is required"):
-            await get_order_handler({})
+        result = await get_order_handler({})
+        assert "error" in result
+        assert result["error"] == "order_id is required"
 
         # Test non-existent order
-        with pytest.raises(ValueError, match="Order not found"):
-            await get_order_handler({"order_id": "ORD-999999"})
+        result = await get_order_handler({"order_id": "ORD-999999"})
+        assert "error" in result
+        assert "Order not found" in result["error"]
 
     async def test_list_orders_rpc(self, mock_message_bus, mock_metrics):
         """Test list_orders RPC method."""
@@ -242,12 +255,23 @@ class TestOrderService:
             metrics=mock_metrics,
         )
 
-        # Add test orders
+        # Add test orders to repository
+        from datetime import UTC, datetime
+
+        from order_service.domain_models import Order, OrderSide, OrderStatus, OrderType
+
         for i in range(5):
-            service._orders[f"ORD-{i:06d}"] = {
-                "order_id": f"ORD-{i:06d}",
-                "symbol": "AAPL",
-            }
+            order = Order(
+                order_id=f"ORD-{i:06d}",
+                symbol="AAPL",
+                quantity=100,
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                status=OrderStatus.PENDING,
+                created_at=datetime.now(UTC),
+                instance_id=service.instance_id,
+            )
+            await service._order_repository.save(order)
 
         await service.on_start()
 
@@ -274,12 +298,22 @@ class TestOrderService:
             metrics=mock_metrics,
         )
 
-        # Add test order
-        service._orders["ORD-000001"] = {
-            "order_id": "ORD-000001",
-            "symbol": "AAPL",
-            "status": "PENDING",
-        }
+        # Add test order to repository
+        from datetime import UTC, datetime
+
+        from order_service.domain_models import Order, OrderSide, OrderStatus, OrderType
+
+        order = Order(
+            order_id="ORD-000001",
+            symbol="AAPL",
+            quantity=100,
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+            instance_id=service.instance_id,
+        )
+        await service._order_repository.save(order)
 
         await service.on_start()
 
@@ -302,22 +336,28 @@ class TestOrderService:
         # Handle event
         await risk_handler(risk_event)
 
-        # Verify order updated
-        order = service._orders["ORD-000001"]
-        assert order["risk_level"] == "LOW"
-        assert order["status"] == "APPROVED"
-        assert "risk_assessed_at" in order
+        # Verify order updated in repository
+        updated_order = await service._order_repository.get("ORD-000001")
+        assert updated_order.risk_level.value == "LOW"
+        assert updated_order.status == OrderStatus.APPROVED
+        assert updated_order.risk_assessed_at is not None
 
         # Verify metrics
         mock_metrics.increment.assert_any_call("events.order_updated.published")
         mock_metrics.increment.assert_any_call("orders.risk_assessment.low")
 
         # Test high risk rejection
-        service._orders["ORD-000002"] = {
-            "order_id": "ORD-000002",
-            "symbol": "TSLA",
-            "status": "PENDING",
-        }
+        order2 = Order(
+            order_id="ORD-000002",
+            symbol="TSLA",
+            quantity=100,
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            status=OrderStatus.PENDING,
+            created_at=datetime.now(UTC),
+            instance_id=service.instance_id,
+        )
+        await service._order_repository.save(order2)
 
         high_risk_event = Event(
             domain="risk",
@@ -331,7 +371,139 @@ class TestOrderService:
 
         await risk_handler(high_risk_event)
 
-        # Verify order rejected
-        order = service._orders["ORD-000002"]
-        assert order["risk_level"] == "HIGH"
-        assert order["status"] == "REJECTED"
+        # Verify order rejected in repository
+        rejected_order = await service._order_repository.get("ORD-000002")
+        assert rejected_order.risk_level.value == "HIGH"
+        assert rejected_order.status == OrderStatus.REJECTED
+
+    async def test_simulate_work_rpc(self, mock_message_bus, mock_metrics):
+        """Test simulate_work RPC handler."""
+        service = OrderService(
+            message_bus=mock_message_bus,
+            instance_id="order-test-01",
+            metrics=mock_metrics,
+        )
+
+        await service.on_start()
+
+        # Get the handler
+        simulate_work_handler = service._rpc_handlers["simulate_work"]
+
+        # Test with default duration
+        result = await simulate_work_handler({})
+        assert result["work_completed"] is True
+        assert result["duration"] == 1.0
+        assert result["service"] == "order-service"
+        assert result["instance"] == "order-test-01"
+
+        # Test with custom duration
+        result = await simulate_work_handler({"duration": 0.01})
+        assert result["work_completed"] is True
+        assert result["duration"] == 0.01
+
+    async def test_create_order_validation_error(self, mock_message_bus, mock_metrics):
+        """Test create order with validation error."""
+        service = OrderService(
+            message_bus=mock_message_bus,
+            metrics=mock_metrics,
+        )
+
+        await service.on_start()
+
+        create_order_handler = service._rpc_handlers["create_order"]
+
+        # Test with invalid quantity
+        result = await create_order_handler(
+            {
+                "symbol": "AAPL",
+                "quantity": -10,  # Invalid negative quantity
+                "side": "BUY",
+                "order_type": "MARKET",
+            }
+        )
+
+        assert "error" in result
+        assert result["error"] == "Invalid order parameters"
+        assert "details" in result
+
+    async def test_create_order_pricing_service_error(
+        self, mock_message_bus, mock_metrics, mock_logger
+    ):
+        """Test create order when pricing service fails."""
+        # Import AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
+
+        # Create a mock pricing service that raises an error
+        mock_pricing_service = MagicMock()
+        mock_pricing_service.get_price = AsyncMock(side_effect=Exception("Pricing service error"))
+
+        service = OrderService(
+            message_bus=mock_message_bus,
+            metrics=mock_metrics,
+            logger=mock_logger,
+            pricing_service=mock_pricing_service,
+        )
+
+        await service.on_start()
+
+        create_order_handler = service._rpc_handlers["create_order"]
+
+        # Create order - should fallback to default price
+        result = await create_order_handler(
+            {"symbol": "AAPL", "quantity": 100, "side": "BUY", "order_type": "MARKET"}
+        )
+
+        # Order should be created with default price
+        assert "order" in result
+        assert result["order"]["price"] == 100.0
+
+        # Verify metrics and logging
+        mock_metrics.increment.assert_any_call("rpc.pricing_service.failures")
+        mock_logger.warning.assert_called_with("Failed to get price", error="Pricing service error")
+
+    async def test_handle_risk_event_invalid_risk_level(
+        self, mock_message_bus, mock_metrics, mock_logger
+    ):
+        """Test handling risk event with invalid risk level."""
+        service = OrderService(
+            message_bus=mock_message_bus,
+            metrics=mock_metrics,
+            logger=mock_logger,
+        )
+
+        # Create order in repository
+        from order_service.domain_models import Order, OrderSide, OrderType
+
+        order = Order(
+            order_id="ORD-000001",
+            symbol="AAPL",
+            quantity=100.0,
+            side=OrderSide.BUY,
+            order_type=OrderType.MARKET,
+            created_at=datetime.now(UTC),
+            instance_id="order-test-01",
+        )
+        await service._order_repository.save(order)
+
+        await service.on_start()
+
+        # Get the risk assessment handler
+        risk_handler = service._event_handlers["events.risk.*"][0]
+
+        # Create risk event with invalid risk level
+        from aegis_sdk.domain.models import Event
+
+        invalid_risk_event = Event(
+            domain="risk",
+            event_type="assessed",
+            payload={
+                "order_id": "ORD-000001",
+                "risk_level": "INVALID_LEVEL",  # Invalid risk level
+            },
+            source="risk-service-123",
+        )
+
+        await risk_handler(invalid_risk_event)
+
+        # Verify error was logged
+        mock_logger.error.assert_called()
