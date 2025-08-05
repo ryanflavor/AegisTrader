@@ -105,6 +105,10 @@ coverage/
 .pytest_cache/
 test-results/
 junit.xml
+coverage.json
+**/coverage.json
+performance_*.md
+**/performance_*.md
 
 # Build artifacts
 *.so
@@ -160,6 +164,8 @@ helm/values.deployment.yaml
 /tmp/
 *.pid
 *-port-forward.log
+**/app/debug/
+**/app/test/
 
 # Secrets & Keys
 *.pem
@@ -176,7 +182,7 @@ ci-kubeconfig.b64
 *-kubeconfig
 *-kubeconfig.b64
 
-# Package lock files (optional - uncomment if you want to ignore)
+# Package lock files (keep for reproducible builds)
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
@@ -193,6 +199,8 @@ jetstream/
 test-proxy.sh
 *.test.js
 *.spec.js
+test_ttl_*.py
+**/examples/test_*.py
 
 # Documentation build
 docs/_build/
