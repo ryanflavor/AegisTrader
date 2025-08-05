@@ -92,7 +92,7 @@ monitor-ui:
 # Trading services configuration - TO BE IMPLEMENTED
 # vnpy-based services will be added here:
 # - market-data-service
-# - trading-service  
+# - trading-service
 # - algo-service
 
 # Post-install configuration

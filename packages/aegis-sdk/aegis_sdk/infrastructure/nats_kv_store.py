@@ -123,14 +123,21 @@ class NATSKVStore(KVStorePort):
             )
 
             # Create the stream
+            # Type narrowing to access NATSAdapter-specific attributes
+            if not isinstance(self._nats_adapter, NATSAdapter):
+                raise KVStoreError("NATS KV Store requires NATSAdapter", operation="connect")
+            if not self._nats_adapter._js:
+                raise KVStoreError("NATS JetStream not initialized", operation="connect")
             await self._nats_adapter._js.add_stream(config=stream_config)
 
             # Update stream to enable TTL using raw API
-            nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None  # type: ignore[attr-defined]
+            nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None
             if not nc:
                 raise Exception("No NATS connection available")
 
             # Get current stream configuration
+            if not self._nats_adapter._js:
+                raise KVStoreError("NATS JetStream not initialized", operation="connect")
             stream_info = await self._nats_adapter._js.stream_info(stream_name)
             config_dict = stream_info.config.as_dict()
 
@@ -176,9 +183,12 @@ class NATSKVStore(KVStorePort):
         if not await self._nats_adapter.is_connected():
             raise KVNotConnectedError("connect")
 
-        # Check if JetStream is available through a proper interface
-        # This is a temporary check - ideally the MessageBusPort should expose JS access
-        if not hasattr(self._nats_adapter, "_js") or not self._nats_adapter._js:
+        # Type narrowing to access NATSAdapter-specific attributes
+        if not isinstance(self._nats_adapter, NATSAdapter):
+            raise KVStoreError("NATS KV Store requires NATSAdapter", operation="connect")
+
+        # Check if JetStream is available
+        if not self._nats_adapter._js:
             raise KVStoreError("NATS JetStream not initialized", operation="connect")
 
         log_ctx = LogContext(
@@ -197,13 +207,13 @@ class NATSKVStore(KVStorePort):
                 try:
                     # Check if stream already exists
                     await self._nats_adapter._js.stream_info(stream_name)
-                except Exception:
+                except Exception as e:
                     # Stream doesn't exist, create it
-                    if self._config.enable_ttl:
+                    if self._config and self._config.enable_ttl:
                         # Create stream with TTL support
                         success = await self._create_kv_stream_with_ttl(bucket)
                         if not success:
-                            raise Exception("Failed to create stream with TTL support")
+                            raise Exception("Failed to create stream with TTL support") from e
                     else:
                         # Use standard API without TTL
                         from nats.js import api
@@ -212,10 +222,12 @@ class NATSKVStore(KVStorePort):
                             name=stream_name,
                             subjects=[f"$KV.{bucket}.>"],
                             retention=api.RetentionPolicy.LIMITS,
-                            max_msgs_per_subject=self._config.history_size,
+                            max_msgs_per_subject=self._config.history_size if self._config else 10,
                             max_bytes=-1,
                             max_age=0,
-                            max_msg_size=self._config.max_value_size,
+                            max_msg_size=(
+                                self._config.max_value_size if self._config else 1024 * 1024
+                            ),
                             storage=api.StorageType.FILE,
                             allow_direct=True,
                             allow_rollup_hdrs=True,
@@ -382,7 +394,16 @@ class NATSKVStore(KVStorePort):
                                 )
 
                                 # Publish directly to JetStream with TTL header
-                                pa = await self._nats_adapter._js.publish(  # type: ignore[attr-defined]
+                                # Type narrowing to access NATSAdapter-specific attributes
+                                if not isinstance(self._nats_adapter, NATSAdapter):
+                                    raise KVStoreError(
+                                        "NATS KV Store requires NATSAdapter", operation="put"
+                                    )
+                                if not self._nats_adapter._js:
+                                    raise KVStoreError(
+                                        "NATS JetStream not initialized", operation="put"
+                                    )
+                                pa = await self._nats_adapter._js.publish(
                                     subject, serialized, headers=hdrs
                                 )
                                 revision = pa.seq

@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fix-ttl-streams
+  namespace: aegis-trader
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: fix-ttl
+          image: natsio/nats-box:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Updating NATS streams to enable per-message TTL..."
+
+              # Update COMMANDS stream
+              echo "Updating COMMANDS stream..."
+              cat <<EOF > /tmp/commands_config.json
+              {
+                "allow_msg_ttl": true
+              }
+              EOF
+              nats stream edit COMMANDS --force --config=/tmp/commands_config.json
+
+              # Update EVENTS stream
+              echo "Updating EVENTS stream..."
+              cat <<EOF > /tmp/events_config.json
+              {
+                "allow_msg_ttl": true
+              }
+              EOF
+              nats stream edit EVENTS --force --config=/tmp/events_config.json
+
+              # Verify the changes
+              echo ""
+              echo "Verifying configuration:"
+              echo "COMMANDS stream TTL status:"
+              nats stream info COMMANDS --json | jq '.config | {name, allow_msg_ttl}'
+              echo "EVENTS stream TTL status:"
+              nats stream info EVENTS --json | jq '.config | {name, allow_msg_ttl}'
+
+              echo "✅ TTL configuration complete!"
+          env:
+            - name: NATS_URL
+              value: "nats://aegis-trader-nats:4222"

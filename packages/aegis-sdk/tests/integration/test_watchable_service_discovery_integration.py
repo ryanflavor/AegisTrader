@@ -50,17 +50,15 @@ class TestWatchableServiceDiscoveryIntegration:
         yield store
 
         # Cleanup - check if still connected before clearing
-        try:
-            await store.clear()
-        except Exception:
-            # Store might already be disconnected by test
-            pass
+        import contextlib
 
-        try:
-            await store.disconnect()
-        except Exception:
+        with contextlib.suppress(Exception):
+            # Store might already be disconnected by test
+            await store.clear()
+
+        with contextlib.suppress(Exception):
             # Already disconnected
-            pass
+            await store.disconnect()
 
     @pytest_asyncio.fixture
     async def registry(self, kv_store):

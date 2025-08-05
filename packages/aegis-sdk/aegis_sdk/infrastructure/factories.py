@@ -314,7 +314,28 @@ def create_service_dependencies(
 
     # Create service discovery if enabled
     if enable_discovery:
-        deps["service_discovery"] = BasicServiceDiscovery(service_registry=None, logger=logger)
+        # For development/testing, create a mock registry
+        from typing import cast
+
+        from ..ports.service_registry import ServiceRegistryPort
+
+        # Create a no-op registry for BasicServiceDiscovery
+        class NoOpRegistry:
+            async def register(self, *args, **kwargs):
+                pass
+
+            async def deregister(self, *args, **kwargs):
+                pass
+
+            async def get_instance(self, *args, **kwargs):
+                return None
+
+            async def list_instances(self, *args, **kwargs):
+                return []
+
+        deps["service_discovery"] = BasicServiceDiscovery(
+            service_registry=cast(ServiceRegistryPort, NoOpRegistry()), logger=logger
+        )
 
     # Create service registry if enabled
     if enable_registry:

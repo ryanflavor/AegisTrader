@@ -215,7 +215,7 @@ class Service:
         original_service_name = target
 
         # Use service discovery if enabled and available
-        if discovery_enabled and self._discovery and self._is_service_name(target):
+        if discovery_enabled and self._discovery and target and self._is_service_name(target):
             instance = await self._discovery.select_instance(
                 target,
                 strategy=selection_strategy,
@@ -246,6 +246,7 @@ class Service:
             if (
                 discovery_enabled
                 and self._discovery
+                and original_service_name
                 and self._is_service_name(original_service_name)
             ):
                 await self._discovery.invalidate_cache(original_service_name)

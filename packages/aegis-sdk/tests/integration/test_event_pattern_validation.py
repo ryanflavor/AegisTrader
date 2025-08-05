@@ -192,9 +192,11 @@ class TestEventPatternValidation:
 
         async def versioned_handler(event: Event):
             # Only process events from this test run
-            if event.payload.get("product_id") in test_product_ids:
-                if event.version in events_by_version:
-                    events_by_version[event.version].append(event)
+            if (
+                event.payload.get("product_id") in test_product_ids
+                and event.version in events_by_version
+            ):
+                events_by_version[event.version].append(event)
 
         # Subscribe to all product update events
         await nats_adapter.subscribe_event(

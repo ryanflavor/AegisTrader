@@ -19,24 +19,20 @@ from .watchable_cached_service_discovery import (
 )
 
 __all__ = [
-    # Service Discovery
     "BasicServiceDiscovery",
     "CacheConfig",
     "CachedServiceDiscovery",
+    "DiscoveryRequestFactory",
+    "InMemoryMetrics",
+    "KVOptionsFactory",
+    "KVServiceRegistry",
+    "KVStoreConfig",
+    "LogContext",
+    "NATSAdapter",
+    "NATSConnectionConfig",
+    "NATSKVStore",
+    "SerializationFactory",
     "WatchConfig",
     "WatchableCacheConfig",
     "WatchableCachedServiceDiscovery",
-    # Adapters
-    "NATSAdapter",
-    "NATSKVStore",
-    "InMemoryMetrics",
-    "KVServiceRegistry",
-    # Configuration
-    "NATSConnectionConfig",
-    "KVStoreConfig",
-    "LogContext",
-    # Factories
-    "SerializationFactory",
-    "KVOptionsFactory",
-    "DiscoveryRequestFactory",
 ]

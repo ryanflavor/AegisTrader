@@ -51,9 +51,9 @@ class UseCaseEventFactory:
             payload={
                 "service_name": str(service_name),
                 "instance_id": str(instance_id),
-                "timestamp": timestamp.isoformat()
-                if hasattr(timestamp, "isoformat")
-                else str(timestamp),
+                "timestamp": (
+                    timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+                ),
                 "details": details or {},
             },
             source=str(instance_id),
