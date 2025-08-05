@@ -42,7 +42,7 @@ This document captures the complete state of the current Kubernetes deployment i
 - **ConfigMap Variables**:
   - API_PORT: "8100"
   - NATS_URL: "nats://aegis-trader-nats:4222"
-  - NATS_KV_BUCKET: "service-registry"
+  - NATS_KV_BUCKET: "service_registry"
 - **Init Container**: wait-for-nats (busybox:1.36)
 
 ### 3. Monitor UI (Deployment)

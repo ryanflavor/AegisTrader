@@ -29,7 +29,7 @@ class TestNATSKVStoreTTL:
     async def test_per_message_ttl_with_sdk(self, nats_adapter):
         """Test per-message TTL using SDK's built-in TTL support."""
         # Create unique bucket name
-        bucket_name = f"ttl-sdk-test-{int(time.time())}"
+        bucket_name = f"ttl_sdk_test_{int(time.time())}"
 
         # Connect KV store with TTL support enabled
         kv_store = NATSKVStore(nats_adapter=nats_adapter)
@@ -78,7 +78,7 @@ class TestNATSKVStoreTTL:
     async def test_ttl_disabled_by_default(self, nats_adapter):
         """Test that TTL is properly disabled when not requested."""
         # Create a bucket without TTL support
-        bucket_name = f"no-ttl-sdk-test-{int(time.time())}"
+        bucket_name = f"no_ttl_sdk_test_{int(time.time())}"
         kv_store = NATSKVStore(nats_adapter=nats_adapter)
         await kv_store.connect(bucket_name, enable_ttl=False)
 
@@ -97,7 +97,7 @@ class TestNATSKVStoreTTL:
     @pytest.mark.asyncio
     async def test_mixed_ttl_operations(self, nats_adapter):
         """Test mixing TTL and non-TTL operations."""
-        bucket_name = f"mixed-ttl-test-{int(time.time())}"
+        bucket_name = f"mixed_ttl_test_{int(time.time())}"
         kv_store = NATSKVStore(nats_adapter=nats_adapter)
         await kv_store.connect(bucket_name, enable_ttl=True)
 

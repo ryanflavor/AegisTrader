@@ -31,7 +31,7 @@ class TestNATSKVStoreIntegration:
     async def kv_store(self, nats_adapter):
         """Create KV Store connected to test bucket."""
         kv_store = NATSKVStore(nats_adapter=nats_adapter)
-        await kv_store.connect("test-bucket")
+        await kv_store.connect("test_bucket")
 
         # Clear any existing data
         await kv_store.clear()
@@ -217,7 +217,7 @@ class TestNATSKVStoreIntegration:
         status = await kv_store.status()
 
         assert status["connected"] is True
-        assert status["bucket"] == "test-bucket"
+        assert status["bucket"] == "test_bucket"
         # Check for either 'values' or 'bytes' - different NATS versions might have different fields
         assert "bytes" in status or "values" in status
         if "values" in status:
@@ -252,7 +252,7 @@ class TestNATSKVStoreIntegration:
             await kv_store.get("any-key")
 
         # Reconnect for remaining tests
-        await kv_store.connect("test-bucket")
+        await kv_store.connect("test_bucket")
 
         # Test revision mismatch
         rev = await kv_store.put("error-key", "initial")

@@ -20,6 +20,7 @@ from ..ports.kv_store import KVStorePort
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
+from .config import KVStoreConfig, LogContext, NATSConnectionConfig
 from .in_memory_metrics import InMemoryMetrics
 from .nats_adapter import NATSAdapter
 from .simple_logger import SimpleLogger
@@ -37,7 +38,7 @@ class NATSKVStore(KVStorePort):
         nats_adapter: MessageBusPort | None = None,
         metrics: MetricsPort | None = None,
         logger: LoggerPort | None = None,
-        sanitize_keys: bool = True,
+        config: KVStoreConfig | None = None,
     ):
         """Initialize NATS KV Store adapter.
 
@@ -45,14 +46,14 @@ class NATSKVStore(KVStorePort):
             nats_adapter: Optional NATS adapter. If not provided, creates a new one.
             metrics: Optional metrics port. If not provided, uses default adapter.
             logger: Optional logger port. If not provided, uses simple logger.
-            sanitize_keys: Whether to sanitize keys for NATS compatibility (default: True)
+            config: Optional KV store configuration. If not provided, uses defaults.
         """
-        self._nats_adapter = nats_adapter or NATSAdapter()
+        self._nats_adapter = nats_adapter or NATSAdapter(config=NATSConnectionConfig())
         self._metrics = metrics or InMemoryMetrics()
         self._logger = logger or SimpleLogger("aegis_sdk.nats_kv_store")
+        self._config: KVStoreConfig | None = config
         self._kv: KeyValue | None = None
         self._bucket_name: str | None = None
-        self._sanitize_keys = sanitize_keys
         # Keep mapping of sanitized to original keys for reverse lookup
         self._key_mapping: dict[str, str] = {}
 
@@ -67,7 +68,7 @@ class NATSKVStore(KVStorePort):
         """
         from .key_sanitizer import KeySanitizer
 
-        if not self._sanitize_keys:
+        if not self._config or not self._config.sanitize_keys:
             return key, key
 
         sanitized = KeySanitizer.sanitize(key)
@@ -90,7 +91,7 @@ class NATSKVStore(KVStorePort):
         return self._key_mapping.get(sanitized_key, sanitized_key)
 
     async def _create_kv_stream_with_ttl(self, bucket: str) -> bool:
-        """Create a KV stream with per-message TTL enabled using raw API.
+        """Create a KV stream with per-message TTL enabled.
 
         Args:
             bucket: The bucket name
@@ -98,42 +99,59 @@ class NATSKVStore(KVStorePort):
         Returns:
             bool: True if stream was created successfully
         """
+        from nats.js import api
+
         stream_name = f"KV_{bucket}"
 
-        # Create stream configuration with AllowMsgTTL
-        stream_config = {
-            "name": stream_name,
-            "subjects": [f"$KV.{bucket}.>"],
-            "retention": "limits",
-            "max_msgs_per_subject": 10,  # History of 10
-            "max_bytes": -1,
-            "max_age": 0,  # No bucket-level TTL
-            "max_msg_size": 1024 * 1024,  # 1MB
-            "storage": "file",
-            "allow_direct": True,
-            "allow_rollup_hdrs": True,
-            "deny_delete": True,
-            "deny_purge": False,
-            "discard": "new",
-            "allow_msg_ttl": True,  # Enable per-message TTL
-        }
-
-        # Create the stream using raw API
         try:
+            # Create stream with standard NATS JS API
+            stream_config = api.StreamConfig(
+                name=stream_name,
+                subjects=[f"$KV.{bucket}.>"],
+                retention=api.RetentionPolicy.LIMITS,
+                max_msgs_per_subject=self._config.history_size if self._config else 10,
+                max_bytes=-1,
+                max_age=0,
+                max_msg_size=self._config.max_value_size if self._config else 1024 * 1024,
+                storage=api.StorageType.FILE,
+                allow_direct=True,
+                allow_rollup_hdrs=True,
+                deny_delete=True,
+                deny_purge=False,
+                discard=api.DiscardPolicy.NEW,
+                num_replicas=1,
+            )
+
+            # Create the stream
+            await self._nats_adapter._js.add_stream(config=stream_config)
+
+            # Update stream to enable TTL using raw API
             nc = self._nats_adapter._connections[0] if self._nats_adapter._connections else None  # type: ignore[attr-defined]
             if not nc:
                 raise Exception("No NATS connection available")
 
+            # Get current stream configuration
+            stream_info = await self._nats_adapter._js.stream_info(stream_name)
+            config_dict = stream_info.config.as_dict()
+
+            # Add allow_msg_ttl field
+            config_dict["allow_msg_ttl"] = True
+
+            # Send update request
             resp = await nc.request(
-                f"$JS.API.STREAM.CREATE.{stream_name}",
-                json.dumps(stream_config).encode(),
+                f"$JS.API.STREAM.UPDATE.{stream_name}",
+                json.dumps(config_dict).encode(),
                 timeout=5.0,
             )
+
             result = json.loads(resp.data.decode())
             if "error" in result:
-                self._logger.error(f"Error creating stream: {result['error']}")
+                self._logger.error(f"Failed to enable TTL: {result['error']}")
                 return False
+
+            self._logger.info(f"Created stream {stream_name} with TTL support")
             return True
+
         except Exception as e:
             self._logger.exception("Failed to create stream with TTL", exc_info=e)
             return False
@@ -145,6 +163,15 @@ class NATSKVStore(KVStorePort):
             bucket: The bucket name
             enable_ttl: Whether to enable per-message TTL support (default: True)
         """
+        # Create config if not provided during init
+        if not self._config:
+            self._config = KVStoreConfig(bucket=bucket, enable_ttl=enable_ttl)
+        else:
+            # Update config with provided values
+            self._config = self._config.model_copy(
+                update={"bucket": bucket, "enable_ttl": enable_ttl}
+            )
+
         # Ensure NATS adapter is connected
         if not await self._nats_adapter.is_connected():
             raise KVNotConnectedError("connect")
@@ -153,6 +180,11 @@ class NATSKVStore(KVStorePort):
         # This is a temporary check - ideally the MessageBusPort should expose JS access
         if not hasattr(self._nats_adapter, "_js") or not self._nats_adapter._js:
             raise KVStoreError("NATS JetStream not initialized", operation="connect")
+
+        log_ctx = LogContext(
+            operation="connect_kv",
+            component="NATSKVStore",
+        )
 
         try:
             # Try to get existing bucket first
@@ -165,13 +197,13 @@ class NATSKVStore(KVStorePort):
                 try:
                     # Check if stream already exists
                     await self._nats_adapter._js.stream_info(stream_name)
-                except Exception as e:
+                except Exception:
                     # Stream doesn't exist, create it
-                    if enable_ttl:
-                        # Use raw API to create stream with TTL support
+                    if self._config.enable_ttl:
+                        # Create stream with TTL support
                         success = await self._create_kv_stream_with_ttl(bucket)
                         if not success:
-                            raise Exception("Failed to create stream with TTL support") from e
+                            raise Exception("Failed to create stream with TTL support")
                     else:
                         # Use standard API without TTL
                         from nats.js import api
@@ -180,10 +212,10 @@ class NATSKVStore(KVStorePort):
                             name=stream_name,
                             subjects=[f"$KV.{bucket}.>"],
                             retention=api.RetentionPolicy.LIMITS,
-                            max_msgs_per_subject=10,  # History of 10
+                            max_msgs_per_subject=self._config.history_size,
                             max_bytes=-1,
                             max_age=0,
-                            max_msg_size=1024 * 1024,  # 1MB
+                            max_msg_size=self._config.max_value_size,
                             storage=api.StorageType.FILE,
                             allow_direct=True,
                             allow_rollup_hdrs=True,
@@ -198,10 +230,13 @@ class NATSKVStore(KVStorePort):
 
             self._bucket_name = bucket
             self._metrics.gauge("kv.buckets.active", 1)
-            self._logger.info(f"Connected to NATS KV bucket: {bucket}")
+            self._logger.info(f"Connected to NATS KV bucket: {bucket}", extra=log_ctx.to_dict())
         except Exception as e:
             self._metrics.increment("kv.connect.error")
-            self._logger.exception(f"Failed to connect to KV bucket '{bucket}'", exc_info=e)
+            error_ctx = log_ctx.with_error(e)
+            self._logger.exception(
+                f"Failed to connect to KV bucket '{bucket}'", extra=error_ctx.to_dict()
+            )
             raise KVStoreError(
                 f"Failed to connect to KV bucket '{bucket}': {e}",
                 bucket=bucket,
@@ -239,6 +274,13 @@ class NATSKVStore(KVStorePort):
                 ttl = None
                 if hasattr(entry, "delta") and entry.delta is not None and entry.delta > 0:
                     ttl = entry.delta
+
+                # Debug: log all available attributes on entry
+                self._logger.debug(
+                    f"Entry attributes for {key}: {[attr for attr in dir(entry) if not attr.startswith('_')]}"
+                )
+                if hasattr(entry, "delta"):
+                    self._logger.debug(f"Entry delta for {key}: {entry.delta}")
 
                 # Handle created timestamp - it might be None for some NATS versions
                 from datetime import UTC, datetime
@@ -335,14 +377,22 @@ class NATSKVStore(KVStorePort):
                                 # Get the subject for this KV bucket
                                 subject = f"$KV.{self._bucket_name}.{safe_key}"
 
+                                self._logger.info(
+                                    f"Attempting to set TTL: key={key}, ttl={options.ttl}s, subject={subject}"
+                                )
+
                                 # Publish directly to JetStream with TTL header
                                 pa = await self._nats_adapter._js.publish(  # type: ignore[attr-defined]
                                     subject, serialized, headers=hdrs
                                 )
                                 revision = pa.seq
                                 self._metrics.increment("kv.put.ttl.success")
+                                self._logger.info(
+                                    f"TTL set successfully: key={key}, revision={revision}"
+                                )
                             except Exception as e:
                                 # NO FALLBACK - fail if per-message TTL is not supported
+                                self._logger.error(f"Failed to set TTL: key={key}, error={e!s}")
                                 if "per-message TTL is disabled" in str(e):
                                     raise KVTTLNotSupportedError() from e
                                 # Re-raise other errors
@@ -653,6 +703,11 @@ class NATSKVStore(KVStorePort):
                 "bytes": 0,
             }
 
+        log_ctx = LogContext(
+            operation="status",
+            component="NATSKVStore",
+        )
+
         try:
             # Get bucket status from NATS
             status = await self._kv.status()
@@ -668,8 +723,19 @@ class NATSKVStore(KVStorePort):
                 if hasattr(status, field):
                     result[field] = getattr(status, field)
 
+            # Add config info if available
+            if self._config:
+                result["config"] = {
+                    "enable_ttl": self._config.enable_ttl,
+                    "sanitize_keys": self._config.sanitize_keys,
+                    "max_value_size": self._config.max_value_size,
+                    "history_size": self._config.history_size,
+                }
+
             return result
         except Exception as e:
+            error_ctx = log_ctx.with_error(e)
+            self._logger.error("Failed to get KV status", extra=error_ctx.to_dict())
             return {
                 "connected": True,
                 "bucket": self._bucket_name,

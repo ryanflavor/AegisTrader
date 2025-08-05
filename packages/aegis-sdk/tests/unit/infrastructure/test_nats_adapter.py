@@ -10,6 +10,7 @@ from nats.aio.client import Client as NATSClient
 from nats.js import JetStreamContext
 
 from aegis_sdk.domain.models import Command, Event, RPCRequest, RPCResponse
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.infrastructure.serialization import serialize_to_msgpack
 
@@ -20,17 +21,18 @@ class TestNATSAdapterInitialization:
     def test_init_with_defaults(self):
         """Test initialization with default values."""
         adapter = NATSAdapter()
-        assert adapter._pool_size == 1
-        assert adapter._use_msgpack is True
+        assert adapter._config.pool_size == 1
+        assert adapter._config.use_msgpack is True
         assert adapter._connections == []
         assert adapter._js is None
         assert adapter._current_conn == 0
 
     def test_init_with_custom_values(self):
         """Test initialization with custom values."""
-        adapter = NATSAdapter(pool_size=5, use_msgpack=False)
-        assert adapter._pool_size == 5
-        assert adapter._use_msgpack is False
+        config = NATSConnectionConfig(pool_size=5, use_msgpack=False)
+        adapter = NATSAdapter(config=config)
+        assert adapter._config.pool_size == 5
+        assert adapter._config.use_msgpack is False
         assert adapter._connections == []
         assert adapter._js is None
 
@@ -62,7 +64,7 @@ class TestNATSAdapterConnection:
         mock_nc.jetstream.return_value = mock_js
         mock_connect.return_value = mock_nc
 
-        adapter = NATSAdapter(pool_size=1)
+        adapter = NATSAdapter()
         adapter._metrics = Mock()
         adapter._metrics.gauge = Mock()
 
@@ -96,7 +98,8 @@ class TestNATSAdapterConnection:
 
         mock_connect.side_effect = mock_connections
 
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         adapter._metrics.gauge = Mock()
         adapter._ensure_streams = AsyncMock()
@@ -181,7 +184,8 @@ class TestNATSAdapterConnectionManagement:
 
     def test_get_connection_round_robin(self):
         """Test round-robin connection selection."""
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+        adapter = NATSAdapter(config=config)
         mock_connections = []
         for i in range(3):
             mock_nc = Mock(spec=NATSClient)
@@ -343,7 +347,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_rpc_handler_success_msgpack(self):
         """Test RPC handler with successful execution using msgpack."""
-        adapter = NATSAdapter(use_msgpack=True)
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
@@ -384,7 +389,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_rpc_handler_success_json(self):
         """Test RPC handler with successful execution using JSON."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
@@ -558,7 +564,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_rpc_handler_serialization_error_fallback(self):
         """Test RPC handler fallback when msgpack deserialization fails."""
-        adapter = NATSAdapter(use_msgpack=True)
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -596,7 +603,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_rpc_handler_non_bytes_data(self):
         """Test RPC handler with non-bytes message data."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -632,7 +640,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_rpc_handler_error_json_response(self):
         """Test RPC handler error response with JSON serialization."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -672,7 +681,8 @@ class TestNATSAdapterRPC:
     @pytest.mark.asyncio
     async def test_call_rpc_non_bytes_response(self):
         """Test call_rpc with non-bytes response data."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1100,7 +1110,7 @@ class TestNATSAdapterCommands:
 
         # Verify progress data
         progress_data = progress_calls[0].args[1]
-        if adapter._use_msgpack:
+        if adapter._config.use_msgpack:
             import msgpack
 
             progress_dict = msgpack.unpackb(progress_data, raw=False)
@@ -1333,7 +1343,8 @@ class TestNATSAdapterCommands:
     @pytest.mark.asyncio
     async def test_send_command_progress_handler_non_msgpack(self):
         """Test send_command progress handler with non-msgpack data."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1521,7 +1532,13 @@ class TestNATSAdapterServiceRegistration:
         adapter = NATSAdapter()
         adapter._metrics = Mock()
         adapter._metrics.increment = Mock()
-        adapter._metrics.get_all = Mock(return_value={"metric1": 10, "metric2": 20})
+        from aegis_sdk.domain.metrics_models import MetricsSnapshot
+
+        adapter._metrics.get_all = Mock(
+            return_value=MetricsSnapshot(
+                uptime_seconds=100.0, counters={"metric1": 10}, gauges={"metric2": 20}, summaries={}
+            )
+        )
         mock_nc = Mock(spec=NATSClient)
         mock_nc.is_connected = True
         adapter._connections = [mock_nc]
@@ -1538,7 +1555,8 @@ class TestNATSAdapterServiceRegistration:
         data = json.loads(call_args.args[1].decode())
         assert data["instance_id"] == "instance-123"
         assert "timestamp" in data
-        assert data["metrics"] == {"metric1": 10, "metric2": 20}
+        assert data["metrics"]["counters"] == {"metric1": 10}
+        assert data["metrics"]["gauges"] == {"metric2": 20}
 
         adapter._metrics.increment.assert_called_with("heartbeats.sent")
 
@@ -1549,7 +1567,8 @@ class TestNATSAdapterIntegration:
     @pytest.mark.asyncio
     async def test_json_fallback_handling(self):
         """Test JSON fallback when msgpack detection fails."""
-        adapter = NATSAdapter(use_msgpack=True)
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         # Create a proper context manager that doesn't swallow exceptions
         timer_context = Mock()
@@ -1582,7 +1601,8 @@ class TestNATSAdapterIntegration:
     @pytest.mark.asyncio
     async def test_connection_pool_failover(self):
         """Test connection pool failover behavior."""
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+        adapter = NATSAdapter(config=config)
 
         # Create mixed connection states
         mock_connections = []
@@ -1641,7 +1661,7 @@ class TestNATSAdapterErrorScenarios:
         mock_nc.jetstream.return_value = mock_js
         mock_connect.return_value = mock_nc
 
-        adapter = NATSAdapter(pool_size=1)
+        adapter = NATSAdapter()
         adapter._metrics = Mock()
         adapter._metrics.gauge = Mock()
         adapter._ensure_streams = AsyncMock()
@@ -1655,7 +1675,8 @@ class TestNATSAdapterErrorScenarios:
     @pytest.mark.asyncio
     async def test_rpc_handler_fallback_deserialization(self):
         """Test RPC handler with fallback JSON deserialization - covers lines 154-155."""
-        adapter = NATSAdapter(use_msgpack=True)
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1755,7 +1776,8 @@ class TestNATSAdapterErrorScenarios:
     @pytest.mark.asyncio
     async def test_publish_event_json_serialization(self):
         """Test event publishing with JSON serialization - covers line 305."""
-        adapter = NATSAdapter(use_msgpack=False)  # Force JSON
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)  # Force JSON
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1788,7 +1810,8 @@ class TestNATSAdapterErrorScenarios:
     @pytest.mark.asyncio
     async def test_send_command_progress_handler_json(self):
         """Test command progress handler with JSON data - covers line 413."""
-        adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1855,7 +1878,8 @@ class TestNATSAdapterErrorScenarios:
     @pytest.mark.asyncio
     async def test_send_command_completion_handler_json(self):
         """Test command completion handler with JSON data - covers line 420."""
-        adapter = NATSAdapter(use_msgpack=True)  # Use msgpack but receive JSON
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)  # Use msgpack but receive JSON
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)
@@ -1907,7 +1931,8 @@ class TestNATSAdapterErrorScenarios:
     @pytest.mark.asyncio
     async def test_rpc_handler_exception_in_deserialize(self):
         """Test RPC handler with exception during deserialization."""
-        adapter = NATSAdapter(use_msgpack=True)
+        config = NATSConnectionConfig(use_msgpack=True)
+        adapter = NATSAdapter(config=config)
         adapter._metrics = Mock()
         timer_context = Mock()
         timer_context.__enter__ = Mock(return_value=None)

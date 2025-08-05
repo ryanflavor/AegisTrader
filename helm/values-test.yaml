@@ -17,6 +17,9 @@ nats:
         pvc:
           enabled: true
           size: 1Gi
+      memoryStore:
+        enabled: false
+        maxSize: 0
   container:
     merge:
       resources:
@@ -49,7 +52,7 @@ monitor-api:
     data:
       API_PORT: "8100"
       NATS_URL: "nats://aegis-trader-nats:4222"
-      NATS_KV_BUCKET: "service-registry"
+      NATS_KV_BUCKET: "service_registry"
   initContainers:
     - name: wait-for-nats
       image: busybox:1.36
@@ -86,39 +89,16 @@ monitor-ui:
       cpu: 300m
       memory: 512Mi
 
-# Trading services configuration
-order-service:
-  enabled: true
-  replicaCount: 2
-  image:
-    tag: "20250804-143648"
-  livenessProbe:
-    enabled: false
-  readinessProbe:
-    enabled: false
-
-pricing-service:
-  enabled: true
-  replicaCount: 1
-  image:
-    tag: "20250804-143648"
-  livenessProbe:
-    enabled: false
-  readinessProbe:
-    enabled: false
-
-risk-service:
-  enabled: true
-  replicaCount: 1
-  image:
-    tag: "20250804-143648"
-  livenessProbe:
-    enabled: false
-  readinessProbe:
-    enabled: false
+# Trading services configuration - TO BE IMPLEMENTED
+# vnpy-based services will be added here:
+# - market-data-service
+# - trading-service  
+# - algo-service
 
 # Post-install configuration
 postInstall:
   createKvBucket:
     enabled: true
-    bucketName: service-registry
+    bucketName: service_registry
+  configureTTL:
+    enabled: true

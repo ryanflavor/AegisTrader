@@ -44,7 +44,9 @@ export default function ServiceDetailPage() {
 
       // First, fetch all instances to find the one we need
       const instances = await serviceInstanceRepository.getAllInstances()
-      const foundInstance = instances.find(inst => inst.instance_id === instanceId)
+      const foundInstance = instances.find(inst =>
+        (inst.instance_id === instanceId) || (inst.instanceId === instanceId)
+      )
 
       if (!foundInstance) {
         setError(new Error('Instance not found'))
@@ -127,8 +129,8 @@ export default function ServiceDetailPage() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h1 className="text-3xl font-bold text-gray-800">{instance.service_name}</h1>
-                <p className="text-gray-600 mt-1">Instance: {instance.instance_id}</p>
+                <h1 className="text-3xl font-bold text-gray-800">{instance.service_name || instance.serviceName}</h1>
+                <p className="text-gray-600 mt-1">Instance: {instance.instance_id || instance.instanceId}</p>
               </div>
               <ServiceStatusBadge status={instance.status} />
             </div>
@@ -140,12 +142,12 @@ export default function ServiceDetailPage() {
               </div>
               <div>
                 <span className="text-gray-500">Last Heartbeat:</span>
-                <p>{formatTimestamp(instance.last_heartbeat)}</p>
+                <p>{formatTimestamp(instance.last_heartbeat || instance.lastHeartbeat || '')}</p>
               </div>
-              {instance.sticky_active_group && (
+              {(instance.sticky_active_group || instance.stickyActiveGroup) && (
                 <div>
                   <span className="text-gray-500">Sticky Group:</span>
-                  <p>{instance.sticky_active_group}</p>
+                  <p>{instance.sticky_active_group || instance.stickyActiveGroup}</p>
                 </div>
               )}
             </div>

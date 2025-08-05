@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from aegis_sdk.domain.models import Command, Event, RPCRequest
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.ports.message_bus import MessageBusPort
 
@@ -40,7 +41,9 @@ class TestMessageBusIntegration:
     @pytest.mark.asyncio
     async def test_connection_lifecycle(self, nats_container):
         """Test complete connection lifecycle."""
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+
+        adapter = NATSAdapter(config=config)
 
         # Initially not connected
         assert not await adapter.is_connected()
@@ -229,8 +232,12 @@ class TestMessageBusIntegration:
     async def test_msgpack_json_interoperability(self, nats_container):
         """Test that msgpack and JSON serialization work together."""
         # Create two adapters with different serialization
-        msgpack_adapter = NATSAdapter(use_msgpack=True)
-        json_adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=True)
+
+        msgpack_adapter = NATSAdapter(config=config)
+        config = NATSConnectionConfig(use_msgpack=False)
+
+        json_adapter = NATSAdapter(config=config)
 
         await msgpack_adapter.connect([nats_container])
         await json_adapter.connect([nats_container])
@@ -351,7 +358,9 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_connection_with_invalid_urls(self):
         """Test connection handling with invalid URLs."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
 
         # Should handle invalid URLs gracefully
         with pytest.raises((OSError, ValueError, Exception)):
@@ -360,7 +369,9 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_operations_without_connection(self):
         """Test operations when not connected."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
 
         # Should raise when not connected
         with pytest.raises(Exception, match="not initialized"):
@@ -418,12 +429,14 @@ class TestEdgeCases:
     async def test_event_publish_without_msgpack(self, nats_container):
         """Test event publishing JSON path (line 293)."""
         # Create a JSON-only adapter
-        json_adapter = NATSAdapter(use_msgpack=False)
+        config = NATSConnectionConfig(use_msgpack=False)
+
+        json_adapter = NATSAdapter(config=config)
         await json_adapter.connect([nats_container])
 
         try:
             # Ensure we're using JSON serialization
-            assert not json_adapter._use_msgpack
+            assert not json_adapter._config.use_msgpack
 
             event = Event(domain="test", event_type="json_event", payload={"data": "test"})
 

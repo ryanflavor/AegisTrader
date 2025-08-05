@@ -47,7 +47,16 @@ def get_monitoring_port() -> MonitoringPort:
         MonitoringPort: Monitoring port implementation
     """
     config = get_service_configuration()
-    return MonitoringAdapter(config)
+    # Try to get instance repository if available
+    try:
+        from ..connection_manager import get_connection_manager
+
+        manager = get_connection_manager()
+        instance_repository = manager.instance_repository
+    except Exception:
+        instance_repository = None
+
+    return MonitoringAdapter(config, instance_repository)
 
 
 @lru_cache

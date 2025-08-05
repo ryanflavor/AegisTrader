@@ -37,10 +37,10 @@ graph TD
     end
 
     subgraph "核心业务服务 (可冗余部署)"
-        C\[行情服务\]
+        C\[MarketDataService\<br\>\<i\>(基于vnpy行情接口)\</i\>\]
         D\[计算服务\]
-        E\[算法服务\]
-        F\[交易服务\<br\>\<i\>(粘性单活跃实例/账户)\</i\>\]
+        E\[AlgoService\<br\>\<i\>(基于vnpy策略框架)\</i\>\]
+        F\[TradingService\<br\>\<i\>(基于vnpy交易接口，单活跃)\</i\>\]
     end
 
     subgraph "核心基础设施"

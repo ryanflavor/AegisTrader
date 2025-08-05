@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ServiceStatusBadge } from './service-status-badge'
 import type { ServiceInstance } from '@/types/service'
 import { cn } from '@/lib/utils'
+import { useRelativeTime } from '@/hooks/use-relative-time'
 
 interface ServiceInstanceCardProps {
   instance: ServiceInstance
@@ -14,21 +15,16 @@ interface ServiceInstanceCardProps {
 export function ServiceInstanceCard({ instance, className }: ServiceInstanceCardProps) {
   const router = useRouter()
 
-  const formatLastHeartbeat = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffSecs = Math.floor(diffMs / 1000)
+  // Support both snake_case and camelCase
+  const serviceName = instance.service_name || instance.serviceName || ''
+  const instanceId = instance.instance_id || instance.instanceId || ''
+  const lastHeartbeat = instance.last_heartbeat || instance.lastHeartbeat || ''
 
-    if (diffSecs < 60) return `${diffSecs}s ago`
-    const diffMins = Math.floor(diffSecs / 60)
-    if (diffMins < 60) return `${diffMins}m ago`
-    const diffHours = Math.floor(diffMins / 60)
-    return `${diffHours}h ago`
-  }
+  // Use the hook for real-time updates
+  const relativeTime = useRelativeTime(lastHeartbeat)
 
   const handleClick = () => {
-    router.push(`/services/${instance.instance_id}`)
+    router.push(`/services/${instanceId}`)
   }
 
   return (
@@ -40,14 +36,14 @@ export function ServiceInstanceCard({ instance, className }: ServiceInstanceCard
       onClick={handleClick}
     >
       <div className="flex justify-between items-start mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">{instance.service_name}</h3>
+        <h3 className="text-lg font-semibold text-gray-800">{serviceName}</h3>
         <ServiceStatusBadge status={instance.status} />
       </div>
 
       <div className="space-y-2 text-sm">
         <div className="flex items-center text-gray-600">
           <span className="w-24">Instance ID:</span>
-          <span className="font-mono">{instance.instance_id}</span>
+          <span className="font-mono">{instanceId}</span>
         </div>
         <div className="flex items-center text-gray-600">
           <span className="w-24">Version:</span>
@@ -55,7 +51,7 @@ export function ServiceInstanceCard({ instance, className }: ServiceInstanceCard
         </div>
         <div className="flex items-center text-gray-600">
           <span className="w-24">Last Heartbeat:</span>
-          <span>{formatLastHeartbeat(instance.last_heartbeat)}</span>
+          <span>{relativeTime}</span>
         </div>
       </div>
     </div>

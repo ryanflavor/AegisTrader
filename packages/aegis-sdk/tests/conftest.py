@@ -69,7 +69,10 @@ async def nats_adapter(nats_container):
 @pytest_asyncio.fixture
 async def nats_adapter_msgpack(nats_container):
     """Create a real NATS adapter with msgpack serialization."""
-    adapter = NATSAdapter(use_msgpack=True)
+    from aegis_sdk.infrastructure.config import NATSConnectionConfig
+
+    config = NATSConnectionConfig(use_msgpack=True)
+    adapter = NATSAdapter(config=config)
     await adapter.connect([nats_container])
 
     yield adapter

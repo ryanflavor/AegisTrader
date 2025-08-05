@@ -34,7 +34,7 @@ class AegisKVStoreComposition(KVStorePort):
     while maintaining a separate NATS connection for KV Store.
     """
 
-    def __init__(self, bucket_name: str = "service-registry"):
+    def __init__(self, bucket_name: str = "service_registry"):
         """Initialize the KV Store adapter."""
         self.bucket_name = bucket_name
         self._messaging_adapter = NATSAdapter(pool_size=1, use_msgpack=False)

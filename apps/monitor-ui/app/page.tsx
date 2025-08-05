@@ -3,6 +3,8 @@
 import { ServiceInstanceCard } from '@/components/ui/service-instance-card'
 import { useServiceInstances } from '@/hooks/use-service-instances'
 import { useSystemStatus } from '@/hooks/use-system-status'
+import { useCurrentTime } from '@/hooks/use-relative-time'
+import { useLiveUptime } from '@/hooks/use-live-uptime'
 
 export default function Home() {
   // Use custom hooks for data fetching with automatic polling
@@ -18,6 +20,15 @@ export default function Home() {
     loading: statusLoading,
     error: statusError,
   } = useSystemStatus();
+
+  // Get current time that updates every second
+  const currentTime = useCurrentTime();
+
+  // Get live uptime that updates every second
+  const liveUptime = useLiveUptime(
+    undefined, // No start_time available
+    systemStatus?.uptime_seconds
+  );
 
   // Combine loading states
   const loading = instancesLoading || statusLoading;
@@ -88,7 +99,7 @@ export default function Home() {
                   </div>
                   <div className="flex items-center">
                     <span className="text-gray-600 w-32">Uptime:</span>
-                    <span className="font-mono">{formatUptime(systemStatus.uptime_seconds)}</span>
+                    <span className="font-mono">{liveUptime}</span>
                   </div>
                   <div className="flex items-center">
                     <span className="text-gray-600 w-32">Version:</span>
@@ -104,7 +115,7 @@ export default function Home() {
 
             {/* Timestamp */}
             <div className="md:col-span-2 text-center text-sm text-gray-500 mt-4">
-              Last updated: {systemStatus ? new Date(systemStatus.timestamp).toLocaleString() : 'N/A'}
+              Last updated: {currentTime}
             </div>
           </div>
         )}

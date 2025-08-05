@@ -18,6 +18,79 @@ from ..ports.metrics import MetricsPort
 from ..ports.repository import ServiceRepository
 
 
+class UseCaseEventFactory:
+    """Factory for creating domain events in use cases.
+
+    This factory provides consistent event creation across use cases,
+    reducing code duplication and ensuring proper event structure.
+    """
+
+    @staticmethod
+    def create_service_event(
+        event_type: str,
+        service_name: ServiceName,
+        instance_id: InstanceId,
+        timestamp: Any,
+        details: dict[str, Any] | None = None,
+    ) -> Event:
+        """Create a service domain event.
+
+        Args:
+            event_type: The event type (e.g., "service.registered", "service.unhealthy")
+            service_name: The service name value object
+            instance_id: The instance ID value object
+            timestamp: The event timestamp
+            details: Optional event details
+
+        Returns:
+            Event: A properly constructed Event instance
+        """
+        return Event(
+            domain="service",
+            event_type=event_type,
+            payload={
+                "service_name": str(service_name),
+                "instance_id": str(instance_id),
+                "timestamp": timestamp.isoformat()
+                if hasattr(timestamp, "isoformat")
+                else str(timestamp),
+                "details": details or {},
+            },
+            source=str(instance_id),
+        )
+
+    @staticmethod
+    def create_command_event(
+        event_type: str,
+        command_id: str,
+        handler_instance: str,
+        **kwargs: Any,
+    ) -> Event:
+        """Create a command domain event.
+
+        Args:
+            event_type: The event type (e.g., "progress", "completed", "failed")
+            command_id: The command message ID
+            handler_instance: The handler instance ID
+            **kwargs: Additional event payload fields
+
+        Returns:
+            Event: A properly constructed Event instance
+        """
+        payload = {
+            "command_id": command_id,
+            "handler": handler_instance,
+            **kwargs,
+        }
+
+        return Event(
+            domain="command",
+            event_type=event_type,
+            payload=payload,
+            source=handler_instance,
+        )
+
+
 class UseCase(Protocol):
     """Protocol for use case implementations."""
 
@@ -91,16 +164,12 @@ class ServiceRegistrationUseCase:
 
         # Publish domain events
         for event in aggregate.get_uncommitted_events():
-            domain_event = Event(
-                domain="service",
+            domain_event = UseCaseEventFactory.create_service_event(
                 event_type=event.event_type,
-                payload={
-                    "service_name": str(event.service_name),
-                    "instance_id": str(event.instance_id),
-                    "timestamp": event.timestamp.isoformat(),
-                    "details": event.details,
-                },
-                source=str(instance_id),
+                service_name=event.service_name,
+                instance_id=event.instance_id,
+                timestamp=event.timestamp,
+                details=event.details,
             )
             await self._message_bus.publish_event(domain_event)
 
@@ -198,16 +267,12 @@ class ServiceHeartbeatUseCase:
 
         # Publish domain events
         for event in aggregate.get_uncommitted_events():
-            domain_event = Event(
-                domain="service",
+            domain_event = UseCaseEventFactory.create_service_event(
                 event_type=event.event_type,
-                payload={
-                    "service_name": str(event.service_name),
-                    "instance_id": str(event.instance_id),
-                    "timestamp": event.timestamp.isoformat(),
-                    "details": event.details,
-                },
-                source=str(instance_id),
+                service_name=event.service_name,
+                instance_id=event.instance_id,
+                timestamp=event.timestamp,
+                details=event.details,
             )
             await self._message_bus.publish_event(domain_event)
 
@@ -327,16 +392,12 @@ class CommandProcessingUseCase:
             try:
                 # Create progress reporter
                 async def report_progress(percent: float, status: str = "processing"):
-                    progress_event = Event(
-                        domain="command",
+                    progress_event = UseCaseEventFactory.create_command_event(
                         event_type="progress",
-                        payload={
-                            "command_id": command.message_id,
-                            "percent": percent,
-                            "status": status,
-                            "handler": request.handler_instance,
-                        },
-                        source=request.handler_instance,
+                        command_id=command.message_id,
+                        handler_instance=request.handler_instance,
+                        percent=percent,
+                        status=status,
                     )
                     await self._message_bus.publish_event(progress_event)
                     self._metrics.gauge(f"{metric_prefix}.progress", percent)
@@ -345,15 +406,11 @@ class CommandProcessingUseCase:
                 result = await handler(command, report_progress)
 
                 # Publish completion event
-                completion_event = Event(
-                    domain="command",
+                completion_event = UseCaseEventFactory.create_command_event(
                     event_type="completed",
-                    payload={
-                        "command_id": command.message_id,
-                        "result": result,
-                        "handler": request.handler_instance,
-                    },
-                    source=request.handler_instance,
+                    command_id=command.message_id,
+                    handler_instance=request.handler_instance,
+                    result=result,
                 )
                 await self._message_bus.publish_event(completion_event)
 
@@ -362,15 +419,11 @@ class CommandProcessingUseCase:
 
             except Exception as e:
                 # Publish failure event
-                failure_event = Event(
-                    domain="command",
+                failure_event = UseCaseEventFactory.create_command_event(
                     event_type="failed",
-                    payload={
-                        "command_id": command.message_id,
-                        "error": str(e),
-                        "handler": request.handler_instance,
-                    },
-                    source=request.handler_instance,
+                    command_id=command.message_id,
+                    handler_instance=request.handler_instance,
+                    error=str(e),
                 )
                 await self._message_bus.publish_event(failure_event)
 

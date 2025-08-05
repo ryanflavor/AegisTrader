@@ -6,6 +6,7 @@ import os
 import pytest
 
 from aegis_sdk.application.service import Service
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.kv_service_registry import KVServiceRegistry
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
@@ -27,12 +28,14 @@ class TestServiceRegistrationIntegration:
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
         # Create NATS adapter
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         # Create KV store
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", enable_ttl=True)
+        await kv_store.connect("service_registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -88,12 +91,14 @@ class TestServiceRegistrationIntegration:
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
         # Create shared NATS adapter
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         # Create shared KV store
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", enable_ttl=True)
+        await kv_store.connect("service_registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -147,12 +152,14 @@ class TestServiceRegistrationIntegration:
         """Test that service registration expires after TTL."""
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         # Use a separate bucket for TTL testing to avoid conflicts
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry-ttl-test", enable_ttl=True)  # Enable TTL support
+        await kv_store.connect("service_registry-ttl-test", enable_ttl=True)  # Enable TTL support
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -194,12 +201,14 @@ class TestServiceRegistrationIntegration:
         """Test that heartbeat prevents TTL expiration."""
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         # Use a separate bucket for TTL testing to avoid conflicts
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry-ttl-test", enable_ttl=True)
+        await kv_store.connect("service_registry-ttl-test", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -243,11 +252,13 @@ class TestServiceRegistrationIntegration:
         """Test service re-registers if KV entry is lost."""
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", enable_ttl=True)
+        await kv_store.connect("service_registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -290,11 +301,13 @@ class TestServiceRegistrationIntegration:
         """Test concurrent heartbeat updates don't cause issues."""
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", enable_ttl=True)
+        await kv_store.connect("service_registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -336,11 +349,13 @@ class TestServiceRegistrationIntegration:
         """Test service discovery using key prefix pattern."""
         nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
 
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service-registry", enable_ttl=True)
+        await kv_store.connect("service_registry", enable_ttl=True)
 
         # Create registry
         registry = KVServiceRegistry(kv_store)

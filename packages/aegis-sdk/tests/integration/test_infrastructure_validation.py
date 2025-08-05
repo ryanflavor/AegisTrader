@@ -21,6 +21,7 @@ from nats.errors import TimeoutError as NATSTimeoutError
 
 from aegis_sdk.application.service import Service
 from aegis_sdk.domain.models import Command, Event, RPCRequest, ServiceInfo
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 from aegis_sdk.ports.message_bus import MessageBusPort
 
@@ -32,7 +33,8 @@ class TestNATSAdapterConnectionPooling:
     async def test_connection_pool_creation(self):
         """Test that connection pool is created with specified size."""
         pool_size = 3
-        adapter = NATSAdapter(pool_size=pool_size)
+        config = NATSConnectionConfig(pool_size=pool_size)
+        adapter = NATSAdapter(config=config)
 
         # Mock NATS connections
         mock_connections = []
@@ -55,7 +57,8 @@ class TestNATSAdapterConnectionPooling:
     async def test_round_robin_connection_distribution(self):
         """Test that connections are distributed in round-robin fashion."""
         pool_size = 3
-        adapter = NATSAdapter(pool_size=pool_size)
+        config = NATSConnectionConfig(pool_size=pool_size)
+        adapter = NATSAdapter(config=config)
 
         # Create mock connections
         mock_connections = []
@@ -82,7 +85,8 @@ class TestNATSAdapterConnectionPooling:
     async def test_connection_pool_with_failed_connections(self):
         """Test connection pool behavior when some connections fail."""
         pool_size = 3
-        adapter = NATSAdapter(pool_size=pool_size)
+        config = NATSConnectionConfig(pool_size=pool_size)
+        adapter = NATSAdapter(config=config)
 
         # Create mock connections with one failed
         mock_connections = []
@@ -111,7 +115,8 @@ class TestNATSAdapterConnectionPooling:
 
     async def test_all_connections_failed_raises_exception(self):
         """Test that exception is raised when all connections fail."""
-        adapter = NATSAdapter(pool_size=2)
+        config = NATSConnectionConfig(pool_size=2)
+        adapter = NATSAdapter(config=config)
 
         # All connections failed
         mock_connections = []
@@ -132,7 +137,8 @@ class TestNATSAdapterFailoverAndHealthChecks:
 
     async def test_connection_health_check(self):
         """Test that is_connected properly checks connection health."""
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+        adapter = NATSAdapter(config=config)
 
         # No connections initially
         assert await adapter.is_connected() is False
@@ -157,7 +163,8 @@ class TestNATSAdapterFailoverAndHealthChecks:
 
     async def test_automatic_failover_on_request(self):
         """Test automatic failover when making requests."""
-        adapter = NATSAdapter(pool_size=2)
+        config = NATSConnectionConfig(pool_size=2)
+        adapter = NATSAdapter(config=config)
 
         # Create mock connections
         mock_conn1 = Mock(spec=NATSClient)
@@ -199,7 +206,8 @@ class TestNATSAdapterFailoverAndHealthChecks:
 
     async def test_heartbeat_functionality(self):
         """Test service heartbeat sending."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         mock_nc = Mock(spec=NATSClient)
         mock_nc.is_connected = True
@@ -227,7 +235,8 @@ class TestNATSAdapterReconnection:
 
     async def test_connection_with_retry_configuration(self):
         """Test that connections are configured with proper retry settings."""
-        adapter = NATSAdapter(pool_size=1)
+        config = NATSConnectionConfig(pool_size=1)
+        adapter = NATSAdapter(config=config)
 
         with patch("nats.connect") as mock_connect:
             mock_nc = Mock(spec=NATSClient)
@@ -249,7 +258,8 @@ class TestNATSAdapterReconnection:
 
     async def test_publish_retry_on_json_decode_error(self):
         """Test that publish operations retry on JSON decode errors."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         mock_js = Mock()
         adapter._js = mock_js
@@ -279,7 +289,8 @@ class TestNATSAdapterReconnection:
 
     async def test_publish_max_retry_exceeded(self):
         """Test that publish fails after max retries."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         mock_js = Mock()
         adapter._js = mock_js
@@ -301,7 +312,8 @@ class TestNATSAdapterReconnection:
 
     async def test_command_send_retry_on_json_decode_error(self):
         """Test that command send operations retry on JSON decode errors."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         mock_js = Mock()
         adapter._js = mock_js
@@ -341,7 +353,8 @@ class TestMessageBusPortCompliance:
 
     async def test_implements_all_abstract_methods(self):
         """Test that NATSAdapter implements all MessageBusPort methods."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         # Check all required methods exist
         assert hasattr(adapter, "connect")
@@ -362,7 +375,8 @@ class TestMessageBusPortCompliance:
 
     async def test_rpc_interface_compliance(self):
         """Test RPC operations comply with interface."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         # Mock connection
         mock_nc = Mock(spec=NATSClient)
@@ -385,7 +399,8 @@ class TestMessageBusPortCompliance:
 
     async def test_event_interface_compliance(self):
         """Test event operations comply with interface."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         # Mock JetStream
         mock_js = Mock()
@@ -415,7 +430,8 @@ class TestMessageBusPortCompliance:
 
     async def test_command_interface_compliance(self):
         """Test command operations comply with interface."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+        adapter = NATSAdapter(config=config)
 
         # Mock JetStream
         mock_js = Mock()
@@ -653,41 +669,38 @@ class TestMetricsIntegration:
         mock_metrics.increment = Mock()
         mock_metrics.timer = Mock(return_value=Mock(__enter__=Mock(), __exit__=Mock()))
 
-        with patch(
-            "aegis_sdk.infrastructure.nats_adapter.get_metrics",
-            return_value=mock_metrics,
-        ):
-            adapter = NATSAdapter(pool_size=2)
+        config = NATSConnectionConfig(pool_size=2)
+        adapter = NATSAdapter(config=config, metrics=mock_metrics)
 
-            # Mock connections
-            mock_connections = []
-            for _ in range(2):
-                mock_nc = Mock(spec=NATSClient)
-                mock_nc.is_connected = True
-                mock_js = Mock()
-                mock_js.stream_info = AsyncMock(side_effect=Exception("Not found"))
-                mock_js.add_stream = AsyncMock()
-                mock_nc.jetstream = Mock(return_value=mock_js)
-                mock_connections.append(mock_nc)
+        # Mock connections
+        mock_connections = []
+        for _ in range(2):
+            mock_nc = Mock(spec=NATSClient)
+            mock_nc.is_connected = True
+            mock_js = Mock()
+            mock_js.stream_info = AsyncMock(side_effect=Exception("Not found"))
+            mock_js.add_stream = AsyncMock()
+            mock_nc.jetstream = Mock(return_value=mock_js)
+            mock_connections.append(mock_nc)
 
-            with patch("nats.connect", side_effect=mock_connections):
-                await adapter.connect(["nats://localhost:4222"])
+        with patch("nats.connect", side_effect=mock_connections):
+            await adapter.connect(["nats://localhost:4222"])
 
-            # Check connection gauge
-            mock_metrics.gauge.assert_called_with("nats.connections", 2)
+        # Check connection gauge
+        mock_metrics.gauge.assert_called_with("nats.connections", 2)
 
-            # Test RPC metrics
-            mock_nc = adapter._connections[0]
-            mock_response = Mock()
-            mock_response.data = b'{"correlation_id":"123","success":true,"result":{}}'
-            mock_nc.request = AsyncMock(return_value=mock_response)
+        # Test RPC metrics
+        mock_nc = adapter._connections[0]
+        mock_response = Mock()
+        mock_response.data = b'{"correlation_id":"123","success":true,"result":{}}'
+        mock_nc.request = AsyncMock(return_value=mock_response)
 
-            request = RPCRequest(method="test", params={}, target="service")
-            await adapter.call_rpc(request)
+        request = RPCRequest(method="test", params={}, target="service")
+        await adapter.call_rpc(request)
 
-            # Check timer and increment calls
-            mock_metrics.timer.assert_called()
-            mock_metrics.increment.assert_called_with("rpc.client.service.test.success")
+        # Check timer and increment calls
+        mock_metrics.timer.assert_called()
+        mock_metrics.increment.assert_called_with("rpc.client.service.test.success")
 
 
 if __name__ == "__main__":

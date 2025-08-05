@@ -239,10 +239,11 @@ class ServiceDefinition(BaseModel):
 class ServiceInstance(BaseModel):
     """Domain model representing a running service instance."""
 
-    model_config = ConfigDict(strict=True, frozen=True)
+    model_config = ConfigDict(strict=True, frozen=True, alias_generator=None, populate_by_name=True)
 
     service_name: str = Field(
         ...,
+        alias="serviceName",
         description="Service name this instance belongs to",
         pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$",
         min_length=3,
@@ -250,6 +251,7 @@ class ServiceInstance(BaseModel):
     )
     instance_id: str = Field(
         ...,
+        alias="instanceId",
         description="Unique instance identifier",
         min_length=1,
         max_length=100,
@@ -265,10 +267,12 @@ class ServiceInstance(BaseModel):
     )
     last_heartbeat: datetime = Field(
         ...,
+        alias="lastHeartbeat",
         description="Last heartbeat timestamp",
     )
     sticky_active_group: str | None = Field(
         None,
+        alias="stickyActiveGroup",
         description="Sticky session group identifier",
     )
     metadata: dict[str, Any] = Field(

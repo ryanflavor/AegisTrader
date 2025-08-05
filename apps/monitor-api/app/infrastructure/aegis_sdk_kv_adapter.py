@@ -56,7 +56,7 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
 
             # Initialize KV Store
             self._kv_store = NATSKVStore(self._nats_adapter)
-            await self._kv_store.connect("service-registry")
+            await self._kv_store.connect("service_registry")
 
             self._connected = True
             logger.info("Connected to NATS KV Store via AegisSDK")

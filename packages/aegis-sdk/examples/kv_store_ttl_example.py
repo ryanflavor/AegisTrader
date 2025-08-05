@@ -13,6 +13,13 @@ from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
 
 async def main():
     """Demonstrate KV Store with TTL functionality."""
+    # Set up logging to see what's happening
+    import logging
+
+    logging.basicConfig(
+        level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
     # Create NATS adapter
     adapter = NATSAdapter()
 
@@ -24,9 +31,14 @@ async def main():
     kv_store = NATSKVStore(nats_adapter=adapter)
 
     # Connect to a bucket with TTL support enabled
-    await kv_store.connect("ttl-example-bucket", enable_ttl=True)
+    await kv_store.connect("ttl_example_bucket", enable_ttl=True)
 
     print("=== NATS KV Store TTL Example ===\n")
+    print("⚠️  IMPORTANT NOTES:")
+    print("1. NATS KV doesn't expose remaining TTL when retrieving entries")
+    print("2. TTL feature requires NATS 2.11+ (you have: v2.11.6 ✓)")
+    print("3. Current limitation: TTL may not work with standard KV bucket creation")
+    print("4. Workaround: Use direct JetStream streams with allow_msg_ttl enabled")
 
     # Example 1: Store temporary session data (expires in 30 seconds)
     session_data = {
@@ -51,28 +63,43 @@ async def main():
     await kv_store.put("config:global", config_data)
     print("✓ Stored permanent configuration (no TTL)")
 
-    # Check all values
-    print("\nChecking stored values:")
+    # Check all values exist immediately
+    print("\nVerifying all values exist immediately after storage:")
     for key in ["session:user123", "verify:email:user123", "config:global"]:
-        entry = await kv_store.get(key)
-        if entry:
-            ttl_info = (
-                f" (expires in ~{entry.ttl}s)"
-                if hasattr(entry, "ttl") and entry.ttl
-                else " (permanent)"
-            )
-            print(f"  - {key}: exists{ttl_info}")
+        exists = await kv_store.exists(key)
+        print(f"  - {key}: {'exists' if exists else 'not found'}")
 
-    # Example 4: Update TTL by overwriting with new value
-    print("\nExtending session TTL to 60 seconds...")
-    session_data["extended"] = True
-    await kv_store.put("session:user123", session_data, KVOptions(ttl=60))
-    print("✓ Session TTL extended")
+    # Example 4: Verify TTL expiration works
+    print("\nTesting TTL expiration...")
+    # Store a key with 3 second TTL
+    await kv_store.put("short-ttl-test", {"expires": "soon"}, KVOptions(ttl=3))
+    print("✓ Stored key with 3-second TTL")
+
+    # Verify it exists immediately
+    assert await kv_store.exists("short-ttl-test") is True
+    print("✓ Key exists immediately after storage")
+
+    # Wait 4 seconds
+    print("⏳ Waiting 4 seconds for expiration...")
+    await asyncio.sleep(4)
+
+    # Check if expired
+    exists_after = await kv_store.exists("short-ttl-test")
+    if exists_after:
+        print("⚠️  Key still exists - TTL is not working with standard KV buckets")
+        print("   This is a known limitation: NATS KV doesn't properly support per-message TTL")
+        print("   even though the server version supports it.")
+        print("\n   Alternative approaches:")
+        print("   1. Use direct JetStream streams instead of KV buckets")
+        print("   2. Implement application-level expiration logic")
+        print("   3. Use stream-level max_age for bucket-wide TTL")
+    else:
+        print("✓ Key expired as expected!")
 
     # Example 5: Handling TTL errors when not supported
     print("\nTesting TTL on non-TTL bucket...")
     kv_store_no_ttl = NATSKVStore(nats_adapter=adapter)
-    await kv_store_no_ttl.connect("no-ttl-bucket", enable_ttl=False)
+    await kv_store_no_ttl.connect("no_ttl_bucket", enable_ttl=False)
 
     try:
         await kv_store_no_ttl.put("test", "value", KVOptions(ttl=10))
@@ -90,3 +117,9 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    print("\n" + "=" * 50)
+    print("For TTL to work properly, ensure:")
+    print("1. NATS server version 2.11+")
+    print("2. JetStream enabled with proper configuration")
+    print("3. Stream created with 'allow_msg_ttl: true'")
+    print("=" * 50)

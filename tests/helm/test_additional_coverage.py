@@ -260,7 +260,7 @@ class TestServiceRegistry:
 
         sr_config = values["serviceRegistry"]
         assert sr_config["createBucket"] is True
-        assert sr_config["bucketName"] == "service-registry"
+        assert sr_config["bucketName"] == "service_registry"
         assert sr_config["bucket"]["replicas"] == 3
         assert sr_config["bucket"]["maxBytes"] == 1073741824  # 1GB
 

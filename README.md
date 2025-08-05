@@ -1,17 +1,33 @@
 # AegisTrader
 
-AegisTrader is an automated trading system built with modern microservices architecture.
+AegisTrader is an automated trading system built with modern microservices architecture. The system provides a comprehensive platform for service management, monitoring, and inter-service communication using NATS JetStream.
 
 ## Project Structure
 
 - `apps/` - Application services
-  - `monitor-api/` - FastAPI Management Service
-  - `monitor-ui/` - Next.js Monitoring Frontend
+  - `monitor-api/` - FastAPI Management Service with CRUD operations for service definitions
+  - `monitor-ui/` - Next.js Monitoring Frontend with real-time service status dashboard
+  - `trading-service/` - Example trading services (Order, Pricing, Risk) demonstrating SDK usage
 - `packages/` - Shared packages
-  - `aegis-sdk/` - Core SDK
-  - `shared-contracts/` - Shared data contracts
-- `helm/` - Kubernetes Helm charts
-- `tests/` - Test suites
+  - `aegis-sdk/` - Core SDK with service registry, discovery, RPC, events, and metrics
+  - `shared-contracts/` - Shared event contracts and utilities for type-safe communication
+- `helm/` - Kubernetes Helm charts for deploying the entire system
+- `tests/` - Comprehensive unit and integration test suites
+
+## Features
+
+### Completed (Through Story 2.4)
+
+- ✅ **Service Registry & Heartbeats** - Automatic service registration with health monitoring
+- ✅ **Service Discovery** - Dynamic service discovery with multiple selection strategies
+- ✅ **Inter-Service RPC** - Type-safe RPC communication between services
+- ✅ **Event Streaming** - Pub/sub event system with domain-based routing
+- ✅ **Management API** - RESTful API for CRUD operations on service definitions
+- ✅ **Monitoring Dashboard** - Real-time UI showing service health and status
+- ✅ **Example Trading Services** - Order, Pricing, and Risk services demonstrating patterns
+- ✅ **Kubernetes Integration** - Full Helm chart deployment with auto-scaling support
+- ✅ **Metrics Collection** - Built-in metrics port for performance monitoring
+- ✅ **Failover & Recovery** - Automatic pod recovery with service re-registration
 
 ## Development
 
@@ -46,7 +62,37 @@ pre-commit run --all-files
 
 ## Deployment
 
-See `helm/README.md` for Kubernetes deployment instructions.
+### Quick Start
+
+```bash
+# Deploy to local Kind cluster
+make dev-deploy
+
+# Forward ports for local access
+make dev-forward
+
+# Check service registry status
+make registry-status
+```
+
+### Service Management
+
+Rapid development commands for updating individual services:
+
+```bash
+# Update specific services (~45 seconds each)
+make update-api        # Update Monitor API only
+make update-ui         # Update Monitor UI only
+make update-order      # Update Order Service only
+make update-pricing    # Update Pricing Service only
+make update-risk       # Update Risk Service only
+
+# Utility commands
+make restart-all       # Restart all services
+make watch            # Monitor pod status changes
+```
+
+For detailed Kubernetes deployment instructions, see `helm/README.md`.
 
 ## CI/CD Setup
 
@@ -69,3 +115,39 @@ The project includes GitHub Actions CI/CD pipeline for automated testing and dep
    - Deploy to staging environment
 
 For detailed setup instructions, see [docs/github-actions-setup.md](docs/github-actions-setup.md).
+
+## Architecture
+
+### Core Components
+
+1. **AegisSDK** - Python SDK providing:
+   - Service registration with automatic heartbeats
+   - Service discovery with caching and selection strategies
+   - RPC client/server with request-reply patterns
+   - Event publishing and subscription
+   - Metrics collection and reporting
+
+2. **NATS JetStream** - Message broker providing:
+   - Key-Value store for service registry
+   - Stream-based event distribution
+   - Request-reply for RPC communication
+
+3. **Monitor API** - Management service providing:
+   - CRUD operations for service definitions
+   - Service instance monitoring
+   - RESTful API for UI and external tools
+
+4. **Monitor UI** - Next.js dashboard showing:
+   - Real-time service health status
+   - Service instance details
+   - Interactive service management
+
+### Example Services
+
+The project includes three example trading services:
+
+- **Order Service** - Manages trading orders with RPC endpoints
+- **Pricing Service** - Provides market pricing data and updates
+- **Risk Service** - Assesses order risk and manages position limits
+
+These services demonstrate best practices for using AegisSDK features.

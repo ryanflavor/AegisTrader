@@ -63,11 +63,11 @@ class TestNATSKVStore:
             mock_adapter._js = js
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test-bucket")
+            await kv_store.connect("test_bucket")
 
-            js.key_value.assert_called_once_with("test-bucket")
+            js.key_value.assert_called_once_with("test_bucket")
             assert kv_store._kv == kv
-            assert kv_store._bucket_name == "test-bucket"
+            assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_with_enable_ttl(self, kv_store, mock_nats_client):
@@ -79,11 +79,11 @@ class TestNATSKVStore:
             mock_adapter._js = js
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("ttl-bucket", enable_ttl=True)
+            await kv_store.connect("ttl_bucket", enable_ttl=True)
 
             # Should try key_value first
             assert js.key_value.call_count >= 1
-            assert kv_store._bucket_name == "ttl-bucket"
+            assert kv_store._bucket_name == "ttl_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_not_connected(self, kv_store):
@@ -92,13 +92,13 @@ class TestNATSKVStore:
             mock_adapter.is_connected = AsyncMock(return_value=False)
 
             with pytest.raises(KVNotConnectedError):
-                await kv_store.connect("test-bucket")
+                await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_disconnect_clears_kv_reference(self, kv_store):
         """Test that disconnect clears KV references."""
         kv_store._kv = AsyncMock()
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         await kv_store.disconnect()
 
@@ -180,7 +180,7 @@ class TestNATSKVStore:
         """Test put with TTL and revision check."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock get for revision check
         mock_entry = Mock()
@@ -202,7 +202,7 @@ class TestNATSKVStore:
         # Should use JetStream publish with TTL header
         mock_js.publish.assert_called_once()
         call_args = mock_js.publish.call_args
-        assert call_args[0][0] == "$KV.test-bucket.test-key"
+        assert call_args[0][0] == "$KV.test_bucket.test-key"
         assert call_args[0][1] == b'"value"'
         assert call_args[1]["headers"]["Nats-TTL"] == "3600"
         assert revision == 125
@@ -533,11 +533,11 @@ class TestNATSKVStore:
         """Test status returns KV bucket information."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock status
         mock_status = Mock()
-        mock_status.bucket = "test-bucket"
+        mock_status.bucket = "test_bucket"
         mock_status.values = 42
         mock_status.history = 10
         mock_status.bytes = 1024
@@ -546,7 +546,7 @@ class TestNATSKVStore:
 
         status = await kv_store.status()
 
-        assert status["bucket"] == "test-bucket"
+        assert status["bucket"] == "test_bucket"
         assert status["values"] == 42
         assert status["history"] == 10
         assert status["bytes"] == 1024
@@ -579,47 +579,50 @@ class TestNATSKVStore:
 
     def test_sanitize_key(self):
         """Test key sanitization for NATS compatibility."""
-        kv_store = NATSKVStore(sanitize_keys=True)
+        from aegis_sdk.infrastructure.config import KVStoreConfig
+
+        config = KVStoreConfig(bucket="test", sanitize_keys=True)
+        kv_store = NATSKVStore(config=config)
 
         # Test various invalid characters
-        sanitized = kv_store._sanitize_key("key with spaces")
-        assert sanitized.sanitized == "key_with_spaces"
-        assert sanitized.original == "key with spaces"
-        assert sanitized.was_sanitized
+        original, sanitized = kv_store._sanitize_key("key with spaces")
+        assert sanitized == "key_with_spaces"
+        assert original == "key with spaces"
 
-        sanitized = kv_store._sanitize_key("key.with.dots")
-        assert sanitized.sanitized == "key_with_dots"
+        original, sanitized = kv_store._sanitize_key("key.with.dots")
+        assert sanitized == "key_with_dots"
 
-        sanitized = kv_store._sanitize_key("key*with*stars")
-        assert sanitized.sanitized == "key_with_stars"
+        original, sanitized = kv_store._sanitize_key("key*with*stars")
+        assert sanitized == "key_with_stars"
 
-        sanitized = kv_store._sanitize_key("key>with>gt")
-        assert sanitized.sanitized == "key_with_gt"
+        original, sanitized = kv_store._sanitize_key("key>with>gt")
+        assert sanitized == "key_with_gt"
 
-        sanitized = kv_store._sanitize_key("key/with/slash")
-        assert sanitized.sanitized == "key_with_slash"
+        original, sanitized = kv_store._sanitize_key("key/with/slash")
+        assert sanitized == "key_with_slash"
 
-        sanitized = kv_store._sanitize_key("key\\with\\backslash")
-        assert sanitized.sanitized == "key_with_backslash"
+        original, sanitized = kv_store._sanitize_key("key\\with\\backslash")
+        assert sanitized == "key_with_backslash"
 
-        sanitized = kv_store._sanitize_key("key:with:colon")
-        assert sanitized.sanitized == "key_with_colon"
+        original, sanitized = kv_store._sanitize_key("key:with:colon")
+        assert sanitized == "key_with_colon"
 
         # Test key mapping is stored
         assert kv_store._key_mapping["key_with_spaces"] == "key with spaces"
 
         # Test with sanitization disabled
-        kv_store_no_sanitize = NATSKVStore(sanitize_keys=False)
-        sanitized = kv_store_no_sanitize._sanitize_key("key with spaces")
-        assert sanitized.sanitized == "key with spaces"
-        assert not sanitized.was_sanitized
+        config_no_sanitize = KVStoreConfig(bucket="test", sanitize_keys=False)
+        kv_store_no_sanitize = NATSKVStore(config=config_no_sanitize)
+        original, sanitized = kv_store_no_sanitize._sanitize_key("key with spaces")
+        assert sanitized == "key with spaces"
+        assert original == "key with spaces"
 
     @pytest.mark.asyncio
     async def test_put_with_ttl_and_revision(self, kv_store):
         """Test put with both TTL and revision check."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock get for revision check
         mock_entry = Mock()
@@ -699,7 +702,7 @@ class TestNATSKVStore:
         """Test put with TTL when server doesn't support it."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock JetStream publish that fails with TTL error
         mock_js = AsyncMock()
@@ -723,7 +726,7 @@ class TestNATSKVStore:
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
             with pytest.raises(KVStoreError, match="NATS JetStream not initialized"):
-                await kv_store.connect("test-bucket")
+                await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_connect_create_bucket_no_ttl(self, kv_store, mock_nats_client):
@@ -742,11 +745,11 @@ class TestNATSKVStore:
             mock_adapter._js = js
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test-bucket", enable_ttl=False)
+            await kv_store.connect("test_bucket", enable_ttl=False)
 
             # Should have tried to add stream
             js.add_stream.assert_called_once()
-            assert kv_store._bucket_name == "test-bucket"
+            assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_stream_exists(self, kv_store, mock_nats_client):
@@ -764,11 +767,11 @@ class TestNATSKVStore:
             mock_adapter._js = js
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test-bucket")
+            await kv_store.connect("test_bucket")
 
             # Should get KV bucket after checking stream exists
             assert js.key_value.call_count == 2
-            assert kv_store._bucket_name == "test-bucket"
+            assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_get_no_created_timestamp(self, kv_store, mock_metrics):
@@ -1062,7 +1065,7 @@ class TestNATSKVStore:
         """Test status with error."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock status throws exception
         mock_kv.status = AsyncMock(side_effect=Exception("status error"))
@@ -1070,7 +1073,7 @@ class TestNATSKVStore:
         status = await kv_store.status()
 
         assert status["connected"] is True
-        assert status["bucket"] == "test-bucket"
+        assert status["bucket"] == "test_bucket"
         assert "error" in status
 
     @pytest.mark.asyncio
@@ -1180,7 +1183,7 @@ class TestNATSKVStore:
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
             with pytest.raises(Exception, match="Failed to create stream with TTL support"):
-                await kv_store.connect("test-bucket", enable_ttl=True)
+                await kv_store.connect("test_bucket", enable_ttl=True)
 
     @pytest.mark.asyncio
     async def test_connect_failure(self, kv_store, mock_nats_client):
@@ -1196,7 +1199,7 @@ class TestNATSKVStore:
             mock_adapter.is_connected = AsyncMock(return_value=True)
 
             with pytest.raises(Exception, match="Failed to connect to KV bucket"):
-                await kv_store.connect("test-bucket")
+                await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_put_create_only_generic_error(self, kv_store):
@@ -1281,7 +1284,7 @@ class TestNATSKVStore:
         """Test put with TTL re-raises generic errors."""
         mock_kv = AsyncMock()
         kv_store._kv = mock_kv
-        kv_store._bucket_name = "test-bucket"
+        kv_store._bucket_name = "test_bucket"
 
         # Mock JetStream publish that fails with generic error
         mock_js = AsyncMock()

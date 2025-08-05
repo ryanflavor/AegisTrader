@@ -183,10 +183,18 @@ class TestEventPatternValidation:
         domain = "product"
         event_type = "updated"
         events_by_version = {"1.0": [], "2.0": [], "3.0": []}
+        test_product_ids = {
+            f"P{time.time_ns()}-1",
+            f"P{time.time_ns()}-2",
+            f"P{time.time_ns()}-3",
+            f"P{time.time_ns()}-4",
+        }
 
         async def versioned_handler(event: Event):
-            if event.version in events_by_version:
-                events_by_version[event.version].append(event)
+            # Only process events from this test run
+            if event.payload.get("product_id") in test_product_ids:
+                if event.version in events_by_version:
+                    events_by_version[event.version].append(event)
 
         # Subscribe to all product update events
         await nats_adapter.subscribe_event(
@@ -194,19 +202,22 @@ class TestEventPatternValidation:
         )
         await asyncio.sleep(0.1)
 
+        # Convert set to list to maintain order
+        product_ids = sorted(test_product_ids)
+
         # Publish events with different versions
         test_events = [
             Event(
                 domain=domain,
                 event_type=event_type,
-                payload={"product_id": "P1", "name": "Product 1"},
+                payload={"product_id": product_ids[0], "name": "Product 1"},
                 version="1.0",
             ),
             Event(
                 domain=domain,
                 event_type=event_type,
                 payload={
-                    "product_id": "P2",
+                    "product_id": product_ids[1],
                     "name": "Product 2",
                     "category": "Electronics",
                 },
@@ -216,7 +227,7 @@ class TestEventPatternValidation:
                 domain=domain,
                 event_type=event_type,
                 payload={
-                    "product_id": "P3",
+                    "product_id": product_ids[2],
                     "name": "Product 3",
                     "metadata": {"tags": ["new"]},
                 },
@@ -225,7 +236,7 @@ class TestEventPatternValidation:
             Event(
                 domain=domain,
                 event_type=event_type,
-                payload={"product_id": "P4", "name": "Product 4"},
+                payload={"product_id": product_ids[3], "name": "Product 4"},
                 version="1.0",
             ),
         ]
@@ -241,8 +252,8 @@ class TestEventPatternValidation:
         assert len(events_by_version["3.0"]) == 1
 
         # Verify version-specific handling works
-        v1_products = [e.payload["product_id"] for e in events_by_version["1.0"]]
-        assert sorted(v1_products) == ["P1", "P4"]
+        v1_products = sorted([e.payload["product_id"] for e in events_by_version["1.0"]])
+        assert v1_products == sorted([product_ids[0], product_ids[3]])
 
     @pytest.mark.asyncio
     async def test_event_subject_pattern_compliance(self, nats_adapter):
@@ -278,10 +289,14 @@ class TestEventPatternValidation:
         domain = "format"
         event_type = "test"
 
+        # Use unique test ID to avoid collision with historical events
+        test_id = f"EVT-{time.time_ns()}"
+        current_timestamp = time.time()
+
         # Complex event data to test serialization
         test_data = {
-            "id": "EVT-001",
-            "timestamp": time.time(),
+            "id": test_id,
+            "timestamp": current_timestamp,
             "user": {"id": 123, "name": "Test User"},
             "items": [
                 {"sku": "ITEM-1", "quantity": 2, "price": 99.99},
@@ -299,10 +314,14 @@ class TestEventPatternValidation:
         msgpack_events = []
 
         async def json_handler(event: Event):
-            json_events.append(event)
+            # Only process events from this test run
+            if event.payload.get("id") == test_id:
+                json_events.append(event)
 
         async def msgpack_handler(event: Event):
-            msgpack_events.append(event)
+            # Only process events from this test run
+            if event.payload.get("id") == test_id:
+                msgpack_events.append(event)
 
         # Subscribe with JSON adapter
         await nats_adapter.subscribe_event(SubjectPatterns.event(domain, event_type), json_handler)
@@ -338,8 +357,13 @@ class TestEventPatternValidation:
         event_type = "burst"
         events_received = []
 
+        # Use unique test run ID to avoid collision with historical events
+        test_run_id = f"run-{time.time_ns()}"
+
         async def counter_handler(event: Event):
-            events_received.append(event)
+            # Only process events from this test run
+            if event.payload.get("test_run_id") == test_run_id:
+                events_received.append(event)
 
         await nats_adapter.subscribe_event(
             SubjectPatterns.event(domain, event_type), counter_handler
@@ -354,7 +378,7 @@ class TestEventPatternValidation:
             event = Event(
                 domain=domain,
                 event_type=event_type,
-                payload={"sequence": i, "timestamp": time.time()},
+                payload={"sequence": i, "timestamp": time.time(), "test_run_id": test_run_id},
                 version="1.0",
             )
             task = nats_adapter.publish_event(event)

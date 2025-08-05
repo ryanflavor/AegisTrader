@@ -196,7 +196,7 @@ class TestDeploymentIntegration(unittest.TestCase):
         sr_config = values["serviceRegistry"]
 
         self.assertTrue(sr_config["createBucket"])
-        self.assertEqual(sr_config["bucketName"], "service-registry")
+        self.assertEqual(sr_config["bucketName"], "service_registry")
         self.assertIn("bucket", sr_config)
 
         # Validate bucket settings

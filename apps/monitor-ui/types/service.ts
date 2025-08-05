@@ -20,6 +20,11 @@ export interface ServiceInstance {
   last_heartbeat: string;
   sticky_active_group?: string | null;
   metadata?: Record<string, unknown>;
+  // Also support camelCase from API
+  serviceName?: string;
+  instanceId?: string;
+  lastHeartbeat?: string;
+  stickyActiveGroup?: string | null;
 }
 
 /**
@@ -48,13 +53,24 @@ export function isServiceInstance(value: unknown): value is ServiceInstance {
 
   const obj = value as Record<string, unknown>;
 
-  return (
+  // Check for either snake_case or camelCase
+  const hasSnakeCase = (
     typeof obj.service_name === 'string' &&
     typeof obj.instance_id === 'string' &&
     typeof obj.version === 'string' &&
-    Object.values(ServiceStatusValues).includes(obj.status as string) &&
+    (Object.values(ServiceStatusValues) as string[]).includes(obj.status as string) &&
     typeof obj.last_heartbeat === 'string'
   );
+
+  const hasCamelCase = (
+    typeof obj.serviceName === 'string' &&
+    typeof obj.instanceId === 'string' &&
+    typeof obj.version === 'string' &&
+    (Object.values(ServiceStatusValues) as string[]).includes(obj.status as string) &&
+    typeof obj.lastHeartbeat === 'string'
+  );
+
+  return hasSnakeCase || hasCamelCase;
 }
 
 /**

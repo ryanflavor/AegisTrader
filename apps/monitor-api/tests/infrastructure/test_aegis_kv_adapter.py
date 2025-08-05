@@ -74,7 +74,7 @@ class TestAegisSDKKVAdapter:
             assert adapter._kv_store == mock_kv_store
             assert adapter._connected is True
             mock_aegis_adapter.connect.assert_called_once_with(["nats://localhost:4222"])
-            mock_kv_store.connect.assert_called_once_with("service-registry")
+            mock_kv_store.connect.assert_called_once_with("service_registry")
 
     @pytest.mark.asyncio
     async def test_connect_failure(

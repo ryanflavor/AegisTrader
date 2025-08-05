@@ -65,7 +65,7 @@ class TestCommandPatternValidation:
                 from aegis_sdk.infrastructure.serialization import deserialize_params, is_msgpack
 
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
-                    data = deserialize_params(msg.data, nats_adapter._use_msgpack)
+                    data = deserialize_params(msg.data, nats_adapter._config.use_msgpack)
                 else:
                     data = json.loads(msg.data.decode())
                 progress_updates.append(data)

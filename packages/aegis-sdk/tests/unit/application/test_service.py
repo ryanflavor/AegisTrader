@@ -205,9 +205,8 @@ class TestRPCMethods:
         mock_message_bus.call_rpc.return_value = mock_response
 
         # Make RPC call with discovery disabled
-        result = await service.call_rpc(
-            "user-service", "get_user", {"id": 123}, discovery_enabled=False
-        )
+        request = service.create_rpc_request("user-service", "get_user", {"id": 123})
+        result = await service.call_rpc(request, discovery_enabled=False)
 
         assert result == {"user": "john"}
 
@@ -232,8 +231,9 @@ class TestRPCMethods:
         mock_message_bus.call_rpc.return_value = mock_response
 
         # Make RPC call with discovery disabled
+        request = service.create_rpc_request("user-service", "unknown_method")
         with pytest.raises(Exception) as exc_info:
-            await service.call_rpc("user-service", "unknown_method", discovery_enabled=False)
+            await service.call_rpc(request, discovery_enabled=False)
 
         assert "RPC failed: Method not found" in str(exc_info.value)
 
@@ -271,7 +271,8 @@ class TestRPCMethods:
         mock_message_bus.call_rpc.return_value = mock_response
 
         # Make RPC call
-        result = await service.call_rpc("user-service", "get_user", {"id": 123})
+        request = service.create_rpc_request("user-service", "get_user", {"id": 123})
+        result = await service.call_rpc(request)
 
         assert result == {"user": "john"}
 
@@ -301,8 +302,9 @@ class TestRPCMethods:
         )
 
         # Make RPC call
+        request = service.create_rpc_request("user-service", "get_user")
         with pytest.raises(ServiceUnavailableError) as exc_info:
-            await service.call_rpc("user-service", "get_user")
+            await service.call_rpc(request)
 
         assert exc_info.value.service_name == "user-service"
 
@@ -340,8 +342,9 @@ class TestRPCMethods:
         mock_message_bus.call_rpc.return_value = mock_response
 
         # Make RPC call
+        request = service.create_rpc_request("user-service", "get_user")
         with pytest.raises(Exception) as exc_info:
-            await service.call_rpc("user-service", "get_user")
+            await service.call_rpc(request)
 
         assert "RPC failed: Service unavailable" in str(exc_info.value)
 
@@ -369,7 +372,8 @@ class TestRPCMethods:
         mock_message_bus.call_rpc.return_value = mock_response
 
         # Make RPC call with instance ID
-        result = await service.call_rpc("user-service-abc123def", "health_check")
+        request = service.create_rpc_request("user-service-abc123def", "health_check")
+        result = await service.call_rpc(request)
 
         assert result == {"ok": True}
 
@@ -438,7 +442,8 @@ class TestEventMethods:
         """Test publishing an event."""
         service = Service("test-service", mock_message_bus)
 
-        await service.publish_event("order", "created", {"order_id": "123"})
+        event = service.create_event("order", "created", {"order_id": "123"})
+        await service.publish_event(event)
 
         # Verify event was published
         mock_message_bus.publish_event.assert_called_once()
@@ -479,13 +484,13 @@ class TestCommandMethods:
         }
 
         # Send command
-        result = await service.send_command(
+        command = service.create_command(
             "worker-service",
             "process_data",
             {"batch_id": "batch-456"},
             priority="high",
-            track_progress=True,
         )
+        result = await service.send_command(command, track_progress=True)
 
         assert result["status"] == "completed"
         assert result["result"]["processed"] == 50

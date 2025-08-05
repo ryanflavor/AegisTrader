@@ -12,11 +12,14 @@ from nats.aio.client import Client as NATSClient
 from nats.aio.msg import Msg
 from nats.js import JetStreamContext
 
+from ..domain.metrics_models import MetricsSnapshot
 from ..domain.models import Command, Event, RPCRequest, RPCResponse
 from ..domain.patterns import SubjectPatterns
 from ..domain.value_objects import InstanceId, ServiceName
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
+from .config import LogContext, NATSConnectionConfig
+from .factories import SerializationFactory
 from .in_memory_metrics import InMemoryMetrics
 from .serialization import (
     SerializationError,
@@ -24,7 +27,6 @@ from .serialization import (
     detect_and_deserialize,
     is_msgpack,
     serialize_dict,
-    serialize_to_msgpack,
 )
 
 
@@ -33,45 +35,48 @@ class NATSAdapter(MessageBusPort):
 
     def __init__(
         self,
-        pool_size: int = 1,
-        use_msgpack: bool = True,
+        config: NATSConnectionConfig | None = None,
         metrics: MetricsPort | None = None,
-        service_name: str | None = None,
-        instance_id: str | None = None,
     ):
-        """Initialize NATS adapter.
+        """Initialize NATS adapter with configuration.
 
         Args:
-            pool_size: Number of connections to maintain (default: 1)
-            use_msgpack: Whether to use MessagePack for serialization (default: True)
+            config: Connection configuration. If not provided, uses defaults.
             metrics: Optional metrics port. If not provided, uses default adapter.
-            service_name: Service name for deliver_group in compete mode
-            instance_id: Instance ID for unique durable names in broadcast mode
         """
-        self._pool_size = pool_size
+        self._config = config or NATSConnectionConfig()
         self._connections: list[NATSClient] = []
         self._js: JetStreamContext | None = None
         self._current_conn = 0
         self._metrics = metrics or InMemoryMetrics()
-        self._use_msgpack = use_msgpack
-        self._service_name = service_name
-        self._instance_id = instance_id
+        self._serializer = SerializationFactory.create_serializer(self._config.use_msgpack)
 
-    async def connect(self, servers: list[str]) -> None:
-        """Connect to NATS servers with clustering support."""
+        # Extract service identification from config
+        self._service_name = str(self._config.service_name) if self._config.service_name else None
+        self._instance_id = str(self._config.instance_id) if self._config.instance_id else None
+
+    async def connect(self, servers: list[str] | None = None) -> None:
+        """Connect to NATS servers with clustering support.
+
+        Args:
+            servers: Optional override for server URLs. If not provided, uses config.
+        """
+        # Use provided servers or fall back to config
+        connect_servers = servers or self._config.servers
+
         # Create connections
-        for _i in range(self._pool_size):
-            nc = await nats.connect(
-                servers=servers,
-                max_reconnect_attempts=10,
-                reconnect_time_wait=2.0,
-            )
+        for _i in range(self._config.pool_size):
+            # Get connection params and override servers if provided
+            conn_params = self._config.to_connection_params()
+            conn_params["servers"] = connect_servers
+
+            nc = await nats.connect(**conn_params)
             self._connections.append(nc)
 
         # Initialize JetStream on first connection
-        if self._connections:
-            # Get JetStream domain from environment
-            js_domain = os.getenv("NATS_JS_DOMAIN")
+        if self._connections and self._config.enable_jetstream:
+            # Use JS domain from config or environment
+            js_domain = self._config.js_domain or os.getenv("NATS_JS_DOMAIN")
             if js_domain:
                 self._js = self._connections[0].jetstream(domain=js_domain)
             else:
@@ -81,7 +86,17 @@ class NATSAdapter(MessageBusPort):
             await self._ensure_streams()
 
         self._metrics.gauge("nats.connections", len(self._connections))
-        print(f"✅ Connected to NATS cluster with {len(self._connections)} connections")
+
+        # Log with context
+        log_ctx = LogContext(
+            service_name=self._service_name,
+            instance_id=self._instance_id,
+            operation="connect",
+            component="NATSAdapter",
+        )
+        print(
+            f"✅ Connected to NATS cluster with {len(self._connections)} connections - {log_ctx.to_dict()}"
+        )
 
     async def disconnect(self) -> None:
         """Disconnect from NATS."""
@@ -171,10 +186,7 @@ class NATSAdapter(MessageBusPort):
                     )
 
                     # Send response
-                    if self._use_msgpack:
-                        await msg.respond(serialize_to_msgpack(response))
-                    else:
-                        await msg.respond(response.model_dump_json().encode())
+                    await msg.respond(self._serializer.serialize(response))
                     self._metrics.increment(f"rpc.{service}.{method}.success")
 
                 except Exception as e:
@@ -184,10 +196,7 @@ class NATSAdapter(MessageBusPort):
                         success=False,
                         error=str(e),
                     )
-                    if self._use_msgpack:
-                        await msg.respond(serialize_to_msgpack(response))
-                    else:
-                        await msg.respond(response.model_dump_json().encode())
+                    await msg.respond(self._serializer.serialize(response))
                     self._metrics.increment(f"rpc.{service}.{method}.error")
 
         # Subscribe with queue group for load balancing
@@ -219,10 +228,7 @@ class NATSAdapter(MessageBusPort):
         with self._metrics.timer(f"rpc.client.{service}.{method}"):
             try:
                 # Send request
-                if self._use_msgpack:
-                    request_data = serialize_to_msgpack(request)
-                else:
-                    request_data = request.model_dump_json().encode()
+                request_data = self._serializer.serialize(request)
 
                 response_msg = await nc.request(
                     subject,
@@ -298,9 +304,14 @@ class NATSAdapter(MessageBusPort):
         # For event patterns, use core NATS if pattern contains wildcards
         if "*" in pattern or ">" in pattern:
             # Use core NATS for wildcard subscriptions
-            # TODO: In future, we could use JetStream filtered consumers for wildcards
             nc = self._get_connection()
-            await nc.subscribe(pattern, cb=wrapper)
+
+            # For compete mode with wildcards, use queue group
+            if mode == "compete" and self._service_name:
+                await nc.subscribe(pattern, queue=self._service_name, cb=wrapper)
+            else:
+                # Broadcast mode or no service name
+                await nc.subscribe(pattern, cb=wrapper)
         else:
             # Use JetStream for specific subjects
             subscribe_kwargs = {
@@ -337,10 +348,7 @@ class NATSAdapter(MessageBusPort):
         subject = SubjectPatterns.event(event.domain, event.event_type)
 
         with self._metrics.timer(f"events.publish.{event.domain}.{event.event_type}"):
-            if self._use_msgpack:
-                event_data = serialize_to_msgpack(event)
-            else:
-                event_data = event.model_dump_json().encode()
+            event_data = self._serializer.serialize(event)
 
             # Retry logic for empty response issue in NATS client
             max_retries = 3
@@ -395,7 +403,7 @@ class NATSAdapter(MessageBusPort):
                     nc = self._get_connection()
                     await nc.publish(
                         SubjectPatterns.command_progress(cmd.message_id),
-                        serialize_dict(progress_data, self._use_msgpack),
+                        serialize_dict(progress_data, self._config.use_msgpack),
                     )
 
                 # Call handler
@@ -412,7 +420,7 @@ class NATSAdapter(MessageBusPort):
                 nc = self._get_connection()
                 await nc.publish(
                     SubjectPatterns.command_callback(cmd.message_id),
-                    serialize_dict(completion_data, self._use_msgpack),
+                    serialize_dict(completion_data, self._config.use_msgpack),
                 )
 
                 # Acknowledge
@@ -448,14 +456,14 @@ class NATSAdapter(MessageBusPort):
 
             async def progress_handler(msg: Msg) -> None:
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
-                    progress_updates.append(deserialize_params(msg.data, self._use_msgpack))
+                    progress_updates.append(deserialize_params(msg.data, self._config.use_msgpack))
                 else:
                     progress_updates.append(json.loads(msg.data.decode()))
 
             async def completion_handler(msg: Msg) -> None:
                 nonlocal completion_data
                 if isinstance(msg.data, bytes) and is_msgpack(msg.data):
-                    completion_data = deserialize_params(msg.data, self._use_msgpack)
+                    completion_data = deserialize_params(msg.data, self._config.use_msgpack)
                 else:
                     completion_data = json.loads(msg.data.decode())
 
@@ -472,10 +480,7 @@ class NATSAdapter(MessageBusPort):
 
         # Send command with retry logic
         with self._metrics.timer(f"commands.send.{service}.{command.command}"):
-            if self._use_msgpack:
-                command_data = serialize_to_msgpack(command)
-            else:
-                command_data = command.model_dump_json().encode()
+            command_data = self._serializer.serialize(command)
 
             # Retry logic for empty response issue in NATS client
             max_retries = 3
@@ -564,10 +569,24 @@ class NATSAdapter(MessageBusPort):
         instance = InstanceId(value=instance_id)
 
         nc = self._get_connection()
+
+        # Get metrics snapshot using proper domain model
+        metrics_data = self._metrics.get_all()
+        if isinstance(metrics_data, MetricsSnapshot):
+            metrics_snapshot = metrics_data
+        else:
+            # Legacy dict format
+            metrics_snapshot = MetricsSnapshot(
+                uptime_seconds=metrics_data.get("uptime", 0.0),
+                counters=metrics_data.get("counters", {}),
+                gauges=metrics_data.get("gauges", {}),
+                summaries=metrics_data.get("summaries", {}),
+            )
+
         heartbeat_data = {
             "instance_id": str(instance),
             "timestamp": time.time(),
-            "metrics": self._metrics.get_all(),
+            "metrics": metrics_snapshot.model_dump(),
         }
         await nc.publish(
             SubjectPatterns.heartbeat(str(service)),

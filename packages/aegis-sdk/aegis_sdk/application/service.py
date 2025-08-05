@@ -188,9 +188,7 @@ class Service:
 
     async def call_rpc(
         self,
-        service: str,
-        method: str,
-        params: dict[str, Any] | None = None,
+        request: RPCRequest,
         discovery_enabled: bool = True,
         selection_strategy: SelectionStrategy = SelectionStrategy.ROUND_ROBIN,
         preferred_instance_id: str | None = None,
@@ -198,9 +196,7 @@ class Service:
         """Call RPC method on another service.
 
         Args:
-            service: Target service name or instance ID
-            method: RPC method name
-            params: Optional method parameters
+            request: The RPCRequest object containing method, params, and target
             discovery_enabled: Whether to use service discovery (default: True)
             selection_strategy: Instance selection strategy (default: ROUND_ROBIN)
             preferred_instance_id: Preferred instance for sticky selection
@@ -211,40 +207,34 @@ class Service:
         Raises:
             Exception: If RPC call fails or no healthy instances available
         """
-        target = service
-        original_service_name = service
+        # Ensure request has source set
+        if request.source is None:
+            request.source = self.instance_id
+
+        target = request.target
+        original_service_name = target
 
         # Use service discovery if enabled and available
-        if discovery_enabled and self._discovery and self._is_service_name(service):
+        if discovery_enabled and self._discovery and self._is_service_name(target):
             instance = await self._discovery.select_instance(
-                service,
+                target,
                 strategy=selection_strategy,
                 preferred_instance_id=preferred_instance_id,
             )
             if not instance:
-                raise ServiceUnavailableError(service)
-            target = instance.instance_id
+                raise ServiceUnavailableError(target)
+
+            # For discovery-enabled calls, we keep the service name in the request
+            # so the NATSAdapter can construct the correct RPC subject
+            # The actual routing to the instance is handled by NATS
 
             if self._logger:
                 self._logger.debug(
                     "Selected instance for RPC",
-                    service=service,
-                    instance=target,
-                    method=method,
+                    service=original_service_name,
+                    instance=instance.instance_id,
+                    method=request.method,
                 )
-
-        # For discovery-enabled calls, we need to pass the original service name
-        # so the NATSAdapter can construct the correct RPC subject
-        request = RPCRequest(
-            method=method,
-            params=params or {},
-            source=self.instance_id,
-            target=(
-                original_service_name
-                if discovery_enabled and self._discovery and self._is_service_name(service)
-                else target
-            ),
-        )
 
         try:
             response = await self._bus.call_rpc(request)
@@ -253,9 +243,39 @@ class Service:
             return response.result
         except Exception:
             # Invalidate cache on any failure if using discovery
-            if discovery_enabled and self._discovery and self._is_service_name(service):
-                await self._discovery.invalidate_cache(service)
+            if (
+                discovery_enabled
+                and self._discovery
+                and self._is_service_name(original_service_name)
+            ):
+                await self._discovery.invalidate_cache(original_service_name)
             raise
+
+    def create_rpc_request(
+        self,
+        service: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 5.0,
+    ) -> RPCRequest:
+        """Factory method to create an RPCRequest object.
+
+        Args:
+            service: Target service name or instance ID
+            method: RPC method name
+            params: Optional method parameters
+            timeout: Request timeout in seconds (default: 5.0)
+
+        Returns:
+            RPCRequest: A properly constructed RPCRequest instance
+        """
+        return RPCRequest(
+            method=method,
+            params=params or {},
+            source=self.instance_id,
+            target=service,
+            timeout=timeout,
+        )
 
     def _is_service_name(self, target: str) -> bool:
         """Check if target looks like a service name vs instance ID.
@@ -305,18 +325,37 @@ class Service:
 
         return decorator
 
-    async def publish_event(
+    async def publish_event(self, event: Event) -> None:
+        """Publish a domain event.
+
+        Args:
+            event: The Event object to publish. Must be a properly constructed Event instance.
+        """
+        # Ensure the event has the correct source
+        if event.source is None:
+            event.source = self.instance_id
+
+        await self._bus.publish_event(event)
+
+    def create_event(
         self, domain: str, event_type: str, payload: dict[str, Any] | None = None
-    ) -> None:
-        """Publish a domain event."""
-        event = Event(
+    ) -> Event:
+        """Factory method to create an Event object.
+
+        Args:
+            domain: The event domain
+            event_type: The event type
+            payload: Optional event payload
+
+        Returns:
+            Event: A properly constructed Event instance with source set to this instance
+        """
+        return Event(
             domain=domain,
             event_type=event_type,
             payload=payload or {},
             source=self.instance_id,
         )
-
-        await self._bus.publish_event(event)
 
     # Command Methods
     def command(self, command_name: str) -> Callable[[Callable], Callable]:
@@ -341,22 +380,55 @@ class Service:
 
     async def send_command(
         self,
+        command: Command,
+        track_progress: bool = True,
+    ) -> dict[str, Any]:
+        """Send command to another service.
+
+        Args:
+            command: The Command object to send. Must be a properly constructed Command instance.
+            track_progress: Whether to track command execution progress (default: True)
+
+        Returns:
+            dict: Command execution result
+        """
+        # Ensure command has source set
+        if command.source is None:
+            command.source = self.instance_id
+
+        return await self._bus.send_command(command, track_progress)
+
+    def create_command(
+        self,
         service: str,
         command_name: str,
         payload: dict[str, Any] | None = None,
         priority: str = "normal",
-        track_progress: bool = True,
-    ) -> dict[str, Any]:
-        """Send command to another service."""
-        command = Command(
+        max_retries: int = 3,
+        timeout: float = 300.0,
+    ) -> Command:
+        """Factory method to create a Command object.
+
+        Args:
+            service: Target service name
+            command_name: Command name
+            payload: Optional command payload
+            priority: Command priority (low, normal, high, critical)
+            max_retries: Maximum retry attempts (default: 3)
+            timeout: Command timeout in seconds (default: 300.0)
+
+        Returns:
+            Command: A properly constructed Command instance
+        """
+        return Command(
             command=command_name,
             payload=payload or {},
             priority=priority,
             source=self.instance_id,
             target=service,
+            max_retries=max_retries,
+            timeout=timeout,
         )
-
-        return await self._bus.send_command(command, track_progress)
 
     # Health Management
     async def _register_instance(self) -> None:
@@ -571,11 +643,9 @@ class Service:
             domain: The event domain
             event_type: The event type
             payload: The event payload
+
+        Note: This is a convenience method that creates an Event object.
+              Consider using publish_event with a pre-constructed Event for better type safety.
         """
-        event = Event(
-            domain=domain,
-            event_type=event_type,
-            payload=payload,
-            source=self.instance_id,
-        )
-        await self._bus.publish_event(event)
+        event = self.create_event(domain, event_type, payload)
+        await self.publish_event(event)

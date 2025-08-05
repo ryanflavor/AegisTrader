@@ -12,20 +12,27 @@ import psutil
 
 from ..domain.models import DetailedHealthStatus, HealthStatus, ServiceConfiguration, SystemStatus
 from ..ports.monitoring import MonitoringPort
+from ..ports.service_instance_repository import ServiceInstanceRepositoryPort
 from ..utils.timezone import now_utc8
 
 
 class MonitoringAdapter(MonitoringPort):
     """Concrete implementation of monitoring operations."""
 
-    def __init__(self, config: ServiceConfiguration):
+    def __init__(
+        self,
+        config: ServiceConfiguration,
+        instance_repository: ServiceInstanceRepositoryPort | None = None,
+    ):
         """Initialize the monitoring adapter.
 
         Args:
             config: Service configuration
+            instance_repository: Optional service instance repository
         """
         self._config = config
         self._start_time = now_utc8()
+        self._instance_repository = instance_repository
 
     async def check_health(self) -> HealthStatus:
         """Check the health status of the service.
@@ -52,11 +59,20 @@ class MonitoringAdapter(MonitoringPort):
         current_time = now_utc8()
         uptime_seconds = (current_time - self._start_time).total_seconds()
 
+        # Count active service instances
+        connected_services = 0
+        if self._instance_repository:
+            try:
+                connected_services = await self._instance_repository.count_active_instances()
+            except Exception:
+                # If we can't get the count, default to 0
+                pass
+
         return SystemStatus(
             timestamp=current_time,
             uptime_seconds=uptime_seconds,
             environment=self._config.environment,
-            connected_services=0,  # Will be implemented when NATS integration is added
+            connected_services=connected_services,
             deployment_version=os.getenv("DEPLOYMENT_VERSION", "v1.0.0-demo"),
             start_time=self._start_time,
         )

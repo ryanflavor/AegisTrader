@@ -20,6 +20,7 @@ from aegis_sdk.infrastructure import (
     WatchableCachedServiceDiscovery,
     WatchConfig,
 )
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.simple_logger import SimpleLogger
 from aegis_sdk.ports.service_discovery import SelectionStrategy
 
@@ -37,7 +38,9 @@ class TestServiceDiscoveryK8sIntegration:
     @pytest_asyncio.fixture
     async def nats_adapter(self):
         """Create NATS adapter connected to K8s cluster."""
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
         await adapter.connect("nats://localhost:4222")
         yield adapter
         await adapter.disconnect()
@@ -453,10 +456,11 @@ class TestServiceDiscoveryK8sIntegration:
             # Test RPC calls with discovery to service A (multiple instances)
             responses = []
             for i in range(9):  # Should cycle through all 3 instances
+                request = client.create_rpc_request(
+                    "test-service-a", "echo", {"message": f"Hello {i}"}
+                )
                 result = await client.call_rpc(
-                    "test-service-a",
-                    "echo",
-                    {"message": f"Hello {i}"},
+                    request,
                     discovery_enabled=True,
                 )
                 responses.append(result)
@@ -477,10 +481,9 @@ class TestServiceDiscoveryK8sIntegration:
                 assert 1 <= count <= 5, f"Instance {instance_id} was called {count} times"
 
             # Test RPC to service B
+            request_b = client.create_rpc_request("test-service-b", "process", {"data": "test"})
             result = await client.call_rpc(
-                "test-service-b",
-                "process",
-                {"data": "test"},
+                request_b,
                 discovery_enabled=True,
             )
             assert result["result"] == "processed"
@@ -488,10 +491,9 @@ class TestServiceDiscoveryK8sIntegration:
 
             # Test RPC to non-existent service
             with pytest.raises(ServiceUnavailableError):
+                request_ne = client.create_rpc_request("non-existent-service", "method", {})
                 await client.call_rpc(
-                    "non-existent-service",
-                    "method",
-                    {},
+                    request_ne,
                     discovery_enabled=True,
                 )
 

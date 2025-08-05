@@ -95,11 +95,11 @@ class TestSingleActiveService:
                 await service._run_election()
 
         # Should have published heartbeat
-        service.publish_event.assert_called_once_with(
-            "service.test-service.election",
-            "heartbeat",
-            {"instance_id": service.instance_id},
-        )
+        service.publish_event.assert_called_once()
+        event_arg = service.publish_event.call_args[0][0]
+        assert event_arg.domain == "service.test-service.election"
+        assert event_arg.event_type == "heartbeat"
+        assert event_arg.payload == {"instance_id": service.instance_id}
 
     @pytest.mark.asyncio
     async def test_handle_election_event(self):

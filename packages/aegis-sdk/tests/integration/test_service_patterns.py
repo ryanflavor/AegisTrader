@@ -49,11 +49,13 @@ class TestRPCPatterns:
                 return {"result": result, "count": self.calculation_count}
 
             async def handle_status(self, params):
+                from datetime import timezone
+
                 return {
                     "service": self.service_name,
                     "version": self.version,
                     "calculations": self.calculation_count,
-                    "uptime": (datetime.now() - self._start_time).total_seconds(),
+                    "uptime": (datetime.now(timezone.utc) - self._start_time).total_seconds(),
                 }
 
         # Create and start service

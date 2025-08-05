@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from aegis_sdk.domain.models import Command, Event, RPCRequest
+from aegis_sdk.infrastructure.config import NATSConnectionConfig
 from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
 
 
@@ -14,7 +15,8 @@ class TestRealIntegrationEdgeCases:
     @pytest.mark.asyncio
     async def test_connection_pool_multiple_urls(self, nats_container):
         """Test connecting to multiple NATS URLs with real connections."""
-        adapter = NATSAdapter(pool_size=3)
+        config = NATSConnectionConfig(pool_size=3)
+        adapter = NATSAdapter(config=config)
         # Connect to same server multiple times (simulating multiple servers)
         await adapter.connect([nats_container, nats_container, nats_container])
 
@@ -71,7 +73,9 @@ class TestRealIntegrationEdgeCases:
     async def test_command_without_jetstream(self):
         """Test command operations when JetStream is not available."""
         # Create adapter without connecting (no JetStream)
-        adapter = NATSAdapter()
+        config = NATSConnectionConfig()
+
+        adapter = NATSAdapter(config=config)
 
         command = Command(target="test", command="test_cmd", payload={"test": True})
 

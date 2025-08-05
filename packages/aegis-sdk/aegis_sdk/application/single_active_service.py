@@ -55,11 +55,12 @@ class SingleActiveService(Service):
 
                 if self.is_active:
                     # Send heartbeat
-                    await self.publish_event(
+                    event = self.create_event(
                         f"service.{self.service_name}.election",
                         "heartbeat",
                         {"instance_id": self.instance_id},
                     )
+                    await self.publish_event(event)
 
                 await asyncio.sleep(2)
             except asyncio.CancelledError:
