@@ -162,7 +162,7 @@ class TestEventPatterns:
                 username = command.payload.get("username")
 
                 # Emit user created event
-                await self.emit_event(
+                event = self.create_event(
                     "user",
                     "created",
                     {
@@ -171,6 +171,7 @@ class TestEventPatterns:
                         "timestamp": datetime.now().isoformat(),
                     },
                 )
+                await self.publish_event(event)
 
                 return {"success": True, "user_id": user_id}
 

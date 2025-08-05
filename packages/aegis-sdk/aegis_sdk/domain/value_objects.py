@@ -10,6 +10,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .enums import CommandPriority
+
 
 class ServiceName(BaseModel):
     """Value object representing a service name.
@@ -215,13 +217,13 @@ class Priority(BaseModel):
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    LOW: ClassVar[str] = "low"
-    NORMAL: ClassVar[str] = "normal"
-    HIGH: ClassVar[str] = "high"
-    CRITICAL: ClassVar[str] = "critical"
+    LOW: ClassVar[str] = CommandPriority.LOW.value
+    NORMAL: ClassVar[str] = CommandPriority.NORMAL.value
+    HIGH: ClassVar[str] = CommandPriority.HIGH.value
+    CRITICAL: ClassVar[str] = CommandPriority.CRITICAL.value
 
     value: str = Field(
-        default=NORMAL,
+        default=CommandPriority.NORMAL.value,
         pattern="^(low|normal|high|critical)$",
         description="The priority level",
     )
@@ -513,6 +515,158 @@ class Duration(BaseModel):
     def __hash__(self) -> int:
         """Make hashable for use in sets and dicts."""
         return hash(self.seconds)
+
+
+class StickyActiveStatus(BaseModel):
+    """Value object representing the sticky active status of a service.
+
+    Encapsulates the election state for sticky single-active pattern.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    ACTIVE: ClassVar[str] = "ACTIVE"
+    STANDBY: ClassVar[str] = "STANDBY"
+    ELECTING: ClassVar[str] = "ELECTING"
+
+    value: str = Field(
+        ...,
+        pattern="^(ACTIVE|STANDBY|ELECTING)$",
+        description="The sticky active status",
+    )
+
+    def __str__(self) -> str:
+        """String representation returns the value."""
+        return self.value
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality comparison."""
+        if isinstance(other, StickyActiveStatus):
+            return self.value == other.value
+        if isinstance(other, str):
+            return self.value == other
+        return False
+
+    def __hash__(self) -> int:
+        """Make hashable for use in sets and dicts."""
+        return hash(self.value)
+
+    def is_active(self) -> bool:
+        """Check if status is ACTIVE."""
+        return self.value == self.ACTIVE
+
+    def is_standby(self) -> bool:
+        """Check if status is STANDBY."""
+        return self.value == self.STANDBY
+
+    def is_electing(self) -> bool:
+        """Check if status is ELECTING."""
+        return self.value == self.ELECTING
+
+
+class LeaderKey(BaseModel):
+    """Value object representing a sticky active leader key.
+
+    Encapsulates the key used for leader election in NATS KV Store.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    service_name: ServiceName
+    group_id: str = Field(default="default", description="Service group identifier")
+
+    def to_kv_key(self) -> str:
+        """Convert to NATS KV Store key format."""
+        return f"sticky-active.{self.service_name.value}.{self.group_id}.leader"
+
+    def __str__(self) -> str:
+        """String representation returns the KV key."""
+        return self.to_kv_key()
+
+
+class ElectionTimeout(BaseModel):
+    """Value object representing election timeout configuration.
+
+    Encapsulates timing parameters for leader election and failover.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    leader_ttl: Duration = Field(
+        default_factory=lambda: Duration(seconds=5),
+        description="TTL for leader key in KV Store",
+    )
+    heartbeat_interval: Duration = Field(
+        default_factory=lambda: Duration(seconds=2),
+        description="Interval between leader heartbeats",
+    )
+    election_timeout: Duration = Field(
+        default_factory=lambda: Duration(seconds=10),
+        description="Maximum time to wait for election completion",
+    )
+    failover_delay: Duration = Field(
+        default_factory=lambda: Duration(seconds=0.5),
+        description="Delay before attempting to take over leadership",
+    )
+
+    @field_validator("heartbeat_interval")
+    @classmethod
+    def validate_heartbeat_interval(cls, v: Duration, info) -> Duration:
+        """Ensure heartbeat interval is less than leader TTL."""
+        if "leader_ttl" in info.data:
+            leader_ttl = info.data["leader_ttl"]
+            if v.seconds >= leader_ttl.seconds:
+                raise ValueError("Heartbeat interval must be less than leader TTL")
+        return v
+
+
+class ServiceGroupId(BaseModel):
+    """Value object representing a service group identifier.
+
+    Used to group service instances for sticky active election.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    value: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="The service group identifier",
+    )
+
+    @field_validator("value")
+    @classmethod
+    def validate_group_id(cls, v: str) -> str:
+        """Validate group ID format.
+
+        Group IDs must:
+        - Not contain whitespace
+        - Not contain dots (reserved for key hierarchy)
+        """
+        if not v.strip():
+            raise ValueError("Group ID cannot be empty or whitespace")
+        if "." in v:
+            raise ValueError("Group ID cannot contain dots")
+        if any(c.isspace() for c in v):
+            raise ValueError("Group ID cannot contain whitespace")
+        return v
+
+    def __str__(self) -> str:
+        """String representation returns the value."""
+        return self.value
+
+    def __eq__(self, other: Any) -> bool:
+        """Equality comparison."""
+        if isinstance(other, ServiceGroupId):
+            return self.value == other.value
+        if isinstance(other, str):
+            return self.value == other
+        return False
+
+    def __hash__(self) -> int:
+        """Make hashable for use in sets and dicts."""
+        return hash(self.value)
 
 
 class Timestamp(BaseModel):

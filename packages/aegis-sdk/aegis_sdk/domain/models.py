@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .enums import CommandPriority, ServiceStatus
+
 
 class Message(BaseModel):
     """Base message model with trace context."""
@@ -106,7 +108,7 @@ class Command(Message):
     command: str = Field(..., min_length=1, description="Command name")
     payload: dict[str, Any] = Field(default_factory=dict, description="Command payload")
     priority: str = Field(
-        default="normal",
+        default=CommandPriority.NORMAL.value,
         pattern="^(low|normal|high|critical)$",
         description="Command priority",
     )
@@ -135,7 +137,7 @@ class ServiceInfo(BaseModel):
     instance_id: str = Field(..., min_length=1, description="Instance identifier")
     version: str = Field(default="1.0.0", description="Service version")
     status: str = Field(
-        default="ACTIVE",
+        default=ServiceStatus.ACTIVE.value,
         pattern="^(ACTIVE|STANDBY|UNHEALTHY|SHUTDOWN)$",
         description="Service status",
     )
@@ -315,7 +317,7 @@ class ServiceInstance(BaseModel):
 
     # Status and health
     status: str = Field(
-        default="ACTIVE",
+        default=ServiceStatus.ACTIVE.value,
         pattern="^(ACTIVE|UNHEALTHY|STANDBY)$",
         description="Current status of the service instance",
     )
@@ -330,6 +332,12 @@ class ServiceInstance(BaseModel):
         default=None,
         description="Optional sticky active group identifier",
         validation_alias="stickyActiveGroup",
+    )
+    sticky_active_status: str | None = Field(
+        default=None,
+        pattern="^(ACTIVE|STANDBY|ELECTING)$",
+        description="Sticky active election status",
+        validation_alias="stickyActiveStatus",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -417,21 +425,21 @@ class ServiceInstance(BaseModel):
 
         A service is considered healthy if it's in ACTIVE or STANDBY status.
         """
-        return self.status in ("ACTIVE", "STANDBY")
+        return self.status in (ServiceStatus.ACTIVE.value, ServiceStatus.STANDBY.value)
 
     def is_active(self) -> bool:
         """Check if the service instance is active.
 
         Only ACTIVE status indicates the service is actively processing.
         """
-        return self.status == "ACTIVE"
+        return self.status == ServiceStatus.ACTIVE.value
 
     def mark_unhealthy(self) -> None:
         """Mark the service instance as unhealthy.
 
         This is a domain event that should trigger re-evaluation of service availability.
         """
-        self.status = "UNHEALTHY"
+        self.status = ServiceStatus.UNHEALTHY.value
 
     def update_heartbeat(self, timestamp: datetime | None = None) -> None:
         """Update the last heartbeat timestamp.

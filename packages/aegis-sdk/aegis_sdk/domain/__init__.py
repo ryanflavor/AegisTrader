@@ -1,5 +1,6 @@
 """Domain layer - Core business logic and entities."""
 
+from .enums import CommandPriority, ServiceStatus, StickyActiveStatus, SubscriptionMode
 from .exceptions import (
     AegisError,
     CommandError,
@@ -31,8 +32,14 @@ from .models import (
     ServiceInstance,
 )
 from .patterns import SubjectPatterns
+from .types import CommandHandler, EventHandler, ProgressCallback, RPCHandler
 
 __all__ = [
+    # Enums
+    "CommandPriority",
+    "ServiceStatus",
+    "StickyActiveStatus",
+    "SubscriptionMode",
     # Exceptions
     "AegisError",
     "Command",
@@ -63,4 +70,9 @@ __all__ = [
     "SubjectPatterns",
     "TimeoutError",
     "ValidationError",
+    # Types
+    "CommandHandler",
+    "EventHandler",
+    "ProgressCallback",
+    "RPCHandler",
 ]

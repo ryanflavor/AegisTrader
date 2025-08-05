@@ -1,10 +1,11 @@
 """Message bus interface - Port definition for messaging infrastructure."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from typing import Any
 
+from ..domain import SubscriptionMode
 from ..domain.models import Command, Event, RPCRequest, RPCResponse
+from ..domain.types import CommandHandler, EventHandler, RPCHandler
 
 
 class MessageBusPort(ABC):
@@ -27,9 +28,7 @@ class MessageBusPort(ABC):
 
     # RPC Operations
     @abstractmethod
-    async def register_rpc_handler(
-        self, service: str, method: str, handler: Callable[[dict[str, Any]], Any]
-    ) -> None:
+    async def register_rpc_handler(self, service: str, method: str, handler: RPCHandler) -> None:
         """Register an RPC handler."""
         ...
 
@@ -41,7 +40,11 @@ class MessageBusPort(ABC):
     # Event Operations
     @abstractmethod
     async def subscribe_event(
-        self, pattern: str, handler: Callable, durable: str | None = None, mode: str = "compete"
+        self,
+        pattern: str,
+        handler: EventHandler,
+        durable: str | None = None,
+        mode: str = SubscriptionMode.COMPETE.value,
     ) -> None:
         """Subscribe to events matching pattern.
 
@@ -61,7 +64,7 @@ class MessageBusPort(ABC):
     # Command Operations
     @abstractmethod
     async def register_command_handler(
-        self, service: str, command: str, handler: Callable[[Command, Callable], Any]
+        self, service: str, command: str, handler: CommandHandler
     ) -> None:
         """Register a command handler with progress callback."""
         ...

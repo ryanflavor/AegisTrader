@@ -113,3 +113,66 @@ class ServiceHeartbeatMissedEvent(DomainEvent):
         data["event_type"] = "ServiceHeartbeatMissed"
         data["aggregate_type"] = "ServiceInstance"
         super().__init__(**data)
+
+
+class LeaderElectedEvent(DomainEvent):
+    """Event emitted when a new leader is elected."""
+
+    service_name: str = Field(..., description="Name of the service")
+    instance_id: str = Field(..., description="Instance identifier of the new leader")
+    group_id: str = Field(..., description="Service group identifier")
+    previous_leader_id: str | None = Field(None, description="Previous leader instance ID")
+    elected_at: datetime = Field(..., description="Timestamp of election")
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with proper event type."""
+        data["event_type"] = "LeaderElected"
+        data["aggregate_type"] = "StickyActiveElection"
+        super().__init__(**data)
+
+
+class LeaderLostEvent(DomainEvent):
+    """Event emitted when leadership is lost."""
+
+    service_name: str = Field(..., description="Name of the service")
+    instance_id: str = Field(..., description="Instance identifier that lost leadership")
+    group_id: str = Field(..., description="Service group identifier")
+    reason: str = Field(..., description="Reason for leadership loss")
+    lost_at: datetime = Field(..., description="Timestamp of leadership loss")
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with proper event type."""
+        data["event_type"] = "LeaderLost"
+        data["aggregate_type"] = "StickyActiveElection"
+        super().__init__(**data)
+
+
+class ElectionStartedEvent(DomainEvent):
+    """Event emitted when an election starts."""
+
+    service_name: str = Field(..., description="Name of the service")
+    instance_id: str = Field(..., description="Instance identifier starting the election")
+    group_id: str = Field(..., description="Service group identifier")
+    reason: str = Field(..., description="Reason for starting election")
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with proper event type."""
+        data["event_type"] = "ElectionStarted"
+        data["aggregate_type"] = "StickyActiveElection"
+        super().__init__(**data)
+
+
+class ElectionFailedEvent(DomainEvent):
+    """Event emitted when an election fails."""
+
+    service_name: str = Field(..., description="Name of the service")
+    instance_id: str = Field(..., description="Instance identifier that failed election")
+    group_id: str = Field(..., description="Service group identifier")
+    reason: str = Field(..., description="Reason for election failure")
+    retry_after_seconds: int | None = Field(None, description="Seconds before retry")
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize with proper event type."""
+        data["event_type"] = "ElectionFailed"
+        data["aggregate_type"] = "StickyActiveElection"
+        super().__init__(**data)

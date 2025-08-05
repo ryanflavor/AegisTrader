@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis-sticky-test
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sticky-service-config
+  namespace: aegis-sticky-test
+data:
+  service_name: "sticky-test-service"
+  nats_url: "nats://aegis-trader-nats.aegis-trader.svc.cluster.local:4222"
+  group_id: "test-group"
+  leader_ttl: "5"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sticky-service
+  namespace: aegis-sticky-test
+  labels:
+    app: sticky-service
+spec:
+  replicas: 3  # Deploy 3 instances for testing
+  selector:
+    matchLabels:
+      app: sticky-service
+  template:
+    metadata:
+      labels:
+        app: sticky-service
+    spec:
+      containers:
+      - name: sticky-service
+        image: aegis-sdk-test:latest
+        imagePullPolicy: Never  # Use local image
+        env:
+        - name: INSTANCE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SERVICE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: sticky-service-config
+              key: service_name
+        - name: NATS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: sticky-service-config
+              key: nats_url
+        - name: GROUP_ID
+          valueFrom:
+            configMapKeyRef:
+              name: sticky-service-config
+              key: group_id
+        - name: LEADER_TTL
+          valueFrom:
+            configMapKeyRef:
+              name: sticky-service-config
+              key: leader_ttl
+        command: ["python", "/app/tests/integration/k8s/sticky_service_runner.py"]
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sticky-service
+  namespace: aegis-sticky-test
+spec:
+  selector:
+    app: sticky-service
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from aegis_sdk.application.service import Service
+from aegis_sdk.domain import CommandPriority, ServiceStatus
 from aegis_sdk.domain.exceptions import ServiceUnavailableError
 from aegis_sdk.domain.models import (
     Event,
@@ -384,23 +385,26 @@ class TestRPCMethods:
         call_args = mock_message_bus.call_rpc.call_args[0][0]
         assert call_args.target == "user-service-abc123def"
 
-    def test_is_service_name(self, mock_message_bus):
+    @pytest.mark.asyncio
+    async def test_is_service_name(self, mock_message_bus):
         """Test service name vs instance ID detection."""
         service = Service("test-service", mock_message_bus)
 
         # Service names
-        assert service._is_service_name("user-service") is True
-        assert service._is_service_name("order-service") is True
-        assert service._is_service_name("payment") is True
+        assert await service._is_service_name("user-service") is True
+        assert await service._is_service_name("order-service") is True
+        assert await service._is_service_name("payment") is True
 
         # Instance IDs
-        assert service._is_service_name("user-service-a1b2c3d4") is False
-        assert service._is_service_name("order-service-deadbeef") is False
-        assert service._is_service_name("payment-123456") is False
+        assert await service._is_service_name("user-service-a1b2c3d4") is False
+        assert await service._is_service_name("order-service-deadbeef") is False
+        assert await service._is_service_name("payment-12345678") is False  # 8+ hex chars
 
         # Edge cases
-        assert service._is_service_name("service-with-many-parts") is True
-        assert service._is_service_name("service-short") is True  # Short hex not considered ID
+        assert await service._is_service_name("service-with-many-parts") is True
+        assert (
+            await service._is_service_name("service-short") is True
+        )  # Short hex not considered ID
 
 
 class TestEventMethods:
@@ -442,8 +446,10 @@ class TestEventMethods:
         """Test publishing an event."""
         service = Service("test-service", mock_message_bus)
 
-        event = service.create_event("order", "created", {"order_id": "123"})
-        await service.publish_event(event)
+        # Mock is_operational to return True
+        with patch.object(service, "is_operational", return_value=True):
+            event = service.create_event("order", "created", {"order_id": "123"})
+            await service.publish_event(event)
 
         # Verify event was published
         mock_message_bus.publish_event.assert_called_once()
@@ -488,7 +494,7 @@ class TestCommandMethods:
             "worker-service",
             "process_data",
             {"batch_id": "batch-456"},
-            priority="high",
+            priority=CommandPriority.HIGH,
         )
         result = await service.send_command(command, track_progress=True)
 
@@ -499,7 +505,7 @@ class TestCommandMethods:
         command_arg = mock_message_bus.send_command.call_args[0][0]
         assert command_arg.command == "process_data"
         assert command_arg.payload == {"batch_id": "batch-456"}
-        assert command_arg.priority == "high"
+        assert command_arg.priority == CommandPriority.HIGH.value
         assert command_arg.target == "worker-service"
         assert command_arg.source == service.instance_id
 
@@ -744,7 +750,7 @@ class TestServiceRegistration:
         await service.start()
 
         # Change status
-        service.set_status("UNHEALTHY")
+        service.set_status(ServiceStatus.UNHEALTHY)
 
         # Give async task time to complete
         await asyncio.sleep(0.1)
@@ -837,7 +843,7 @@ class TestServiceRegistration:
         )
 
         # Don't start service (no service instance)
-        service.set_status("UNHEALTHY")
+        service.set_status(ServiceStatus.UNHEALTHY)
 
         # Give async task time
         await asyncio.sleep(0.1)
@@ -909,18 +915,22 @@ class TestServiceRegistration:
         assert handlers[0][1] == "compete"  # Default mode
 
     @pytest.mark.asyncio
-    async def test_emit_event_helper(self, mock_message_bus):
-        """Test emit_event helper method."""
+    async def test_publish_event_with_create_helper(self, mock_message_bus):
+        """Test publish_event with create_event helper method."""
         service = Service("test-service", mock_message_bus)
 
-        await service.emit_event("order", "created", {"id": 123})
+        # Mock is_operational to return True
+        with patch.object(service, "is_operational", return_value=True):
+            # Use create_event + publish_event instead of emit_event
+            event = service.create_event("order", "created", {"id": 123})
+            await service.publish_event(event)
 
         # Verify event was published
         mock_message_bus.publish_event.assert_called_once()
-        event = mock_message_bus.publish_event.call_args[0][0]
-        assert event.domain == "order"
-        assert event.event_type == "created"
-        assert event.payload == {"id": 123}
+        published_event = mock_message_bus.publish_event.call_args[0][0]
+        assert published_event.domain == "order"
+        assert published_event.event_type == "created"
+        assert published_event.payload == {"id": 123}
 
     @pytest.mark.asyncio
     async def test_on_start_hook(self, mock_message_bus):
@@ -1085,9 +1095,16 @@ class TestServiceRegistration:
 
         assert "Registry unavailable" in str(exc_info.value)
 
-        # Logger should have logged the error
-        mock_logger.error.assert_called_once()
-        assert "Failed to register service instance" in mock_logger.error.call_args[0][0]
+        # Logger should have logged the error twice (once in _register_instance, once in start)
+        assert mock_logger.error.call_count == 2
+
+        # Check the first error (from _register_instance)
+        first_error_call = mock_logger.error.call_args_list[0]
+        assert "Failed to register service instance" in first_error_call[0][0]
+
+        # Check the second error (from start)
+        second_error_call = mock_logger.error.call_args_list[1]
+        assert "Service start failed" in second_error_call[0][0]
 
     @pytest.mark.asyncio
     async def test_update_registry_status_failure_handled(
@@ -1108,7 +1125,7 @@ class TestServiceRegistration:
         await service.start()
 
         # Change status - should trigger update
-        service.set_status("STANDBY")
+        service.set_status(ServiceStatus.STANDBY)
 
         # Give async task time to run
         await asyncio.sleep(0.1)
@@ -1134,13 +1151,13 @@ class TestServiceRegistration:
         await service.start()
 
         # Set status multiple times quickly
-        service.set_status("STANDBY")
+        service.set_status(ServiceStatus.STANDBY)
         first_task = service._status_update_task
 
         # Give the task a moment to start
         await asyncio.sleep(0.01)
 
-        service.set_status("UNHEALTHY")
+        service.set_status(ServiceStatus.UNHEALTHY)
         second_task = service._status_update_task
 
         # Wait for cancellation to propagate

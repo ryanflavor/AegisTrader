@@ -76,3 +76,62 @@ class SubjectPatterns:
         import re
 
         return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", name))
+
+    @staticmethod
+    def is_valid_event_pattern(pattern: str) -> bool:
+        """Validate event pattern format.
+
+        Valid patterns:
+        - "order.created" - exact match
+        - "order.*" - single level wildcard
+        - "order.>" - multi-level wildcard
+        - "*.created" - wildcard at domain level
+        - "order.*.completed" - wildcard in middle
+
+        Invalid patterns:
+        - "" - empty string
+        - "." - just a dot
+        - "order..created" - double dots
+        - "order.*.*.created" - multiple wildcards in sequence
+        - "*order" - wildcard not as complete token
+        """
+        import re
+
+        if not pattern:
+            return False
+
+        # Check for invalid patterns
+        if pattern in (".", "*", ">"):
+            return False
+
+        # Check for double dots
+        if ".." in pattern:
+            return False
+
+        # Split by dots to validate each part
+        parts = pattern.split(".")
+        if not parts:
+            return False
+
+        # Each part should be alphanumeric, hyphen, underscore, or a wildcard
+        for part in parts:
+            if not part:  # Empty part (e.g., from ".." or leading/trailing dot)
+                return False
+
+            # Check if it's a wildcard
+            if part in ("*", ">"):
+                continue
+
+            # Check if it contains partial wildcards (invalid)
+            if "*" in part or ">" in part:
+                return False
+
+            # Check if it's a valid identifier
+            if not re.match(r"^[a-zA-Z][a-zA-Z0-9-_]*$", part):
+                return False
+
+        # Check that '>' only appears at the end if present
+        if ">" in pattern and not pattern.endswith(">"):
+            return False
+
+        return True
