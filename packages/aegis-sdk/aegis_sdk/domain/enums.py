@@ -72,3 +72,18 @@ class ServiceLifecycleState(str, Enum):
     STOPPING = "STOPPING"  # Service is shutting down
     STOPPED = "STOPPED"  # Service has stopped
     FAILED = "FAILED"  # Service encountered a fatal error
+
+
+class RPCErrorCode(str, Enum):
+    """RPC error codes for standardized error handling.
+
+    Provides consistent error codes across the SDK, particularly
+    for sticky active pattern and service communication.
+    """
+
+    NOT_ACTIVE = "NOT_ACTIVE"  # Service instance is not the active leader
+    SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"  # Service cannot be reached
+    TIMEOUT = "TIMEOUT"  # Request timed out
+    INVALID_REQUEST = "INVALID_REQUEST"  # Malformed or invalid request
+    INTERNAL_ERROR = "INTERNAL_ERROR"  # Internal service error
+    ELECTING = "ELECTING"  # Service is in election process

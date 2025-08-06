@@ -6,11 +6,19 @@ from aegis_sdk.domain.exceptions import (
     AegisError,
     CommandError,
     ConnectionError,
+    DiscoveryError,
     EventError,
+    KVKeyAlreadyExistsError,
+    KVKeyNotFoundError,
+    KVNotConnectedError,
+    KVRevisionMismatchError,
+    KVStoreError,
+    KVTTLNotSupportedError,
     MessageBusError,
     RPCError,
     SerializationError,
     ServiceError,
+    ServiceUnavailableError,
     TimeoutError,
     ValidationError,
 )
@@ -54,6 +62,30 @@ class TestServiceError:
         error = ServiceError("Service unavailable", {"service": "order-service"})
         assert error.message == "Service unavailable"
         assert error.details["service"] == "order-service"
+
+    def test_service_unavailable_error(self):
+        """Test ServiceUnavailableError with service name."""
+        error = ServiceUnavailableError("my-service")
+        assert "my-service" in str(error)
+        assert "unavailable" in str(error)
+        assert error.service_name == "my-service"
+        assert error.details["service_name"] == "my-service"
+        assert isinstance(error, ServiceError)
+
+    def test_discovery_error_with_service(self):
+        """Test DiscoveryError with service name."""
+        error = DiscoveryError("Discovery failed", service_name="test-service")
+        assert str(error) == "Discovery failed"
+        assert error.service_name == "test-service"
+        assert error.details["service_name"] == "test-service"
+        assert isinstance(error, ServiceError)
+
+    def test_discovery_error_without_service(self):
+        """Test DiscoveryError without service name."""
+        error = DiscoveryError("General discovery error")
+        assert str(error) == "General discovery error"
+        assert error.service_name is None
+        assert "service_name" not in error.details
 
 
 class TestMessageBusError:
@@ -137,6 +169,59 @@ class TestRPCError:
         assert error2.method == "create_order"
         assert "service" not in error2.details
         assert "method" in error2.details
+
+
+class TestKVStoreExceptions:
+    """Test cases for KV Store exceptions."""
+
+    def test_kv_store_error(self):
+        """Test KVStoreError creation."""
+        error = KVStoreError("KV operation failed")
+        assert str(error) == "KV operation failed"
+        assert isinstance(error, AegisError)
+
+    def test_kv_not_connected_error(self):
+        """Test KVNotConnectedError."""
+        error = KVNotConnectedError("get")
+        assert "not connected" in str(error).lower()
+        assert "get" in str(error)
+        assert isinstance(error, KVStoreError)
+
+    def test_kv_key_not_found_error(self):
+        """Test KVKeyNotFoundError with key."""
+        error = KVKeyNotFoundError("test-key")
+        assert "test-key" in str(error)
+        assert "not found" in str(error)
+        assert error.key == "test-key"
+        assert isinstance(error, KVStoreError)
+
+    def test_kv_key_already_exists_error(self):
+        """Test KVKeyAlreadyExistsError with key."""
+        error = KVKeyAlreadyExistsError("test-key")
+        assert "test-key" in str(error)
+        assert "already exists" in str(error)
+        assert error.key == "test-key"
+        assert isinstance(error, KVStoreError)
+
+    def test_kv_revision_mismatch_error(self):
+        """Test KVRevisionMismatchError with details."""
+        error = KVRevisionMismatchError("test-key", expected=5, actual=3)
+        assert "test-key" in str(error)
+        assert "expected 5" in str(error)
+        assert "got 3" in str(error)
+        assert error.details["key"] == "test-key"
+        assert error.expected_revision == 5
+        assert error.actual_revision == 3
+        assert error.details["expected_revision"] == 5
+        assert error.details["actual_revision"] == 3
+        assert isinstance(error, KVStoreError)
+
+    def test_kv_ttl_not_supported_error(self):
+        """Test KVTTLNotSupportedError."""
+        error = KVTTLNotSupportedError()
+        assert "TTL" in str(error)
+        assert "not enabled" in str(error)
+        assert isinstance(error, KVStoreError)
 
 
 class TestCommandError:

@@ -958,3 +958,216 @@ class Timestamp(BaseModel):
     def __hash__(self) -> int:
         """Make hashable for use in sets and dicts."""
         return hash(self.value)
+
+
+class ElectionState(BaseModel):
+    """Value object representing election progress state.
+
+    Tracks the progress and state of a leader election process,
+    including timing and error information for diagnostics.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    IDLE: ClassVar[str] = "IDLE"
+    DETECTING: ClassVar[str] = "DETECTING"
+    ELECTING: ClassVar[str] = "ELECTING"
+    ELECTED: ClassVar[str] = "ELECTED"
+    FAILED: ClassVar[str] = "FAILED"
+
+    state: str = Field(
+        default="IDLE",
+        pattern="^(IDLE|DETECTING|ELECTING|ELECTED|FAILED)$",
+        description="Current election state",
+    )
+    started_at: datetime | None = Field(default=None, description="When election started")
+    completed_at: datetime | None = Field(default=None, description="When election completed")
+    attempts: int = Field(default=0, ge=0, description="Number of election attempts")
+    last_error: str | None = Field(default=None, description="Last error message if failed")
+    instance_id: str | None = Field(default=None, description="Instance performing election")
+
+    def is_idle(self) -> bool:
+        """Check if election is idle."""
+        return self.state == self.IDLE
+
+    def is_detecting(self) -> bool:
+        """Check if detecting leader failure."""
+        return self.state == self.DETECTING
+
+    def is_electing(self) -> bool:
+        """Check if actively electing."""
+        return self.state == self.ELECTING
+
+    def is_elected(self) -> bool:
+        """Check if election completed successfully."""
+        return self.state == self.ELECTED
+
+    def is_failed(self) -> bool:
+        """Check if election failed."""
+        return self.state == self.FAILED
+
+    def duration(self) -> Duration | None:
+        """Calculate election duration if started and completed."""
+        if self.started_at and self.completed_at:
+            delta = (self.completed_at - self.started_at).total_seconds()
+            return Duration(seconds=delta)
+        return None
+
+    def __str__(self) -> str:
+        """String representation."""
+        if self.instance_id:
+            return f"ElectionState({self.state}, instance={self.instance_id}, attempts={self.attempts})"
+        return f"ElectionState({self.state}, attempts={self.attempts})"
+
+
+class HeartbeatStatus(BaseModel):
+    """Value object representing heartbeat monitoring status.
+
+    Tracks the health and timing of leader heartbeats for
+    detecting failures and triggering failover.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    instance_id: str = Field(..., min_length=1, description="Instance being monitored")
+    last_seen: datetime = Field(..., description="Last heartbeat timestamp")
+    ttl_seconds: int = Field(..., gt=0, description="TTL for heartbeat key in seconds")
+    is_expired: bool = Field(default=False, description="Whether heartbeat has expired")
+    time_since_last: float = Field(default=0.0, ge=0, description="Seconds since last heartbeat")
+
+    @field_validator("last_seen")
+    @classmethod
+    def validate_timezone_aware(cls, v: datetime) -> datetime:
+        """Ensure timestamp is timezone-aware."""
+        if v.tzinfo is None:
+            raise ValueError("Heartbeat timestamp must be timezone-aware")
+        return v
+
+    def time_remaining(self) -> float:
+        """Calculate time remaining before TTL expiration.
+
+        Returns:
+            Seconds remaining (negative if expired)
+        """
+        return self.ttl_seconds - self.time_since_last
+
+    def expiration_ratio(self) -> float:
+        """Calculate ratio of time elapsed vs TTL.
+
+        Returns:
+            Ratio from 0.0 (just started) to >1.0 (expired)
+        """
+        if self.ttl_seconds == 0:
+            return 1.0
+        return self.time_since_last / self.ttl_seconds
+
+    def is_healthy(self) -> bool:
+        """Check if heartbeat is healthy (not expired)."""
+        return not self.is_expired and self.time_remaining() > 0
+
+    def __str__(self) -> str:
+        """String representation."""
+        status = "expired" if self.is_expired else f"{self.time_remaining():.1f}s remaining"
+        return f"HeartbeatStatus({self.instance_id}, {status})"
+
+
+class FailoverPolicy(BaseModel):
+    """Value object representing failover behavior configuration.
+
+    Encapsulates the configuration for how automatic failover
+    should behave in different scenarios.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    AGGRESSIVE: ClassVar[str] = "aggressive"
+    CONSERVATIVE: ClassVar[str] = "conservative"
+    BALANCED: ClassVar[str] = "balanced"
+
+    mode: str = Field(
+        default="balanced",
+        pattern="^(aggressive|conservative|balanced)$",
+        description="Failover mode",
+    )
+    detection_threshold: Duration = Field(
+        default_factory=lambda: Duration(seconds=1.0),
+        description="Time to wait before declaring leader failed",
+    )
+    election_delay: Duration = Field(
+        default_factory=lambda: Duration(seconds=0.5),
+        description="Delay before starting election after failure detected",
+    )
+    max_election_time: Duration = Field(
+        default_factory=lambda: Duration(seconds=2.0),
+        description="Maximum time to wait for election to complete",
+    )
+    enable_pre_election: bool = Field(
+        default=True, description="Whether to prepare for election before failure"
+    )
+
+    @field_validator("detection_threshold")
+    @classmethod
+    def validate_detection_threshold(cls, v: Duration) -> Duration:
+        """Ensure detection threshold is reasonable."""
+        if v.seconds < 0.1:  # 100ms minimum
+            raise ValueError("Detection threshold must be at least 100ms")
+        if v.seconds > 30:  # 30s maximum
+            raise ValueError("Detection threshold must not exceed 30 seconds")
+        return v
+
+    @field_validator("max_election_time")
+    @classmethod
+    def validate_max_election_time(cls, v: Duration, info) -> Duration:
+        """Ensure max election time is reasonable and greater than election delay."""
+        if "election_delay" in info.data:
+            election_delay = info.data["election_delay"]
+            if v.seconds <= election_delay.seconds:
+                raise ValueError("Max election time must be greater than election delay")
+        if v.seconds > 10:  # 10s maximum
+            raise ValueError("Max election time must not exceed 10 seconds")
+        return v
+
+    def is_aggressive(self) -> bool:
+        """Check if using aggressive failover mode."""
+        return self.mode == self.AGGRESSIVE
+
+    def is_conservative(self) -> bool:
+        """Check if using conservative failover mode."""
+        return self.mode == self.CONSERVATIVE
+
+    def is_balanced(self) -> bool:
+        """Check if using balanced failover mode."""
+        return self.mode == self.BALANCED
+
+    @classmethod
+    def aggressive(cls) -> "FailoverPolicy":
+        """Create an aggressive failover policy for fast recovery."""
+        return cls(
+            mode=cls.AGGRESSIVE,
+            detection_threshold=Duration(seconds=0.5),
+            election_delay=Duration(seconds=0.1),
+            max_election_time=Duration(seconds=1.0),
+            enable_pre_election=True,
+        )
+
+    @classmethod
+    def conservative(cls) -> "FailoverPolicy":
+        """Create a conservative failover policy to avoid false positives."""
+        return cls(
+            mode=cls.CONSERVATIVE,
+            detection_threshold=Duration(seconds=3.0),
+            election_delay=Duration(seconds=1.0),
+            max_election_time=Duration(seconds=5.0),
+            enable_pre_election=False,
+        )
+
+    @classmethod
+    def balanced(cls) -> "FailoverPolicy":
+        """Create a balanced failover policy (default)."""
+        return cls(
+            mode=cls.BALANCED,
+            detection_threshold=Duration(seconds=1.0),
+            election_delay=Duration(seconds=0.5),
+            max_election_time=Duration(seconds=2.0),
+            enable_pre_election=True,
+        )
