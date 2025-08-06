@@ -307,19 +307,29 @@ class TestSingleActiveServiceMigration:
         mock_message_bus,
     ):
         """Test that service works without registry (for testing)."""
-        service = SingleActiveService(
-            service_name="test-service",
-            message_bus=mock_message_bus,
-            enable_registration=False,
-        )
+        from unittest.mock import AsyncMock, Mock, patch
 
-        await service.start()
+        # Mock the KV store creation
+        with patch(
+            "aegis_sdk.application.single_active_service.NATSKVStore"
+        ) as mock_kv_store_class:
+            mock_kv_store = Mock()
+            mock_kv_store.connect = AsyncMock()
+            mock_kv_store_class.return_value = mock_kv_store
 
-        # Service should start without errors
-        assert service.service_name == "test-service"
-        assert not service.is_active  # No election without registry
+            service = SingleActiveService(
+                service_name="test-service",
+                message_bus=mock_message_bus,
+                enable_registration=False,
+            )
 
-        await service.stop()
+            await service.start()
+
+            # Service should start without errors
+            assert service.service_name == "test-service"
+            assert not service.is_active  # No election without registry
+
+            await service.stop()
 
     @pytest.mark.asyncio
     async def test_metrics_tracking(

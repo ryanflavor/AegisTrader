@@ -112,6 +112,8 @@ class SingleActiveService(Service):
         # Initialize election repository if not provided
         if self._election_repository is None:
             kv_store = NATSKVStore(nats_adapter=self._bus)
+            # Connect to KV store with a unique bucket name for elections
+            await kv_store.connect(f"election_{self.service_name}", enable_ttl=True)
             self._election_repository = NatsKvElectionRepository(
                 kv_store=kv_store,
                 logger=self._logger,

@@ -161,12 +161,12 @@ class KVStoreConfig(BaseModel):
         """Validate bucket name format."""
         import re
 
-        # NATS KV bucket names should be alphanumeric with underscores
-        # Allow hyphens but they will be converted to underscores for NATS compatibility
-        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+        # NATS KV bucket names should be alphanumeric with underscores only
+        # Hyphens, dots, and spaces are not allowed in NATS bucket names
+        if not re.match(r"^[a-zA-Z0-9_]+$", v):
             raise ValueError(
                 f"Invalid bucket name: {v}. "
-                "Must contain only alphanumeric characters, underscores, and hyphens"
+                "Must contain only alphanumeric characters and underscores"
             )
         return v
 

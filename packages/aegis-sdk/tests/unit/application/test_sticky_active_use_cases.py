@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from aegis_sdk.application.sticky_active_use_cases import (
     StickyActiveHeartbeatRequest,
     StickyActiveHeartbeatUseCase,
+    StickyActiveMonitoringUseCase,
     StickyActiveRegistrationRequest,
     StickyActiveRegistrationUseCase,
 )
@@ -26,6 +28,13 @@ def mock_election_repository():
     repo.get_current_leader = AsyncMock(return_value=(None, {}))
     repo.save_election_state = AsyncMock()
     repo.update_leadership = AsyncMock(return_value=True)
+
+    # Mock watch_leadership to return an empty async iterator by default
+    async def default_watch():
+        return
+        yield  # Make it an async generator
+
+    repo.watch_leadership = MagicMock(return_value=default_watch())
     return repo
 
 
@@ -422,7 +431,7 @@ class TestStickyActiveHeartbeatUseCase:
             group_id="default",
         )
         mock_election_repository.get_election_state.return_value = election
-        mock_service_registry.get_instances.return_value = []  # No instances
+        mock_service_registry.get_instance.return_value = None  # No instance found
 
         use_case = StickyActiveHeartbeatUseCase(
             mock_election_repository,
@@ -443,3 +452,202 @@ class TestStickyActiveHeartbeatUseCase:
         assert result is False
         mock_logger.error.assert_called_once()
         mock_service_registry.update_heartbeat.assert_not_called()
+
+
+class TestStickyActiveMonitoringUseCase:
+    """Test StickyActiveMonitoringUseCase."""
+
+    @pytest.mark.asyncio
+    async def test_start_monitoring_creates_task(
+        self,
+        mock_election_repository,
+        mock_service_registry,
+        mock_message_bus,
+        mock_metrics,
+        mock_logger,
+    ):
+        """Test that start_monitoring creates a monitoring task."""
+        # Arrange
+        use_case = StickyActiveMonitoringUseCase(
+            mock_election_repository,
+            mock_service_registry,
+            mock_message_bus,
+            mock_metrics,
+            mock_logger,
+        )
+
+        # Act
+        await use_case.start_monitoring("test-service", "instance-1", "default")
+
+        # Assert
+        key = "test-service/instance-1/default"  # Use / instead of .
+        assert key in use_case._monitoring_tasks
+        assert use_case._monitoring_tasks[key] is not None
+        # Clean up
+        use_case._monitoring_tasks[key].cancel()
+
+    @pytest.mark.asyncio
+    async def test_stop_monitoring_cancels_task(
+        self,
+        mock_election_repository,
+        mock_service_registry,
+        mock_message_bus,
+        mock_metrics,
+        mock_logger,
+    ):
+        """Test that stop_monitoring cancels the monitoring task."""
+        # Arrange
+        import asyncio
+
+        use_case = StickyActiveMonitoringUseCase(
+            mock_election_repository,
+            mock_service_registry,
+            mock_message_bus,
+            mock_metrics,
+            mock_logger,
+        )
+
+        # Start monitoring first
+        await use_case.start_monitoring("test-service", "instance-1", "default")
+        key = "test-service/instance-1/default"  # Use / instead of .
+        task = use_case._monitoring_tasks[key]
+
+        # Act
+        await use_case.stop_monitoring("test-service", "instance-1", "default")
+
+        # Give the task a moment to actually be cancelled
+        from contextlib import suppress
+
+        with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+            await asyncio.wait_for(task, timeout=0.1)
+
+        # Assert
+        assert task.done() or task.cancelled()
+        assert key not in use_case._monitoring_tasks
+
+    @pytest.mark.asyncio
+    async def test_monitor_leadership_handles_events(
+        self,
+        mock_election_repository,
+        mock_service_registry,
+        mock_message_bus,
+        mock_metrics,
+        mock_logger,
+    ):
+        """Test that _monitor_leadership handles leadership events."""
+        # Arrange
+        from unittest.mock import MagicMock
+
+        # Create election aggregate - start as not leader
+        election = StickyActiveElection(
+            service_name=ServiceName(value="test-service"),
+            instance_id=InstanceId(value="instance-1"),
+            group_id="default",
+        )
+
+        # Mock watch_leadership to return events
+        events = [
+            {
+                "type": "expired",  # Leader expired event when we're not leader
+                "leader_id": None,
+                "metadata": {},
+                "timestamp": 1234567891,
+            },
+        ]
+
+        class AsyncIterator:
+            def __init__(self, events):
+                self.events = events
+                self.index = 0
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if self.index < len(self.events):
+                    event = self.events[self.index]
+                    self.index += 1
+                    return event
+                raise StopAsyncIteration
+
+        # Make watch_leadership return the async iterator
+        mock_election_repository.watch_leadership.return_value = AsyncIterator(events)
+        mock_election_repository.get_election_state.return_value = election
+        mock_election_repository.attempt_leadership.return_value = True  # We win the election
+
+        # Mock status callback
+        status_callback = MagicMock()
+
+        use_case = StickyActiveMonitoringUseCase(
+            mock_election_repository,
+            mock_service_registry,
+            mock_message_bus,
+            mock_metrics,
+            mock_logger,
+            status_callback,
+        )
+
+        # Act - Run monitor_leadership in a task and cancel after processing events
+        task = asyncio.create_task(
+            use_case._monitor_leadership(
+                ServiceName(value="test-service"),
+                InstanceId(value="instance-1"),
+                "default",
+            )
+        )
+
+        # Give it time to process events (including the 1 second sleep in _handle_leader_expired)
+        await asyncio.sleep(1.5)
+        task.cancel()
+
+        from contextlib import suppress
+
+        with suppress(asyncio.CancelledError):
+            await task
+
+        # Assert
+        assert mock_election_repository.watch_leadership.called
+        assert (
+            mock_election_repository.attempt_leadership.called
+        )  # Should attempt to take leadership
+        assert status_callback.call_count >= 1  # Should have been called when we won election
+
+    @pytest.mark.asyncio
+    async def test_handle_leader_expiration(
+        self,
+        mock_election_repository,
+        mock_service_registry,
+        mock_message_bus,
+        mock_metrics,
+        mock_logger,
+    ):
+        """Test that _handle_leader_expiration attempts to take over leadership."""
+        # Arrange
+        election = StickyActiveElection(
+            service_name=ServiceName(value="test-service"),
+            instance_id=InstanceId(value="instance-1"),
+            group_id="default",
+        )
+
+        mock_election_repository.attempt_leadership.return_value = True
+
+        use_case = StickyActiveMonitoringUseCase(
+            mock_election_repository,
+            mock_service_registry,
+            mock_message_bus,
+            mock_metrics,
+            mock_logger,
+        )
+
+        # Act
+        await use_case._handle_leader_expired(
+            ServiceName(value="test-service"),
+            InstanceId(value="instance-1"),
+            "default",
+            election,
+        )
+
+        # Assert
+        mock_election_repository.attempt_leadership.assert_called_once()
+        mock_election_repository.save_election_state.assert_called_once()
+        assert election.is_leader  # Should have won election

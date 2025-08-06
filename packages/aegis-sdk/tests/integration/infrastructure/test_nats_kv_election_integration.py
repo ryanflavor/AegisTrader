@@ -56,9 +56,16 @@ class TestNatsKvElectionRepository:
 
         repo = NatsKvElectionRepository(kv_store)
 
-        service_name = ServiceName(value="test-service")
+        service_name = ServiceName(value="test-service-conflict")  # Use unique service name
         instance1 = InstanceId(value="instance-1")
         instance2 = InstanceId(value="instance-2")
+
+        # Clean up any existing leader
+        leader_key = f"leader.{service_name.value}.default"
+        try:
+            await kv_store.delete(leader_key)
+        except Exception:
+            pass  # Key might not exist
 
         # First instance acquires leadership
         acquired1 = await repo.attempt_leadership(
@@ -313,6 +320,7 @@ class TestNatsKvElectionRepository:
             group_id="production",
             leader_ttl_seconds=10,
             heartbeat_interval_seconds=3,
+            election_timeout_seconds=20,  # Must be greater than leader_ttl_seconds
         )
 
         # Start election and win
@@ -352,8 +360,15 @@ class TestNatsKvElectionRepository:
 
         repo = NatsKvElectionRepository(kv_store)
 
-        service_name = ServiceName(value="test-service")
+        service_name = ServiceName(value="test-service-concurrent")  # Use unique service name
         instances = [InstanceId(value=f"instance-{i}") for i in range(5)]
+
+        # Clean up any existing leader
+        leader_key = f"leader.{service_name.value}.default"
+        try:
+            await kv_store.delete(leader_key)
+        except Exception:
+            pass  # Key might not exist
 
         # All instances attempt leadership concurrently
         tasks = []

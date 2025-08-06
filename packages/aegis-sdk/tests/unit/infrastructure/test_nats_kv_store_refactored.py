@@ -124,7 +124,12 @@ class TestNATSKVStoreConnection:
     @pytest.fixture
     def mock_nats_adapter(self):
         """Create mock NATS adapter."""
-        adapter = AsyncMock()
+        from unittest.mock import create_autospec
+
+        from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
+
+        # Create a mock that satisfies isinstance check
+        adapter = create_autospec(NATSAdapter, instance=True)
         adapter.is_connected = AsyncMock(return_value=True)
         adapter._connections = [AsyncMock()]
         adapter._js = AsyncMock()
@@ -200,8 +205,16 @@ class TestNATSKVStoreOperations:
     @pytest.fixture
     def mock_kv_store(self):
         """Create mock KV store with all dependencies."""
-        mock_adapter = AsyncMock()
+        from unittest.mock import create_autospec
+
+        from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
+
+        # Create a mock that satisfies isinstance check
+        mock_adapter = create_autospec(NATSAdapter, instance=True)
         mock_adapter.is_connected = AsyncMock(return_value=True)
+        mock_adapter._connections = [AsyncMock()]  # Add connections for TTL
+        mock_adapter._js = None  # Will be set in tests that need it
+
         mock_metrics = Mock()
         mock_metrics.timer = MagicMock()
         mock_metrics.increment = Mock()

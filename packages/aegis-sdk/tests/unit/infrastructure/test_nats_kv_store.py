@@ -51,48 +51,57 @@ class TestNATSKVStore:
     @pytest.fixture
     def kv_store(self, mock_metrics):
         """Create NATS KV Store instance."""
-        return NATSKVStore(metrics=mock_metrics)
+        from unittest.mock import create_autospec
+
+        from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
+
+        # Create a mock NATS adapter that satisfies isinstance check
+        mock_adapter = create_autospec(NATSAdapter, instance=True)
+        mock_adapter.is_connected = AsyncMock(return_value=True)
+        mock_adapter._js = None  # Will be set in tests
+        mock_adapter._connections = []  # Will be set in tests
+        return NATSKVStore(nats_adapter=mock_adapter, metrics=mock_metrics)
 
     @pytest.mark.asyncio
     async def test_connect_creates_kv_bucket(self, kv_store, mock_nats_client):
         """Test that connect creates or gets KV bucket."""
         client, js, kv = mock_nats_client
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test_bucket")
+        await kv_store.connect("test_bucket")
 
-            js.key_value.assert_called_once_with("test_bucket")
-            assert kv_store._kv == kv
-            assert kv_store._bucket_name == "test_bucket"
+        js.key_value.assert_called_once_with("test_bucket")
+        assert kv_store._kv == kv
+        assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_with_enable_ttl(self, kv_store, mock_nats_client):
         """Test connect with enable_ttl creates bucket with TTL support."""
         client, js, kv = mock_nats_client
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("ttl_bucket", enable_ttl=True)
+        await kv_store.connect("ttl_bucket", enable_ttl=True)
 
-            # Should try key_value first
-            assert js.key_value.call_count >= 1
-            assert kv_store._bucket_name == "ttl_bucket"
+        # Should try key_value first
+        assert js.key_value.call_count >= 1
+        assert kv_store._bucket_name == "ttl_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_not_connected(self, kv_store):
         """Test connect fails when not connected to NATS."""
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter.is_connected = AsyncMock(return_value=False)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=False)
 
-            with pytest.raises(KVNotConnectedError):
-                await kv_store.connect("test_bucket")
+        with pytest.raises(KVNotConnectedError):
+            await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_disconnect_clears_kv_reference(self, kv_store):
@@ -655,31 +664,45 @@ class TestNATSKVStore:
         """Test creating KV stream with TTL enabled."""
         client, js, kv = mock_nats_client
 
+        # Mock stream info response
+        mock_stream_info = Mock()
+        mock_config = Mock()
+        mock_config.as_dict = Mock(
+            return_value={
+                "name": "KV_test-bucket",
+                "subjects": ["$KV.test-bucket.>"],
+                "max_msgs_per_subject": 1,
+                "allow_msg_ttl": False,  # Will be set to True
+            }
+        )
+        mock_stream_info.config = mock_config
+        js.stream_info = AsyncMock(return_value=mock_stream_info)
+
         # Mock stream API response
         mock_response = Mock()
         mock_response.data = b'{"stream_info": {"created": true}}'  # Valid JSON response
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            # Mock the request method
-            client.request = AsyncMock(return_value=mock_response)
+        # Mock the request method
+        client.request = AsyncMock(return_value=mock_response)
 
-            result = await kv_store._create_kv_stream_with_ttl("test-bucket")
-            assert result is True
+        result = await kv_store._create_kv_stream_with_ttl("test-bucket")
+        assert result is True
 
-            # Verify stream creation request
-            client.request.assert_called_once()
-            call_args = client.request.call_args
-            assert call_args[0][0] == "$JS.API.STREAM.CREATE.KV_test-bucket"
+        # Verify stream update request (updates existing stream with TTL)
+        client.request.assert_called_once()
+        call_args = client.request.call_args
+        assert call_args[0][0] == "$JS.API.STREAM.UPDATE.KV_test-bucket"
 
-            # Verify stream config has allow_msg_ttl
-            import json
+        # Verify stream config has allow_msg_ttl
+        import json
 
-            config = json.loads(call_args[0][1])
-            assert config["allow_msg_ttl"] is True
+        config = json.loads(call_args[0][1])
+        assert config["allow_msg_ttl"] is True
 
     @pytest.mark.asyncio
     async def test_create_kv_stream_with_ttl_error(self, kv_store, mock_nats_client):
@@ -690,12 +713,12 @@ class TestNATSKVStore:
         mock_response = Mock()
         mock_response.data = b'{"error": {"code": 400, "description": "Stream already exists"}}'
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            client.request = AsyncMock(return_value=mock_response)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        client.request = AsyncMock(return_value=mock_response)
 
-            result = await kv_store._create_kv_stream_with_ttl("test-bucket")
-            assert result is False
+        result = await kv_store._create_kv_stream_with_ttl("test-bucket")
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_put_with_ttl_not_supported(self, kv_store):
@@ -720,13 +743,13 @@ class TestNATSKVStore:
         """Test connect fails when JetStream not initialized."""
         client, js, kv = mock_nats_client
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = None  # No JetStream
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = None  # No JetStream
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            with pytest.raises(KVStoreError, match="NATS JetStream not initialized"):
-                await kv_store.connect("test_bucket")
+        with pytest.raises(KVStoreError, match="NATS JetStream not initialized"):
+            await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_connect_create_bucket_no_ttl(self, kv_store, mock_nats_client):
@@ -740,16 +763,16 @@ class TestNATSKVStore:
         # Add stream succeeds
         js.add_stream = AsyncMock()
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test_bucket", enable_ttl=False)
+        await kv_store.connect("test_bucket", enable_ttl=False)
 
-            # Should have tried to add stream
-            js.add_stream.assert_called_once()
-            assert kv_store._bucket_name == "test_bucket"
+        # Should have tried to add stream
+        js.add_stream.assert_called_once()
+        assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_stream_exists(self, kv_store, mock_nats_client):
@@ -762,16 +785,16 @@ class TestNATSKVStore:
         # Stream already exists
         js.stream_info = AsyncMock()  # No exception means it exists
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            await kv_store.connect("test_bucket")
+        await kv_store.connect("test_bucket")
 
-            # Should get KV bucket after checking stream exists
-            assert js.key_value.call_count == 2
-            assert kv_store._bucket_name == "test_bucket"
+        # Should get KV bucket after checking stream exists
+        assert js.key_value.call_count == 2
+        assert kv_store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_get_no_created_timestamp(self, kv_store, mock_metrics):
@@ -1173,17 +1196,17 @@ class TestNATSKVStore:
         # Stream doesn't exist
         js.stream_info = AsyncMock(side_effect=Exception("stream not found"))
 
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
+
         # Mock create_kv_stream_with_ttl to fail
         with (
             patch.object(kv_store, "_create_kv_stream_with_ttl", return_value=False),
-            patch.object(kv_store, "_nats_adapter") as mock_adapter,
+            pytest.raises(Exception, match="Failed to create stream with TTL support"),
         ):
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
-
-            with pytest.raises(Exception, match="Failed to create stream with TTL support"):
-                await kv_store.connect("test_bucket", enable_ttl=True)
+            await kv_store.connect("test_bucket", enable_ttl=True)
 
     @pytest.mark.asyncio
     async def test_connect_failure(self, kv_store, mock_nats_client):
@@ -1193,13 +1216,13 @@ class TestNATSKVStore:
         # key_value always fails
         js.key_value.side_effect = Exception("connection error")
 
-        with patch.object(kv_store, "_nats_adapter") as mock_adapter:
-            mock_adapter._connections = [client]
-            mock_adapter._js = js
-            mock_adapter.is_connected = AsyncMock(return_value=True)
+        # Configure the mock adapter that was injected
+        kv_store._nats_adapter._connections = [client]
+        kv_store._nats_adapter._js = js
+        kv_store._nats_adapter.is_connected = AsyncMock(return_value=True)
 
-            with pytest.raises(Exception, match="Failed to connect to KV bucket"):
-                await kv_store.connect("test_bucket")
+        with pytest.raises(Exception, match="Failed to connect to KV bucket"):
+            await kv_store.connect("test_bucket")
 
     @pytest.mark.asyncio
     async def test_put_create_only_generic_error(self, kv_store):

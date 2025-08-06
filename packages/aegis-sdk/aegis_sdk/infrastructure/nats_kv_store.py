@@ -139,7 +139,12 @@ class NATSKVStore(KVStorePort):
             if not self._nats_adapter._js:
                 raise KVStoreError("NATS JetStream not initialized", operation="connect")
             stream_info = await self._nats_adapter._js.stream_info(stream_name)
-            config_dict = stream_info.config.as_dict()
+            # Check if as_dict is a coroutine or a regular method
+            as_dict_result = stream_info.config.as_dict()
+            if asyncio.iscoroutine(as_dict_result):
+                config_dict = await as_dict_result
+            else:
+                config_dict = as_dict_result
 
             # Add allow_msg_ttl field
             config_dict["allow_msg_ttl"] = True

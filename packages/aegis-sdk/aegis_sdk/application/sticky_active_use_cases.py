@@ -116,9 +116,10 @@ class StickyActiveRegistrationUseCase:
                 # Only call win_election if we weren't already the leader
                 election.win_election()
                 self._metrics.increment("sticky_active.election.won")
-                self._logger.info(
-                    f"Won election for {service_name}/{instance_id} in group {request.group_id}"
-                )
+                if self._logger:
+                    self._logger.info(
+                        f"Won election for {service_name}/{instance_id} in group {request.group_id}"
+                    )
         elif not election.is_leader:
             # Lost the election (and not already leader)
             leader_id, _ = await self._election_repo.get_current_leader(
@@ -127,9 +128,10 @@ class StickyActiveRegistrationUseCase:
             if leader_id:
                 election.lose_election(leader_id)
             self._metrics.increment("sticky_active.election.lost")
-            self._logger.info(
-                f"Lost election for {service_name}/{instance_id} in group {request.group_id}"
-            )
+            if self._logger:
+                self._logger.info(
+                    f"Lost election for {service_name}/{instance_id} in group {request.group_id}"
+                )
 
         # Save election state
         await self._election_repo.save_election_state(election)
@@ -240,7 +242,8 @@ class StickyActiveHeartbeatUseCase:
         )
 
         if not election:
-            self._logger.warning(f"No election state found for {service_name}/{instance_id}")
+            if self._logger:
+                self._logger.warning(f"No election state found for {service_name}/{instance_id}")
             return False
 
         # Update leader heartbeat if we are the leader
@@ -257,9 +260,10 @@ class StickyActiveHeartbeatUseCase:
                 self._metrics.increment("sticky_active.leader.heartbeat")
             else:
                 # Lost leadership
-                self._logger.warning(
-                    f"Failed to update leader heartbeat for {service_name}/{instance_id}"
-                )
+                if self._logger:
+                    self._logger.warning(
+                        f"Failed to update leader heartbeat for {service_name}/{instance_id}"
+                    )
                 election.step_down("Failed to update heartbeat")
                 self._metrics.increment("sticky_active.leader.lost")
 
@@ -286,13 +290,15 @@ class StickyActiveHeartbeatUseCase:
                 self._metrics.increment("sticky_active.heartbeat.success")
                 return True
             else:
-                self._logger.error(
-                    f"Service instance not found in registry: {service_name}/{instance_id}"
-                )
+                if self._logger:
+                    self._logger.error(
+                        f"Service instance not found in registry: {service_name}/{instance_id}"
+                    )
                 return False
 
         except Exception as e:
-            self._logger.exception(f"Failed to update heartbeat: {e}")
+            if self._logger:
+                self._logger.exception(f"Failed to update heartbeat: {e}")
             self._metrics.increment("sticky_active.heartbeat.error")
             return False
         finally:
@@ -378,9 +384,10 @@ class StickyActiveMonitoringUseCase:
         """Monitor leadership changes and handle failover."""
         try:
             async for event in self._election_repo.watch_leadership(service_name, group_id):
-                self._logger.info(
-                    f"Leadership event: {event['type']} for {service_name}/{group_id}"
-                )
+                if self._logger:
+                    self._logger.info(
+                        f"Leadership event: {event['type']} for {service_name}/{group_id}"
+                    )
 
                 # Load election state
                 election = await self._election_repo.get_election_state(
@@ -433,10 +440,12 @@ class StickyActiveMonitoringUseCase:
                     await self._election_repo.save_election_state(election)
 
         except asyncio.CancelledError:
-            self._logger.info(f"Monitoring cancelled for {service_name}/{instance_id}")
+            if self._logger:
+                self._logger.info(f"Monitoring cancelled for {service_name}/{instance_id}")
             raise
         except Exception as e:
-            self._logger.exception(f"Error in leadership monitoring: {e}")
+            if self._logger:
+                self._logger.exception(f"Error in leadership monitoring: {e}")
             self._metrics.increment("sticky_active.monitoring.error")
 
     async def _handle_leader_expired(
@@ -448,7 +457,8 @@ class StickyActiveMonitoringUseCase:
     ) -> None:
         """Handle leader expiration and attempt failover."""
         # Leader expired, attempt to take over
-        self._logger.info(f"Leader expired for {service_name}/{group_id}, attempting takeover")
+        if self._logger:
+            self._logger.info(f"Leader expired for {service_name}/{group_id}, attempting takeover")
 
         election.handle_leader_expired()
 

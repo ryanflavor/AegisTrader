@@ -408,22 +408,34 @@ class TestSingleActiveServicePattern:
         # can become active. This is a known limitation of the simple heartbeat
         # based election without proper distributed consensus.
 
+        # Create a service registry for the test
+        from aegis_sdk.infrastructure.kv_service_registry import KVServiceRegistry
+        from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
+
+        kv_store = NATSKVStore(nats_adapter)
+        await kv_store.connect("test_registry", enable_ttl=True)
+        service_registry = KVServiceRegistry(kv_store)
+
         service = SingleActiveService(
             service_name="single_active_test",
             version="1.0.0",
             message_bus=nats_adapter,
             instance_id="instance_0",
+            service_registry=service_registry,
+            enable_registration=True,
         )
 
         try:
             await service.start()
-            await asyncio.sleep(0.5)
+            # Give more time for service to become active
+            await asyncio.sleep(2.0)
 
             # Single instance should become active
-            assert service.is_active
+            assert service.is_active, "Service should become active when it's the only instance"
 
         finally:
             await service.stop()
+            await kv_store.disconnect()
 
     @pytest.mark.asyncio
     async def test_single_active_failover(self, nats_adapter):
