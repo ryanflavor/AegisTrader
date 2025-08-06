@@ -21,6 +21,7 @@ from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
 from ..ports.service_discovery import ServiceDiscoveryPort
 from ..ports.service_registry import ServiceRegistryPort
+from .dependency_provider import DependencyProvider
 from .service import Service
 from .single_active_dtos import ExclusiveRPCResponse, SingleActiveConfig, SingleActiveStatus
 from .sticky_active_use_cases import (
@@ -121,11 +122,10 @@ class SingleActiveService(Service):
         # Initialize election repository if not provided
         if self._election_repository is None:
             if self._election_repository_factory is None:
-                # Use default factory if none provided
-                # Import from infrastructure layer where concrete implementations belong
-                from ..infrastructure.application_factories import DefaultElectionRepositoryFactory
-
-                self._election_repository_factory = DefaultElectionRepositoryFactory()
+                # Use default factory from DependencyProvider
+                self._election_repository_factory = (
+                    DependencyProvider.get_default_election_factory()
+                )
 
             self._election_repository = (
                 await self._election_repository_factory.create_election_repository(
@@ -139,16 +139,12 @@ class SingleActiveService(Service):
 
         # Initialize metrics if not provided
         if self._metrics is None:
-            from ..infrastructure.in_memory_metrics import InMemoryMetrics
-
-            self._metrics = InMemoryMetrics()
+            self._metrics = DependencyProvider.get_default_metrics()
 
         # Initialize use case factory if not provided
         if self._use_case_factory is None:
-            # Import from infrastructure layer where concrete implementations belong
-            from ..infrastructure.application_factories import DefaultUseCaseFactory
-
-            self._use_case_factory = DefaultUseCaseFactory()
+            # Use default factory from DependencyProvider
+            self._use_case_factory = DependencyProvider.get_default_use_case_factory()
 
         # Create use cases using factory
         self._registration_use_case = self._use_case_factory.create_registration_use_case(

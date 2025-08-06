@@ -22,9 +22,8 @@ def extract_imports(file_path: Path) -> set[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imports.add(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                imports.add(node.module)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
 
     return imports
 
@@ -111,21 +110,9 @@ class TestHexagonalArchitecture:
 
             for imp in imports:
                 if imp and imp.startswith("aegis_sdk.infrastructure"):
-                    # Allow specific infrastructure imports in specific files
-                    allowed_cases = [
-                        # single_active_service.py can import concrete factories
-                        # but only for default initialization when none provided
-                        (
-                            "single_active_service.py" in str(py_file)
-                            and "application_factories" in imp
-                        ),
-                        # Allow InMemoryMetrics for default initialization
-                        ("in_memory_metrics" in imp.lower()),
-                    ]
-
-                    if not any(allowed_cases):
-                        rel_path = py_file.relative_to(self.base_path)
-                        violations.append(f"{rel_path} imports from infrastructure: {imp}")
+                    # NO EXCEPTIONS - Application should NEVER import from infrastructure
+                    rel_path = py_file.relative_to(self.base_path)
+                    violations.append(f"{rel_path} imports from infrastructure: {imp}")
 
         assert not violations, (
             "Application layer has forbidden infrastructure dependencies:\n" + "\n".join(violations)
@@ -170,6 +157,44 @@ class TestHexagonalArchitecture:
         assert "from .nats_kv_election_repository" in content
         assert "from .nats_kv_store" in content
 
+    def test_dependency_provider_exists(self):
+        """Ensure DependencyProvider exists in application layer."""
+        provider_file = self.application_path / "dependency_provider.py"
+        assert provider_file.exists(), "dependency_provider.py should exist in application layer"
+
+        with open(provider_file) as f:
+            content = f.read()
+
+        # Should NOT import from infrastructure
+        assert (
+            "from ..infrastructure" not in content
+        ), "DependencyProvider should not import from infrastructure"
+
+        # Should have necessary methods
+        assert "register_defaults" in content
+        assert "get_default_election_factory" in content
+        assert "get_default_use_case_factory" in content
+        assert "get_default_metrics" in content
+
+    def test_bootstrap_module_exists(self):
+        """Ensure bootstrap module exists in infrastructure layer."""
+        bootstrap_file = self.infrastructure_path / "bootstrap.py"
+        assert bootstrap_file.exists(), "bootstrap.py should exist in infrastructure layer"
+
+        with open(bootstrap_file) as f:
+            content = f.read()
+
+        # Should import DependencyProvider from application
+        assert "from ..application.dependency_provider import DependencyProvider" in content
+
+        # Should import concrete implementations
+        assert "from .application_factories import" in content
+        assert "from .in_memory_metrics import" in content
+
+        # Should have bootstrap function
+        assert "def bootstrap_defaults()" in content
+        assert "DependencyProvider.register_defaults(" in content
+
     def test_no_circular_dependencies(self):
         """Ensure there are no circular import dependencies."""
         # This is a simplified check - a full check would require import graph analysis
@@ -182,13 +207,13 @@ class TestHexagonalArchitecture:
             imports = extract_imports(py_file)
             for imp in imports:
                 if imp and "application.factories" in imp:
-                    assert False, (
+                    raise AssertionError(
                         f"{py_file.relative_to(self.base_path)} imports from "
                         f"application.factories, which could cause circular dependency"
                     )
 
     def test_single_active_service_uses_proper_imports(self):
-        """Verify that SingleActiveService uses factories correctly."""
+        """Verify that SingleActiveService uses dependency provider correctly."""
         service_file = self.application_path / "single_active_service.py"
 
         with open(service_file) as f:
@@ -199,19 +224,23 @@ class TestHexagonalArchitecture:
             "from ..ports.factory_ports import" in content
         ), "SingleActiveService should import factory interfaces from ports"
 
-        # Should only import concrete factories inside methods for default init
-        lines = content.split("\n")
-        for i, line in enumerate(lines):
-            if "from ..infrastructure.application_factories import" in line:
-                # Check that this import is inside a method (indented)
-                assert line.startswith("        "), (
-                    f"Line {i + 1}: Infrastructure imports should only be inside methods, "
-                    f"not at module level"
-                )
+        # Should use DependencyProvider for defaults
+        assert (
+            "from .dependency_provider import DependencyProvider" in content
+        ), "SingleActiveService should import DependencyProvider"
 
-                # Check surrounding context for conditional initialization
-                context = "\n".join(lines[max(0, i - 3) : min(len(lines), i + 3)])
-                assert "if self._" in context and "is None:" in context, (
-                    f"Line {i + 1}: Infrastructure imports should only be used for "
-                    f"default initialization when dependency is not provided"
-                )
+        # Should NOT have any infrastructure imports
+        assert (
+            "from ..infrastructure" not in content
+        ), "SingleActiveService should NOT import from infrastructure layer"
+
+        # Verify DependencyProvider usage for defaults
+        assert (
+            "DependencyProvider.get_default_election_factory()" in content
+        ), "Should use DependencyProvider for default election factory"
+        assert (
+            "DependencyProvider.get_default_metrics()" in content
+        ), "Should use DependencyProvider for default metrics"
+        assert (
+            "DependencyProvider.get_default_use_case_factory()" in content
+        ), "Should use DependencyProvider for default use case factory"
