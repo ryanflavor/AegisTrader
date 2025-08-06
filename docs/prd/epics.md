@@ -80,7 +80,7 @@ The project is broken down into the following epics and stories:
 * **Story 3.1: Implement Sticky-Active Instance Election & Heartbeat**
     * **As an** `AegisSDK` service cluster, **I want** to elect a single "sticky active" instance for a service group and maintain its status via heartbeats **so that** there is always one designated instance for critical requests.
     * **Acceptance Criteria (AC):**
-        1.  A new `StickyActiveService` class is created.
+        1.  SingleActiveService class provides single-active pattern with client-side stickiness.
         2.  On startup, instances of this class use an atomic "create-or-get" operation on a designated NATS KV Store key to elect a leader.
         3.  Only the elected leader instance sets its status to `ACTIVE` in its `ServiceInstance` record in the KV Store.
         4.  Standby instances periodically monitor the leader's heartbeat key.

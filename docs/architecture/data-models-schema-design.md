@@ -22,8 +22,19 @@ export interface ServiceInstance {
   serviceName: string;
   instanceId: string;
   version: string;
-  status: 'ACTIVE' | 'UNHEALTHY' | 'STANDBY';
+  status: 'ACTIVE' | 'UNHEALTHY' | 'STANDBY';  // Maps to ServiceStatus enum
   stickyActiveGroup?: string;
+  stickyActiveStatus?: 'ACTIVE' | 'STANDBY' | 'ELECTING';  // Maps to StickyActiveStatus enum
   lastHeartbeat: string;
   metadata?: Record\<string, any\>;
+}
+
+// RPC Error codes for standardized error handling
+export enum RPCErrorCode {
+  NOT_ACTIVE = 'NOT_ACTIVE',  // Service instance is not the active leader
+  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',  // Service cannot be reached
+  TIMEOUT = 'TIMEOUT',  // Request timed out
+  INVALID_REQUEST = 'INVALID_REQUEST',  // Malformed or invalid request
+  INTERNAL_ERROR = 'INTERNAL_ERROR',  // Internal service error
+  ELECTING = 'ELECTING'  // Service is in election process
 }

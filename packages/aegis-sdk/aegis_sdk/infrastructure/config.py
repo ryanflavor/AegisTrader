@@ -256,10 +256,12 @@ class LogContext(BaseModel):
 
 
 class StickyActiveConfig(BaseModel):
-    """Configuration for sticky active pattern client behavior.
+    """Client-side configuration for sticky behavior with SingleActiveService.
 
-    Encapsulates retry policies and performance settings for handling
-    sticky active failovers gracefully.
+    This configuration enables clients to automatically retry when receiving
+    NOT_ACTIVE errors, achieving sticky session behavior without requiring
+    a separate StickyActiveService class. The stickiness comes from the
+    client persistently retrying until finding the active leader.
     """
 
     model_config = ConfigDict(

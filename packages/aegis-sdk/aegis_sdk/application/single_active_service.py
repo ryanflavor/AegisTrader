@@ -1,7 +1,8 @@
 """Single active service implementation for exclusive RPC execution.
 
-This service uses the sticky active pattern with leader election
-to ensure only one instance processes exclusive RPC methods at a time.
+This service provides leader election to ensure only one instance
+processes exclusive RPC methods at a time. Sticky behavior is achieved
+through client-side retry configuration, not a separate service class.
 Follows hexagonal architecture with dependency injection.
 """
 
@@ -37,10 +38,11 @@ if TYPE_CHECKING:
 
 
 class SingleActiveService(Service):
-    """Service with single active instance support using sticky active pattern.
+    """Service with single active instance support for exclusive processing.
 
-    Only one instance can execute exclusive RPC methods at a time.
-    Uses leader election for robust failover and consistency.
+    Only one instance (leader) can execute exclusive RPC methods at a time.
+    Sticky behavior is achieved when clients configure retry policies for
+    NOT_ACTIVE errors, not through a separate service type.
     Follows hexagonal architecture with proper dependency injection.
     """
 

@@ -159,6 +159,22 @@ uv run pytest --cov=aegis_sdk --cov-report=term-missing
 - pydantic v2: Data validation and settings
 - asyncio: Asynchronous programming
 
+## Service Patterns
+
+AegisSDK provides two fundamental service patterns:
+
+1. **Load-Balanced Service** (`Service`)
+   - Multiple instances handle requests concurrently
+   - Automatic load distribution via NATS
+
+2. **Single-Active Pattern** (`SingleActiveService`)
+   - Only leader instance processes exclusive requests
+   - Sticky behavior through client retry configuration
+   
+Note: There is no separate `StickyActiveService` class. The "sticky" 
+behavior is achieved by configuring client-side retry policies when
+calling SingleActiveService instances that return NOT_ACTIVE errors.
+
 ## Usage in AegisTrader
 This SDK provides the foundation for all AegisTrader microservices:
 - Trading services (Order, Pricing, Risk)

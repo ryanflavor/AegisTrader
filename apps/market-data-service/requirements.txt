@@ -1,0 +1,14 @@
+# VNPy core
+vnpy>=4.1.0
+
+# VNPy gateways (选择您需要的接口)
+vnpy-ctp  # CTP接口（期货）
+vnpy-ctptest  # CTP测试接口
+# vnpy-spot  # 现货接口（如果需要）
+
+# AegisSDK dependency
+-e ../../packages/aegis-sdk
+
+# Other dependencies
+pydantic>=2.0.0
+python-dotenv>=1.0.0

@@ -107,7 +107,7 @@ class KVServiceRegistry(ServiceRegistryPort):
             await self._kv_store.put(
                 key,
                 instance.model_dump(by_alias=True),
-                options=KVOptions(ttl=int(ttl_seconds)),
+                options=KVOptions(ttl=ttl_seconds),
             )
 
             if self._logger:

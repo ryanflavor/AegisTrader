@@ -1,0 +1,11 @@
+# VNPy core
+vnpy>=4.1.0
+vnpy-ctp  # CTP接口
+
+# AegisSDK dependency
+-e ../../packages/aegis-sdk
+
+# Other dependencies
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
