@@ -226,7 +226,7 @@ class TestHandlerRegistry:
             handler = AsyncMock()
             handlers.append(handler)
             await registry.register_rpc(f"method_{i}", handler)
-            await registry.register_event(f"event.{i}", handler, SubscriptionMode.COMPETE)
+            await registry.register_event(f"event.test{i}", handler, SubscriptionMode.COMPETE)
             await registry.register_command(f"command_{i}", handler)
 
         # Register handlers concurrently

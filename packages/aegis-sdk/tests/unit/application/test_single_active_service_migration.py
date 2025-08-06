@@ -4,10 +4,11 @@ These tests ensure backward compatibility and correct behavior
 after migrating from event-based to KV Store-based election.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from aegis_sdk.application.single_active_dtos import SingleActiveConfig
 from aegis_sdk.application.single_active_service import SingleActiveService, exclusive_rpc
 from aegis_sdk.application.sticky_active_use_cases import StickyActiveRegistrationResponse
 from aegis_sdk.domain.value_objects import InstanceId, ServiceName
@@ -64,9 +65,16 @@ class TestSingleActiveServiceMigration:
         mock_election_repository,
     ):
         """Test that service initializes correctly with new components."""
+        # Create config
+        config = SingleActiveConfig(
+            service_name="test-service",
+            group_id="default",
+            leader_ttl_seconds=5,
+        )
+
         # Create service with all new dependencies
         service = SingleActiveService(
-            service_name="test-service",
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             logger=SimpleLogger("test"),
@@ -90,9 +98,15 @@ class TestSingleActiveServiceMigration:
         # Setup mock to return successful election
         mock_election_repository.attempt_leadership.return_value = True
 
+        # Create config
+        config = SingleActiveConfig(
+            service_name="test-service",
+            enable_registration=False,
+        )
+
         # Create service with logger to avoid None errors
         service = SingleActiveService(
-            service_name="test-service",
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=mock_election_repository,
@@ -110,6 +124,15 @@ class TestSingleActiveServiceMigration:
         mock_election_repository.get_election_state.return_value = None
         mock_election_repository.save_election_state.return_value = None
         mock_election_repository.get_current_leader.return_value = (None, {})
+
+        # Create mock use case factory to avoid DependencyProvider
+        mock_use_case_factory = Mock()
+        mock_use_case_factory.create_registration_use_case.return_value = Mock(execute=AsyncMock())
+        mock_use_case_factory.create_heartbeat_use_case.return_value = Mock(execute=AsyncMock())
+        mock_use_case_factory.create_monitoring_use_case.return_value = Mock(
+            start_monitoring=AsyncMock()
+        )
+        service._use_case_factory = mock_use_case_factory
 
         await service.start()
 
@@ -229,11 +252,16 @@ class TestSingleActiveServiceMigration:
         mock_election_repository,
     ):
         """Test that heartbeat updates both service and leader heartbeat."""
-        service = SingleActiveService(
+        config = SingleActiveConfig(
             service_name="test-service",
+            enable_registration=True,
+        )
+        service = SingleActiveService(
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=mock_election_repository,
+            metrics=InMemoryMetrics(),
         )
         service.is_active = True
         service._enable_registration = True
@@ -255,12 +283,17 @@ class TestSingleActiveServiceMigration:
         mock_election_repository,
     ):
         """Test that service handles leadership loss during heartbeat."""
-        service = SingleActiveService(
+        config = SingleActiveConfig(
             service_name="test-service",
+            enable_registration=True,
+        )
+        service = SingleActiveService(
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=mock_election_repository,
             logger=SimpleLogger("test"),
+            metrics=InMemoryMetrics(),
         )
         service.is_active = True
         service._enable_registration = True
@@ -282,12 +315,16 @@ class TestSingleActiveServiceMigration:
         mock_election_repository,
     ):
         """Test that stopping service releases leadership."""
-        service = SingleActiveService(
+        config = SingleActiveConfig(
             service_name="test-service",
+        )
+        service = SingleActiveService(
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=mock_election_repository,
             logger=SimpleLogger("test"),
+            metrics=InMemoryMetrics(),
         )
         service.is_active = True
         service._monitoring_use_case = AsyncMock()
@@ -317,10 +354,25 @@ class TestSingleActiveServiceMigration:
             mock_kv_store.connect = AsyncMock()
             mock_kv_store_class.return_value = mock_kv_store
 
-            service = SingleActiveService(
+            config = SingleActiveConfig(
                 service_name="test-service",
-                message_bus=mock_message_bus,
                 enable_registration=False,
+            )
+            # Create mock use case factory
+            mock_use_case_factory = Mock()
+            mock_use_case_factory.create_registration_use_case.return_value = Mock(
+                execute=AsyncMock()
+            )
+            mock_use_case_factory.create_heartbeat_use_case.return_value = Mock(execute=AsyncMock())
+            mock_use_case_factory.create_monitoring_use_case.return_value = Mock(
+                start_monitoring=AsyncMock()
+            )
+
+            service = SingleActiveService(
+                config=config,
+                message_bus=mock_message_bus,
+                metrics=InMemoryMetrics(),
+                use_case_factory=mock_use_case_factory,
             )
 
             await service.start()
@@ -340,8 +392,11 @@ class TestSingleActiveServiceMigration:
     ):
         """Test that metrics are properly tracked."""
         metrics = InMemoryMetrics()
-        service = SingleActiveService(
+        config = SingleActiveConfig(
             service_name="test-service",
+        )
+        service = SingleActiveService(
+            config=config,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=mock_election_repository,
@@ -390,9 +445,12 @@ class TestSingleActiveServiceMigration:
         election_repo2.release_leadership.return_value = False
 
         # Create services with logger and metrics
-        service1 = SingleActiveService(
+        config1 = SingleActiveConfig(
             service_name="test-service",
             instance_id="instance-1",
+        )
+        service1 = SingleActiveService(
+            config=config1,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=election_repo1,
@@ -400,9 +458,12 @@ class TestSingleActiveServiceMigration:
             metrics=InMemoryMetrics(),
         )
 
-        service2 = SingleActiveService(
+        config2 = SingleActiveConfig(
             service_name="test-service",
             instance_id="instance-2",
+        )
+        service2 = SingleActiveService(
+            config=config2,
             message_bus=mock_message_bus,
             service_registry=mock_service_registry,
             election_repository=election_repo2,

@@ -183,6 +183,7 @@ class HealthManager:
         message_bus: MessageBusPort,
         registry: ServiceRegistryPort | None = None,
         logger: LoggerPort | None = None,
+        on_unhealthy_callback: callable | None = None,
     ) -> None:
         """Initialize health manager."""
         self.service_name = service_name
@@ -192,6 +193,7 @@ class HealthManager:
         self._bus = message_bus
         self._registry = registry
         self._logger = logger
+        self._on_unhealthy = on_unhealthy_callback
         self._heartbeat_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
         self._consecutive_failures = 0
@@ -219,6 +221,9 @@ class HealthManager:
             except Exception as e:
                 await self._handle_heartbeat_failure(e)
                 if self._consecutive_failures >= self._max_consecutive_failures:
+                    # Mark service as unhealthy when max failures reached
+                    if self._on_unhealthy:
+                        self._on_unhealthy()
                     break
                 await self._backoff_sleep()
 
@@ -351,6 +356,7 @@ class Service:
             message_bus,
             service_registry,
             logger,
+            lambda: self.set_status(ServiceStatus.UNHEALTHY),
         )
         self._resolver = ServiceNameResolver(service_discovery)
 
@@ -438,10 +444,20 @@ class Service:
                 },
             )
             if self._registry:
-                await self._registry.register(
-                    self._service_instance,
-                    self._config.registry_ttl,
-                )
+                try:
+                    await self._registry.register(
+                        self._service_instance,
+                        self._config.registry_ttl,
+                    )
+                except Exception as e:
+                    if self._logger:
+                        self._logger.error(
+                            "Failed to register service instance",
+                            service=self.service_name,
+                            instance=self.instance_id,
+                            error=str(e),
+                        )
+                    raise
 
     async def _register_with_infrastructure(self) -> None:
         """Register handlers with message bus."""

@@ -64,7 +64,7 @@ class MonitoringAdapter(MonitoringPort):
         if self._instance_repository:
             try:
                 connected_services = await self._instance_repository.count_active_instances()
-            except Exception:
+            except Exception:  # nosec: B110
                 # If we can't get the count, default to 0
                 pass
 

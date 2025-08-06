@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "AegisTrader - Automated Trading System"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "openctp-ctp>=6.7.7.0",
+    "vnpy>=4.1.0",
+    "vnpy-ctp>=6.7.7.2",
+]
 
 [tool.uv]
 dev-dependencies = [

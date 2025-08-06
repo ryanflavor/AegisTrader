@@ -669,6 +669,121 @@ class ServiceGroupId(BaseModel):
         return hash(self.value)
 
 
+class RetryPolicy(BaseModel):
+    """Value object representing retry configuration for RPC calls.
+
+    Encapsulates retry behavior for handling transient failures,
+    particularly NOT_ACTIVE errors in sticky active pattern.
+    """
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum number of retry attempts",
+    )
+    initial_delay: Duration = Field(
+        default_factory=lambda: Duration(seconds=0.1),
+        description="Initial delay before first retry",
+    )
+    backoff_multiplier: float = Field(
+        default=2.0,
+        gt=1.0,
+        le=10.0,
+        description="Exponential backoff multiplier",
+    )
+    max_delay: Duration = Field(
+        default_factory=lambda: Duration(seconds=5.0),
+        description="Maximum delay between retries",
+    )
+    jitter_factor: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Random jitter factor (0.0 to 1.0)",
+    )
+    retryable_errors: list[str] = Field(
+        default_factory=lambda: ["NOT_ACTIVE"],
+        description="List of error strings that should trigger retry",
+    )
+
+    @field_validator("initial_delay")
+    @classmethod
+    def validate_initial_delay(cls, v: Duration) -> Duration:
+        """Ensure initial delay is reasonable."""
+        if v.seconds < 0.01:  # 10ms minimum
+            raise ValueError("Initial delay must be at least 10ms")
+        if v.seconds > 10:  # 10s maximum
+            raise ValueError("Initial delay must not exceed 10 seconds")
+        return v
+
+    @field_validator("max_delay")
+    @classmethod
+    def validate_max_delay(cls, v: Duration, info) -> Duration:
+        """Ensure max delay is greater than initial delay."""
+        if "initial_delay" in info.data:
+            initial_delay = info.data["initial_delay"]
+            if v.seconds <= initial_delay.seconds:
+                raise ValueError("Max delay must be greater than initial delay")
+        return v
+
+    def calculate_delay(self, attempt: int) -> Duration:
+        """Calculate delay for a given retry attempt with exponential backoff and jitter.
+
+        Args:
+            attempt: The retry attempt number (0-based)
+
+        Returns:
+            Duration to wait before the retry
+        """
+        if attempt < 0:
+            raise ValueError("Attempt number must be non-negative")
+
+        if attempt == 0:
+            return Duration(seconds=0)  # No delay for first attempt
+
+        # Calculate exponential backoff
+        base_delay = self.initial_delay.seconds * (self.backoff_multiplier ** (attempt - 1))
+
+        # Cap at max delay
+        base_delay = min(base_delay, self.max_delay.seconds)
+
+        # Add jitter to prevent thundering herd
+        import random
+
+        jitter_range = base_delay * self.jitter_factor
+        jitter = random.uniform(-jitter_range, jitter_range)
+        final_delay = max(0, base_delay + jitter)
+
+        return Duration(seconds=final_delay)
+
+    def should_retry(self, error: str | None) -> bool:
+        """Check if an error should trigger a retry.
+
+        Args:
+            error: The error string to check
+
+        Returns:
+            True if the error is retryable
+        """
+        if error is None:
+            return False
+        return any(retryable in error for retryable in self.retryable_errors)
+
+    def is_exhausted(self, attempt: int) -> bool:
+        """Check if retry attempts are exhausted.
+
+        Args:
+            attempt: The current attempt number (0-based)
+
+        Returns:
+            True if no more retries are allowed
+        """
+        return attempt >= self.max_retries
+
+
 class Timestamp(BaseModel):
     """Value object representing a point in time.
 

@@ -253,3 +253,105 @@ class LogContext(BaseModel):
                 "component": component or self.component,
             }
         )
+
+
+class StickyActiveConfig(BaseModel):
+    """Configuration for sticky active pattern client behavior.
+
+    Encapsulates retry policies and performance settings for handling
+    sticky active failovers gracefully.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    # Retry configuration
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum number of retry attempts for NOT_ACTIVE errors",
+    )
+    initial_retry_delay_ms: int = Field(
+        default=100,
+        ge=10,
+        le=10000,
+        description="Initial retry delay in milliseconds",
+    )
+    backoff_multiplier: float = Field(
+        default=2.0,
+        gt=1.0,
+        le=10.0,
+        description="Exponential backoff multiplier for retries",
+    )
+    max_retry_delay_ms: int = Field(
+        default=5000,
+        ge=100,
+        le=30000,
+        description="Maximum retry delay in milliseconds",
+    )
+    jitter_factor: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Random jitter factor (0.0 to 1.0) to prevent thundering herd",
+    )
+
+    # Performance settings
+    enable_metrics: bool = Field(
+        default=True,
+        description="Enable detailed metrics for sticky active calls",
+    )
+    enable_debug_logging: bool = Field(
+        default=False,
+        description="Enable debug logging for retry attempts",
+    )
+
+    # Failover detection
+    failover_timeout_ms: int = Field(
+        default=10000,
+        ge=1000,
+        le=60000,
+        description="Maximum time to wait for failover completion in milliseconds",
+    )
+
+    @field_validator("max_retry_delay_ms")
+    @classmethod
+    def validate_max_delay(cls, v: int, info) -> int:
+        """Ensure max delay is greater than initial delay."""
+        if "initial_retry_delay_ms" in info.data:
+            initial_delay = info.data["initial_retry_delay_ms"]
+            if v <= initial_delay:
+                raise ValueError("Max retry delay must be greater than initial retry delay")
+        return v
+
+    def to_retry_policy(self) -> Any:
+        """Convert configuration to RetryPolicy value object.
+
+        Returns:
+            RetryPolicy configured according to this configuration
+        """
+        # Import here to avoid circular imports
+        from ..domain.value_objects import Duration, RetryPolicy
+
+        return RetryPolicy(
+            max_retries=self.max_retries,
+            initial_delay=Duration.from_milliseconds(self.initial_retry_delay_ms),
+            backoff_multiplier=self.backoff_multiplier,
+            max_delay=Duration.from_milliseconds(self.max_retry_delay_ms),
+            jitter_factor=self.jitter_factor,
+            retryable_errors=["NOT_ACTIVE"],  # Specific to sticky active pattern
+        )
+
+    def should_log_debug(self) -> bool:
+        """Check if debug logging is enabled."""
+        return self.enable_debug_logging
+
+    def should_track_metrics(self) -> bool:
+        """Check if metrics tracking is enabled."""
+        return self.enable_metrics

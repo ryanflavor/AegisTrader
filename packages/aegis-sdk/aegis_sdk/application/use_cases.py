@@ -4,6 +4,7 @@ This module contains application services that orchestrate use cases
 by coordinating between domain services, aggregates, and infrastructure ports.
 """
 
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -227,7 +228,6 @@ class ServiceHeartbeatUseCase:
         aggregate.heartbeat()
 
         # Check health based on heartbeat time
-        import time
 
         current_time = time.time()
         last_heartbeat_timestamp = aggregate.last_heartbeat.timestamp()
@@ -289,13 +289,17 @@ class RPCCallRequest(BaseModel):
     method: str = Field(..., description="Method to call")
     params: dict[str, Any] = Field(default_factory=dict, description="Method parameters")
     timeout: float = Field(default=30.0, description="Timeout in seconds")
+    retry_policy: Any | None = Field(
+        default=None, description="Optional retry policy for sticky active calls"
+    )
 
 
 class RPCCallUseCase:
     """Use case for making RPC calls between services.
 
     This application service handles RPC routing, metrics tracking,
-    and error handling for inter-service communication.
+    and error handling for inter-service communication. Supports retry
+    logic for sticky active pattern with NOT_ACTIVE errors.
     """
 
     def __init__(
@@ -304,15 +308,26 @@ class RPCCallUseCase:
         metrics: MetricsPort,
         routing_service: MessageRoutingService,
         naming_service: MetricsNamingService,
+        logger: Any | None = None,
     ):
         """Initialize the use case with required dependencies."""
         self._message_bus = message_bus
         self._metrics = metrics
         self._routing_service = routing_service
         self._naming_service = naming_service
+        self._logger = logger
 
     async def execute(self, request: RPCCallRequest) -> Any:
-        """Execute an RPC call."""
+        """Execute an RPC call with optional retry logic for sticky active pattern.
+
+        Implements smart retry logic for NOT_ACTIVE errors with exponential backoff
+        and jitter to handle failovers gracefully.
+        """
+        # Import at the top of method to avoid circular imports
+        import asyncio
+
+        from ..domain.value_objects import MethodName, RetryPolicy
+
         # Create RPC request
         rpc_request = RPCRequest(
             method=request.method,
@@ -322,31 +337,123 @@ class RPCCallUseCase:
             timeout=request.timeout,
         )
 
-        # Track metrics
-        # Import at the top of method to avoid circular imports
-        from ..domain.value_objects import MethodName
+        # Get retry policy - use default if not provided
+        retry_policy = request.retry_policy
+        if retry_policy is None:
+            # Default retry policy for sticky active calls
+            retry_policy = RetryPolicy()
+        elif not isinstance(retry_policy, RetryPolicy):
+            # Convert dict to RetryPolicy if needed
+            retry_policy = (
+                RetryPolicy(**retry_policy) if isinstance(retry_policy, dict) else RetryPolicy()
+            )
 
+        # Track metrics
         service_name = ServiceName(value=request.target_service)
         method_name = MethodName(value=request.method)
         metric_prefix = self._naming_service.rpc_client_metric_name(
             service_name, method_name, ""
         ).rstrip(".")
 
-        with self._metrics.timer(metric_prefix):
+        # Track overall call time including retries
+        start_time = time.time()
+        attempt = 0
+        last_error = None
+
+        while not retry_policy.is_exhausted(attempt):
             try:
-                # Make the call
-                response = await self._message_bus.call_rpc(rpc_request)
+                # Calculate delay for this attempt
+                delay = retry_policy.calculate_delay(attempt)
+                if delay.seconds > 0:
+                    if self._logger:
+                        self._logger.debug(
+                            f"Retrying RPC call after {delay.seconds:.2f}s delay",
+                            extra={
+                                "service": request.target_service,
+                                "method": request.method,
+                                "attempt": attempt,
+                                "delay_seconds": delay.seconds,
+                            },
+                        )
+                    await asyncio.sleep(delay.seconds)
+
+                # Track individual attempt
+                with self._metrics.timer(f"{metric_prefix}.attempt"):
+                    response = await self._message_bus.call_rpc(rpc_request)
 
                 if response.success:
+                    # Success - track metrics
+                    elapsed = time.time() - start_time
                     self._metrics.increment(f"{metric_prefix}.success")
+                    if attempt > 0:
+                        # This was a retry that succeeded
+                        self._metrics.increment(f"{metric_prefix}.retry.success")
+                        self._metrics.gauge(f"{metric_prefix}.retry.attempts", attempt)
+                        self._metrics.gauge(f"{metric_prefix}.failover.latency", elapsed)
+                        if self._logger:
+                            self._logger.info(
+                                f"RPC call succeeded after {attempt} retries",
+                                extra={
+                                    "service": request.target_service,
+                                    "method": request.method,
+                                    "attempts": attempt,
+                                    "total_time": elapsed,
+                                },
+                            )
                     return response.result
+
+                # Check if error is retryable
+                if retry_policy.should_retry(response.error):
+                    last_error = response.error
+                    attempt += 1
+                    self._metrics.increment(f"{metric_prefix}.retry.not_active")
+                    if self._logger:
+                        self._logger.debug(
+                            f"Received NOT_ACTIVE error, will retry (attempt {attempt}/{retry_policy.max_retries})",
+                            extra={
+                                "service": request.target_service,
+                                "method": request.method,
+                                "attempt": attempt,
+                                "error": response.error,
+                            },
+                        )
+                    continue
                 else:
+                    # Non-retryable error
                     self._metrics.increment(f"{metric_prefix}.error")
                     raise Exception(f"RPC call failed: {response.error}")
 
             except TimeoutError:
                 self._metrics.increment(f"{metric_prefix}.timeout")
+                # Timeout errors are not retryable
                 raise
+            except Exception as e:
+                # Other exceptions might be retryable depending on policy
+                if attempt < retry_policy.max_retries:
+                    last_error = str(e)
+                    attempt += 1
+                    self._metrics.increment(f"{metric_prefix}.retry.error")
+                    continue
+                else:
+                    self._metrics.increment(f"{metric_prefix}.error")
+                    raise
+
+        # Exhausted retries
+        elapsed = time.time() - start_time
+        self._metrics.increment(f"{metric_prefix}.retry.exhausted")
+        self._metrics.gauge(f"{metric_prefix}.retry.attempts", attempt)
+        if self._logger:
+            self._logger.error(
+                f"RPC call failed after {attempt} retries",
+                extra={
+                    "service": request.target_service,
+                    "method": request.method,
+                    "attempts": attempt,
+                    "total_time": elapsed,
+                    "last_error": last_error,
+                },
+            )
+        raise Exception(f"RPC call failed after {attempt} retries: {last_error}")
 
 
 class CommandProcessingRequest(BaseModel):

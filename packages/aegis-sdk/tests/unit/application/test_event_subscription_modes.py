@@ -18,9 +18,9 @@ class TestEventSubscriptionModes:
         async def handle_order_created(event):
             pass
 
-        assert "order.created" in service._event_handlers
+        assert "order.created" in service._handler_registry._event_handlers
         # Check handler is stored as tuple with mode
-        handlers = service._event_handlers["order.created"]
+        handlers = service._handler_registry._event_handlers["order.created"]
         assert len(handlers) == 1
         assert handlers[0][0] == handle_order_created
         assert handlers[0][1] == "compete"  # Default mode
@@ -33,8 +33,8 @@ class TestEventSubscriptionModes:
         async def handle_order_created(event):
             pass
 
-        assert "order.created" in service._event_handlers
-        handlers = service._event_handlers["order.created"]
+        assert "order.created" in service._handler_registry._event_handlers
+        handlers = service._handler_registry._event_handlers["order.created"]
         assert len(handlers) == 1
         assert handlers[0][0] == handle_order_created
         assert handlers[0][1] == "compete"
@@ -47,8 +47,8 @@ class TestEventSubscriptionModes:
         async def handle_user_updated(event):
             pass
 
-        assert "user.updated" in service._event_handlers
-        handlers = service._event_handlers["user.updated"]
+        assert "user.updated" in service._handler_registry._event_handlers
+        handlers = service._handler_registry._event_handlers["user.updated"]
         assert len(handlers) == 1
         assert handlers[0][0] == handle_user_updated
         assert handlers[0][1] == "broadcast"
@@ -63,7 +63,7 @@ class TestEventSubscriptionModes:
             async def handle_order_created(event):
                 pass
 
-        assert "Invalid mode" in str(exc_info.value)
+        assert "not a valid SubscriptionMode" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_compete_mode_subscription(self, mock_message_bus):
@@ -178,8 +178,8 @@ class TestEventSubscriptionModes:
         asyncio.run(service.subscribe_event("order", "created", handler, mode="broadcast"))
 
         expected_pattern = "events.order.created"
-        assert expected_pattern in service._event_handlers
-        handlers = service._event_handlers[expected_pattern]
+        assert expected_pattern in service._handler_registry._event_handlers
+        handlers = service._handler_registry._event_handlers[expected_pattern]
         assert len(handlers) == 1
         assert handlers[0][0] == handler
         assert handlers[0][1] == "broadcast"

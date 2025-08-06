@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from aegis_sdk.application.metrics import Metrics
 from aegis_sdk.application.single_active_dtos import (
     SingleActiveConfig,
     SingleActiveStatus,
@@ -54,6 +55,9 @@ class TestSingleActiveService:
         # Mock election repository
         mock_election_repo = Mock()
 
+        # Mock metrics
+        mock_metrics = Mock(spec=Metrics)
+
         config = SingleActiveConfig(
             service_name="test-service",
             enable_registration=False,  # Disable to simplify test
@@ -64,6 +68,7 @@ class TestSingleActiveService:
             message_bus=mock_bus,
             election_repository=mock_election_repo,
             use_case_factory=mock_factory,
+            metrics=mock_metrics,  # Provide metrics to avoid DependencyProvider
         )
 
         await service.start()
@@ -303,12 +308,16 @@ class TestSingleActiveService:
         # Mock election repository to avoid NATS connection
         mock_election_repo = Mock()
 
+        # Mock metrics to avoid DependencyProvider
+        mock_metrics = Mock(spec=Metrics)
+
         service = SingleActiveService(
             config=config,
             message_bus=mock_bus,
             service_registry=mock_registry,
             election_repository=mock_election_repo,
             use_case_factory=mock_factory,
+            metrics=mock_metrics,
         )
 
         # Mock service instance
@@ -413,7 +422,7 @@ class TestSingleActiveService:
             )
 
         # Invalid version
-        with pytest.raises(ValueError, match="semantic versioning"):
+        with pytest.raises(ValueError, match="String should match pattern"):
             SingleActiveConfig(
                 service_name="test",
                 version="invalid",

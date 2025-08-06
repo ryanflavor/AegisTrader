@@ -400,8 +400,8 @@ class TestRPCCallUseCase:
         assert rpc_request.method == "get_user"
         assert rpc_request.params == {"user_id": 42}
 
-        # Verify metrics
-        mock_metrics.timer.assert_called_with("rpc.client.user-service.get_user")
+        # Verify metrics - the metric names now include .attempt suffix
+        mock_metrics.timer.assert_called_with("rpc.client.user-service.get_user.attempt")
         mock_metrics.increment.assert_called_with("rpc.client.user-service.get_user.success")
 
     @pytest.mark.asyncio
@@ -438,7 +438,9 @@ class TestRPCCallUseCase:
             await use_case.execute(request)
 
         # Verify metrics
-        mock_metrics.increment.assert_called_with("rpc.client.user-service.get_user.error")
+        mock_metrics.increment.assert_called_with(
+            "rpc.client.user-service.get_user.retry.exhausted"
+        )
 
     @pytest.mark.asyncio
     async def test_rpc_call_timeout(
