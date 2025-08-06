@@ -1,5 +1,6 @@
 """Ports layer - Interfaces for external communication."""
 
+from .factory_ports import ElectionRepositoryFactory, KVStoreFactory, UseCaseFactory
 from .kv_store import KVStorePort
 from .logger import LoggerPort
 from .message_bus import MessageBusPort
@@ -8,7 +9,9 @@ from .service_discovery import InstanceSelector, SelectionStrategy, ServiceDisco
 from .service_registry import ServiceRegistryPort
 
 __all__ = [
+    "ElectionRepositoryFactory",
     "InstanceSelector",
+    "KVStoreFactory",
     "KVStorePort",
     "LoggerPort",
     "MessageBusPort",
@@ -16,4 +19,5 @@ __all__ = [
     "SelectionStrategy",
     "ServiceDiscoveryPort",
     "ServiceRegistryPort",
+    "UseCaseFactory",
 ]

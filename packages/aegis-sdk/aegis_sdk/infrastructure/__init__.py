@@ -1,5 +1,11 @@
 """Infrastructure layer - Concrete implementations of ports."""
 
+from .application_factories import (
+    DefaultElectionRepositoryFactory,
+    DefaultKVStoreFactory,
+    DefaultUseCaseFactory,
+    RedisElectionRepositoryFactory,
+)
 from .basic_service_discovery import BasicServiceDiscovery
 from .cached_service_discovery import CacheConfig, CachedServiceDiscovery
 from .config import KVStoreConfig, LogContext, NATSConnectionConfig
@@ -22,6 +28,9 @@ __all__ = [
     "BasicServiceDiscovery",
     "CacheConfig",
     "CachedServiceDiscovery",
+    "DefaultElectionRepositoryFactory",
+    "DefaultKVStoreFactory",
+    "DefaultUseCaseFactory",
     "DiscoveryRequestFactory",
     "InMemoryMetrics",
     "KVOptionsFactory",
@@ -31,6 +40,7 @@ __all__ = [
     "NATSAdapter",
     "NATSConnectionConfig",
     "NATSKVStore",
+    "RedisElectionRepositoryFactory",
     "SerializationFactory",
     "WatchConfig",
     "WatchableCacheConfig",

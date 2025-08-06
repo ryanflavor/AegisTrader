@@ -15,12 +15,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ..domain.value_objects import ServiceName
 from ..ports.election_repository import ElectionRepository
+from ..ports.factory_ports import ElectionRepositoryFactory, UseCaseFactory
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
 from ..ports.service_discovery import ServiceDiscoveryPort
 from ..ports.service_registry import ServiceRegistryPort
-from .factories import ElectionRepositoryFactory, UseCaseFactory
 from .service import Service
 from .single_active_dtos import ExclusiveRPCResponse, SingleActiveConfig, SingleActiveStatus
 from .sticky_active_use_cases import (
@@ -122,7 +122,8 @@ class SingleActiveService(Service):
         if self._election_repository is None:
             if self._election_repository_factory is None:
                 # Use default factory if none provided
-                from .factories import DefaultElectionRepositoryFactory
+                # Import from infrastructure layer where concrete implementations belong
+                from ..infrastructure.application_factories import DefaultElectionRepositoryFactory
 
                 self._election_repository_factory = DefaultElectionRepositoryFactory()
 
@@ -144,7 +145,8 @@ class SingleActiveService(Service):
 
         # Initialize use case factory if not provided
         if self._use_case_factory is None:
-            from .factories import DefaultUseCaseFactory
+            # Import from infrastructure layer where concrete implementations belong
+            from ..infrastructure.application_factories import DefaultUseCaseFactory
 
             self._use_case_factory = DefaultUseCaseFactory()
 
