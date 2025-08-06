@@ -1,23 +1,28 @@
 """Single active service implementation for exclusive RPC execution.
 
-This service uses the sticky active pattern with KV Store-based leader election
+This service uses the sticky active pattern with leader election
 to ensure only one instance processes exclusive RPC methods at a time.
+Follows hexagonal architecture with dependency injection.
 """
 
+from __future__ import annotations
+
 import asyncio
+import uuid
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from ..infrastructure.nats_kv_election_repository import NatsKvElectionRepository
-from ..infrastructure.nats_kv_store import NATSKVStore
+from ..domain.value_objects import ServiceName
 from ..ports.election_repository import ElectionRepository
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
 from ..ports.service_discovery import ServiceDiscoveryPort
 from ..ports.service_registry import ServiceRegistryPort
+from .factories import ElectionRepositoryFactory, UseCaseFactory
 from .service import Service
+from .single_active_dtos import ExclusiveRPCResponse, SingleActiveConfig, SingleActiveStatus
 from .sticky_active_use_cases import (
     StickyActiveHeartbeatRequest,
     StickyActiveHeartbeatUseCase,
@@ -26,78 +31,82 @@ from .sticky_active_use_cases import (
     StickyActiveRegistrationUseCase,
 )
 
+if TYPE_CHECKING:
+    pass
+
 
 class SingleActiveService(Service):
     """Service with single active instance support using sticky active pattern.
 
     Only one instance can execute exclusive RPC methods at a time.
-    Uses KV Store-based leader election for robust failover and consistency.
+    Uses leader election for robust failover and consistency.
+    Follows hexagonal architecture with proper dependency injection.
     """
 
     def __init__(
         self,
-        service_name: str,
+        config: SingleActiveConfig,
         message_bus: MessageBusPort,
-        instance_id: str | None = None,
-        version: str = "1.0.0",
         service_registry: ServiceRegistryPort | None = None,
         service_discovery: ServiceDiscoveryPort | None = None,
         logger: LoggerPort | None = None,
         metrics: MetricsPort | None = None,
-        registry_ttl: int = 30,
-        heartbeat_interval: int = 10,
-        enable_registration: bool = True,
-        group_id: str = "default",
-        leader_ttl_seconds: int = 5,
         election_repository: ElectionRepository | None = None,
+        election_repository_factory: ElectionRepositoryFactory | None = None,
+        use_case_factory: UseCaseFactory | None = None,
     ):
-        """Initialize single active service.
+        """Initialize single active service with dependency injection.
 
         Args:
-            service_name: Name of the service
+            config: Configuration for the single active service
             message_bus: Message bus implementation
-            instance_id: Optional instance ID (auto-generated if not provided)
-            version: Service version
             service_registry: Optional service registry implementation
             service_discovery: Optional service discovery implementation
             logger: Optional logger implementation
             metrics: Optional metrics implementation
-            registry_ttl: TTL for registry entries in seconds (default: 30)
-            heartbeat_interval: Heartbeat interval in seconds (default: 10)
-            enable_registration: Whether to enable service registration (default: True)
-            group_id: Sticky active group identifier (default: "default")
-            leader_ttl_seconds: TTL for leader key in seconds (default: 5)
-            election_repository: Optional election repository (creates default if not provided)
+            election_repository: Optional election repository (uses factory if not provided)
+            election_repository_factory: Factory for creating election repository
+            use_case_factory: Factory for creating use cases
         """
+        # Generate instance ID if not provided
+        instance_id = config.instance_id or f"{config.service_name}-{uuid.uuid4().hex[:8]}"
+
+        # Initialize parent service
         super().__init__(
-            service_name=service_name,
+            service_name=config.service_name,
             message_bus=message_bus,
             instance_id=instance_id,
-            version=version,
+            version=config.version,
             service_registry=service_registry,
             service_discovery=service_discovery,
             logger=logger,
-            registry_ttl=registry_ttl,
-            heartbeat_interval=heartbeat_interval,
-            enable_registration=enable_registration,
+            registry_ttl=config.registry_ttl,
+            heartbeat_interval=config.heartbeat_interval,
+            enable_registration=config.enable_registration,
         )
 
-        # Sticky active configuration
-        self.group_id = group_id
-        self.leader_ttl_seconds = leader_ttl_seconds
+        # Store configuration
+        self._config = config
+        self.group_id = config.group_id
+        self.leader_ttl_seconds = config.leader_ttl_seconds
         self.is_active = False
 
-        # Dependencies
+        # Dependencies and factories
         self._metrics = metrics
         self._election_repository = election_repository
+        self._election_repository_factory = election_repository_factory
+        self._use_case_factory = use_case_factory
 
-        # Use cases
+        # Use cases (initialized in start())
         self._registration_use_case: StickyActiveRegistrationUseCase | None = None
         self._heartbeat_use_case: StickyActiveHeartbeatUseCase | None = None
         self._monitoring_use_case: StickyActiveMonitoringUseCase | None = None
 
         # Election state
         self._monitoring_task: asyncio.Task | None = None
+
+        # RPC handlers registry (for exclusive RPC)
+        self._rpc_handlers: dict[str, Callable] = {}
 
     def _update_active_status(self, is_active: bool) -> None:
         """Callback for status updates from monitoring use case.
@@ -111,21 +120,36 @@ class SingleActiveService(Service):
         """Start service and sticky active election process."""
         # Initialize election repository if not provided
         if self._election_repository is None:
-            kv_store = NATSKVStore(nats_adapter=self._bus)
-            # Connect to KV store with a unique bucket name for elections
-            await kv_store.connect(f"election_{self.service_name}", enable_ttl=True)
-            self._election_repository = NatsKvElectionRepository(
-                kv_store=kv_store,
-                logger=self._logger,
+            if self._election_repository_factory is None:
+                # Use default factory if none provided
+                from .factories import DefaultElectionRepositoryFactory
+
+                self._election_repository_factory = DefaultElectionRepositoryFactory()
+
+            self._election_repository = (
+                await self._election_repository_factory.create_election_repository(
+                    service_name=self.service_name.replace(
+                        "-", "_"
+                    ),  # Replace hyphens for KV bucket name
+                    message_bus=self._bus,
+                    logger=self._logger,
+                )
             )
 
-        # Initialize use cases with default implementations if not already set
+        # Initialize metrics if not provided
         if self._metrics is None:
             from ..infrastructure.in_memory_metrics import InMemoryMetrics
 
             self._metrics = InMemoryMetrics()
 
-        self._registration_use_case = StickyActiveRegistrationUseCase(
+        # Initialize use case factory if not provided
+        if self._use_case_factory is None:
+            from .factories import DefaultUseCaseFactory
+
+            self._use_case_factory = DefaultUseCaseFactory()
+
+        # Create use cases using factory
+        self._registration_use_case = self._use_case_factory.create_registration_use_case(
             election_repository=self._election_repository,
             service_registry=self._registry,
             message_bus=self._bus,
@@ -133,14 +157,14 @@ class SingleActiveService(Service):
             logger=self._logger,
         )
 
-        self._heartbeat_use_case = StickyActiveHeartbeatUseCase(
+        self._heartbeat_use_case = self._use_case_factory.create_heartbeat_use_case(
             election_repository=self._election_repository,
             service_registry=self._registry,
             metrics=self._metrics,
             logger=self._logger,
         )
 
-        self._monitoring_use_case = StickyActiveMonitoringUseCase(
+        self._monitoring_use_case = self._use_case_factory.create_monitoring_use_case(
             election_repository=self._election_repository,
             service_registry=self._registry,
             message_bus=self._bus,
@@ -153,14 +177,14 @@ class SingleActiveService(Service):
         await super().start()
 
         # Perform sticky active registration
-        if self._enable_registration and self._registry:
+        if self._config.enable_registration and self._registry:
             request = StickyActiveRegistrationRequest(
                 service_name=self.service_name,
                 instance_id=self.instance_id,
-                version=self.version,
-                group_id=self.group_id,
-                ttl_seconds=self._registry_ttl,
-                leader_ttl_seconds=self.leader_ttl_seconds,
+                version=self._config.version,
+                group_id=self._config.group_id,
+                ttl_seconds=self._config.registry_ttl,
+                leader_ttl_seconds=self._config.leader_ttl_seconds,
                 metadata=self._service_instance.metadata if self._service_instance else {},
             )
 
@@ -174,7 +198,7 @@ class SingleActiveService(Service):
                         service=self.service_name,
                         instance=self.instance_id,
                         is_leader=response.is_leader,
-                        group_id=self.group_id,
+                        group_id=self._config.group_id,
                     )
                 else:
                     print(
@@ -186,7 +210,7 @@ class SingleActiveService(Service):
                 await self._monitoring_use_case.start_monitoring(
                     self.service_name,
                     self.instance_id,
-                    self.group_id,
+                    self._config.group_id,
                 )
             except Exception as e:
                 if self._logger:
@@ -200,7 +224,7 @@ class SingleActiveService(Service):
             await self._monitoring_use_case.stop_monitoring(
                 self.service_name,
                 self.instance_id,
-                self.group_id,
+                self._config.group_id,
             )
 
         # Release leadership if we are the leader
@@ -211,7 +235,7 @@ class SingleActiveService(Service):
                 released = await self._election_repository.release_leadership(
                     ServiceName(value=self.service_name),
                     InstanceId(value=self.instance_id),
-                    self.group_id,
+                    self._config.group_id,
                 )
 
                 if released and self._logger:
@@ -219,7 +243,7 @@ class SingleActiveService(Service):
                         "Released leadership",
                         service=self.service_name,
                         instance=self.instance_id,
-                        group_id=self.group_id,
+                        group_id=self._config.group_id,
                     )
             except Exception as e:
                 if self._logger:
@@ -233,16 +257,17 @@ class SingleActiveService(Service):
     async def _update_registry_heartbeat(self) -> None:
         """Override parent heartbeat to include sticky active heartbeat."""
         # First update the regular service heartbeat
-        await super()._update_registry_heartbeat()
+        if hasattr(super(), "_update_registry_heartbeat"):
+            await super()._update_registry_heartbeat()
 
         # Then update sticky active heartbeat if we have the use case
-        if self._heartbeat_use_case and self._enable_registration:
+        if self._heartbeat_use_case and self._config.enable_registration:
             request = StickyActiveHeartbeatRequest(
                 service_name=self.service_name,
                 instance_id=self.instance_id,
-                group_id=self.group_id,
-                ttl_seconds=self._registry_ttl,
-                leader_ttl_seconds=self.leader_ttl_seconds,
+                group_id=self._config.group_id,
+                ttl_seconds=self._config.registry_ttl,
+                leader_ttl_seconds=self._config.leader_ttl_seconds,
             )
 
             success = await self._heartbeat_use_case.execute(request)
@@ -255,42 +280,91 @@ class SingleActiveService(Service):
                         "Lost leadership during heartbeat",
                         service=self.service_name,
                         instance=self.instance_id,
-                        group_id=self.group_id,
+                        group_id=self._config.group_id,
                     )
 
-    def exclusive_rpc(self, method: str):
+    def exclusive_rpc(self, method: str) -> Callable:
         """Instance method decorator for exclusive RPC handlers.
 
         This ensures only the active leader instance processes the RPC call.
+        Returns standardized ExclusiveRPCResponse.
         """
 
-        def decorator(handler: Callable):
+        def decorator(handler: Callable) -> Callable:
             @wraps(handler)
             async def wrapper(params: dict) -> dict:
                 if not self.is_active:
                     if self._metrics:
                         self._metrics.increment("sticky_active.rpc.not_active")
 
-                    return {
-                        "success": False,
-                        "error": "NOT_ACTIVE",
-                        "message": (
+                    response = ExclusiveRPCResponse(
+                        success=False,
+                        error="NOT_ACTIVE",
+                        message=(
                             f"This instance is not active. Instance {self.instance_id} "
-                            f"is in STANDBY mode for group {self.group_id}."
+                            f"is in STANDBY mode for group {self._config.group_id}."
                         ),
-                    }
+                    )
+                    return response.model_dump()
 
                 if self._metrics:
                     self._metrics.increment("sticky_active.rpc.processed")
 
-                result = await handler(params)
-                return cast(dict[Any, Any], result)
+                try:
+                    result = await handler(params)
+                    response = ExclusiveRPCResponse(
+                        success=True,
+                        result=result if isinstance(result, dict) else {"data": result},
+                    )
+                    return response.model_dump()
+                except Exception as e:
+                    if self._logger:
+                        self._logger.exception(f"Error in exclusive RPC {method}: {e}")
+                    response = ExclusiveRPCResponse(
+                        success=False,
+                        error="EXECUTION_ERROR",
+                        message=str(e),
+                    )
+                    return response.model_dump()
 
             # Register with parent class
             self._rpc_handlers[method] = wrapper
             return wrapper
 
         return decorator
+
+    async def get_status(self) -> SingleActiveStatus:
+        """Get the current status of the single active service.
+
+        Returns:
+            SingleActiveStatus with current service state
+        """
+        leader_id = None
+        if self._election_repository:
+            try:
+                leader_instance, _ = await self._election_repository.get_current_leader(
+                    ServiceName(value=self.service_name),
+                    self._config.group_id,
+                )
+                leader_id = str(leader_instance) if leader_instance else None
+            except Exception as e:
+                if self._logger:
+                    self._logger.warning(f"Failed to get leader info: {e}")
+
+        return SingleActiveStatus(
+            service_name=self.service_name,
+            instance_id=self.instance_id,
+            group_id=self._config.group_id,
+            is_active=self.is_active,
+            is_leader=self.is_active,
+            leader_instance_id=leader_id,
+            last_heartbeat=None,  # Could track this if needed
+            metadata={
+                "version": self._config.version,
+                "leader_ttl": self._config.leader_ttl_seconds,
+                "heartbeat_interval": self._config.heartbeat_interval,
+            },
+        )
 
 
 def exclusive_rpc(method: str | Callable[..., Any] | None = None) -> Callable[..., Any]:
@@ -314,17 +388,35 @@ def exclusive_rpc(method: str | Callable[..., Any] | None = None) -> Callable[..
                 if hasattr(self, "_metrics") and self._metrics:
                     self._metrics.increment("sticky_active.rpc.not_active")
 
-                return {
-                    "success": False,
-                    "error": "NOT_ACTIVE",
-                    "message": (
+                response = ExclusiveRPCResponse(
+                    success=False,
+                    error="NOT_ACTIVE",
+                    message=(
                         f"This instance is not active. "
                         f"Instance {self.instance_id} is in STANDBY mode."
                     ),
-                }
+                )
+                return response.model_dump()
 
-            result = await func(self, params)
-            return cast(dict[Any, Any], result)
+            try:
+                result = await func(self, params)
+                if not isinstance(result, dict) or "success" not in result:
+                    # Wrap non-standard responses
+                    response = ExclusiveRPCResponse(
+                        success=True,
+                        result=result if isinstance(result, dict) else {"data": result},
+                    )
+                    return response.model_dump()
+                return result
+            except Exception as e:
+                if hasattr(self, "_logger") and self._logger:
+                    self._logger.exception(f"Error in exclusive RPC: {e}")
+                response = ExclusiveRPCResponse(
+                    success=False,
+                    error="EXECUTION_ERROR",
+                    message=str(e),
+                )
+                return response.model_dump()
 
         # Mark as exclusive for registration
         wrapper_with_attr = cast(Any, wrapper)

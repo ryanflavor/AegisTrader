@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..domain.aggregates import StickyActiveElection
 from ..domain.events import (
@@ -28,25 +28,78 @@ from ..ports.service_registry import ServiceRegistryPort
 
 
 class StickyActiveRegistrationRequest(BaseModel):
-    """Request model for sticky active service registration."""
+    """Request model for sticky active service registration with strict validation."""
 
-    service_name: str = Field(..., description="Name of the service")
-    instance_id: str = Field(..., description="Instance identifier")
-    version: str = Field(..., description="Service version")
-    group_id: str = Field(default="default", description="Sticky active group")
-    ttl_seconds: int = Field(default=30, description="Registration TTL")
-    leader_ttl_seconds: int = Field(default=5, description="Leader key TTL")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Service metadata")
+    model_config = ConfigDict(strict=True, validate_assignment=True)
+
+    service_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Name of the service",
+    )
+    instance_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Instance identifier",
+    )
+    version: str = Field(
+        ...,
+        pattern=r"^\d+\.\d+\.\d+$",
+        description="Service version in semantic versioning format",
+    )
+    group_id: str = Field(
+        default="default",
+        min_length=1,
+        max_length=128,
+        description="Sticky active group",
+    )
+    ttl_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        description="Registration TTL in seconds",
+    )
+    leader_ttl_seconds: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="Leader key TTL in seconds",
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Service metadata",
+    )
+
+    @field_validator("service_name", "group_id")
+    @classmethod
+    def validate_name_format(cls, v: str) -> str:
+        """Validate name format."""
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9-_.]*$", v):
+            raise ValueError(
+                f"Invalid format: {v}. Must start with alphanumeric and contain only "
+                "letters, numbers, hyphens, underscores, and dots."
+            )
+        return v
 
 
 class StickyActiveRegistrationResponse(BaseModel):
-    """Response model for sticky active service registration."""
+    """Response model for sticky active service registration with strict validation."""
 
-    service_name: str
-    instance_id: str
-    is_leader: bool
-    sticky_active_status: str
-    group_id: str
+    model_config = ConfigDict(strict=True)
+
+    service_name: str = Field(..., description="Name of the service")
+    instance_id: str = Field(..., description="Instance identifier")
+    is_leader: bool = Field(..., description="Whether this instance is the leader")
+    sticky_active_status: str = Field(
+        ...,
+        pattern="^(ACTIVE|STANDBY)$",
+        description="Current sticky active status",
+    )
+    group_id: str = Field(..., description="Sticky active group")
 
 
 class StickyActiveRegistrationUseCase:
@@ -74,10 +127,25 @@ class StickyActiveRegistrationUseCase:
     async def execute(
         self, request: StickyActiveRegistrationRequest
     ) -> StickyActiveRegistrationResponse:
-        """Register service and participate in sticky active election."""
-        # Create value objects
-        service_name = ServiceName(value=request.service_name)
-        instance_id = InstanceId(value=request.instance_id)
+        """Register service and participate in sticky active election.
+
+        Args:
+            request: Registration request with validated parameters
+
+        Returns:
+            Registration response with election results
+
+        Raises:
+            ValueError: If request validation fails
+            RuntimeError: If election or registration fails
+        """
+        try:
+            # Create value objects
+            service_name = ServiceName(value=request.service_name)
+            instance_id = InstanceId(value=request.instance_id)
+        except ValueError as e:
+            self._logger.error(f"Invalid request parameters: {e}")
+            raise ValueError(f"Invalid registration request: {e}") from e
 
         # Create or restore election aggregate
         election = await self._election_repo.get_election_state(
@@ -134,7 +202,11 @@ class StickyActiveRegistrationUseCase:
                 )
 
         # Save election state
-        await self._election_repo.save_election_state(election)
+        try:
+            await self._election_repo.save_election_state(election)
+        except Exception as e:
+            self._logger.exception(f"Failed to save election state: {e}")
+            # Non-critical, continue execution
 
         # Create service instance with sticky active status
         sticky_status = "ACTIVE" if election.is_leader else "STANDBY"
@@ -149,7 +221,12 @@ class StickyActiveRegistrationUseCase:
         )
 
         # Register in service registry
-        await self._service_registry.register(service_instance, request.ttl_seconds)
+        try:
+            await self._service_registry.register(service_instance, request.ttl_seconds)
+        except Exception as e:
+            self._logger.exception(f"Failed to register service instance: {e}")
+            self._metrics.increment("sticky_active.registration.error")
+            raise RuntimeError(f"Service registration failed: {e}") from e
 
         # Publish domain events
         for event in election.get_uncommitted_events():
@@ -201,13 +278,40 @@ class StickyActiveRegistrationUseCase:
 
 
 class StickyActiveHeartbeatRequest(BaseModel):
-    """Request model for sticky active heartbeat."""
+    """Request model for sticky active heartbeat with strict validation."""
 
-    service_name: str = Field(..., description="Name of the service")
-    instance_id: str = Field(..., description="Instance identifier")
-    group_id: str = Field(default="default", description="Sticky active group")
-    ttl_seconds: int = Field(default=30, description="Registration TTL")
-    leader_ttl_seconds: int = Field(default=5, description="Leader key TTL")
+    model_config = ConfigDict(strict=True, validate_assignment=True)
+
+    service_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Name of the service",
+    )
+    instance_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=256,
+        description="Instance identifier",
+    )
+    group_id: str = Field(
+        default="default",
+        min_length=1,
+        max_length=128,
+        description="Sticky active group",
+    )
+    ttl_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        description="Registration TTL in seconds",
+    )
+    leader_ttl_seconds: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+        description="Leader key TTL in seconds",
+    )
 
 
 class StickyActiveHeartbeatUseCase:
@@ -231,10 +335,25 @@ class StickyActiveHeartbeatUseCase:
         self._logger = logger
 
     async def execute(self, request: StickyActiveHeartbeatRequest) -> bool:
-        """Update heartbeat for both service instance and leader key."""
-        # Create value objects
-        service_name = ServiceName(value=request.service_name)
-        instance_id = InstanceId(value=request.instance_id)
+        """Update heartbeat for both service instance and leader key.
+
+        Args:
+            request: Heartbeat request with validated parameters
+
+        Returns:
+            True if heartbeat was successful, False otherwise
+
+        Raises:
+            ValueError: If request validation fails
+        """
+        try:
+            # Create value objects
+            service_name = ServiceName(value=request.service_name)
+            instance_id = InstanceId(value=request.instance_id)
+        except ValueError as e:
+            self._logger.error(f"Invalid heartbeat request: {e}")
+            self._metrics.increment("sticky_active.heartbeat.validation_error")
+            return False
 
         # Load election state
         election = await self._election_repo.get_election_state(
@@ -272,7 +391,7 @@ class StickyActiveHeartbeatUseCase:
 
         # Update service instance
         try:
-            # Get current instance from registry
+            # Get current instance from registry with proper error handling
             current_instance = await self._service_registry.get_instance(
                 request.service_name, request.instance_id
             )
@@ -302,8 +421,13 @@ class StickyActiveHeartbeatUseCase:
             self._metrics.increment("sticky_active.heartbeat.error")
             return False
         finally:
-            # Save election state
-            await self._election_repo.save_election_state(election)
+            # Always save election state, even on error
+            try:
+                await self._election_repo.save_election_state(election)
+            except Exception as save_error:
+                if self._logger:
+                    self._logger.error(f"Failed to save election state: {save_error}")
+                # Don't fail the heartbeat if save fails
 
 
 class StickyActiveMonitoringUseCase:
@@ -381,7 +505,16 @@ class StickyActiveMonitoringUseCase:
         instance_id: InstanceId,
         group_id: str,
     ) -> None:
-        """Monitor leadership changes and handle failover."""
+        """Monitor leadership changes and handle failover.
+
+        Args:
+            service_name: Service name value object
+            instance_id: Instance ID value object
+            group_id: Sticky active group identifier
+        """
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+
         try:
             async for event in self._election_repo.watch_leadership(service_name, group_id):
                 if self._logger:
@@ -397,10 +530,11 @@ class StickyActiveMonitoringUseCase:
                 if not election:
                     continue
 
-                if event["type"] == "expired" and not election.is_leader:
+                if event.get("type") == "expired" and not election.is_leader:
                     await self._handle_leader_expired(service_name, instance_id, group_id, election)
+                    consecutive_errors = 0  # Reset error counter on successful handling
 
-                elif event["type"] == "elected" and event["leader_id"] != str(instance_id):
+                elif event.get("type") == "elected" and event.get("leader_id") != str(instance_id):
                     # Another instance became leader
                     if election.is_leader:
                         election.step_down("Another instance elected")
@@ -444,9 +578,26 @@ class StickyActiveMonitoringUseCase:
                 self._logger.info(f"Monitoring cancelled for {service_name}/{instance_id}")
             raise
         except Exception as e:
+            consecutive_errors += 1
             if self._logger:
-                self._logger.exception(f"Error in leadership monitoring: {e}")
+                self._logger.exception(
+                    f"Error in leadership monitoring (error {consecutive_errors}/{max_consecutive_errors}): {e}"
+                )
             self._metrics.increment("sticky_active.monitoring.error")
+
+            # If too many consecutive errors, stop monitoring
+            if consecutive_errors >= max_consecutive_errors:
+                if self._logger:
+                    self._logger.error(
+                        f"Too many consecutive monitoring errors for {service_name}/{instance_id}, stopping monitoring"
+                    )
+                self._metrics.increment("sticky_active.monitoring.stopped")
+                raise RuntimeError(
+                    f"Monitoring failed after {consecutive_errors} consecutive errors"
+                ) from e
+
+            # Otherwise, wait before retrying
+            await asyncio.sleep(min(2**consecutive_errors, 30))  # Exponential backoff with max 30s
 
     async def _handle_leader_expired(
         self,
@@ -547,4 +698,7 @@ class StickyActiveMonitoringUseCase:
                 # Re-register with updated status
                 await self._service_registry.register(instance, 30)
         except Exception as e:
-            self._logger.exception(f"Failed to update instance status: {e}")
+            if self._logger:
+                self._logger.exception(f"Failed to update instance status: {e}")
+            self._metrics.increment("sticky_active.status_update.error")
+            # Non-critical error, don't propagate
