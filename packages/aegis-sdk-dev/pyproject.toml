@@ -1,0 +1,81 @@
+[project]
+name = "aegis-sdk-dev"
+version = "1.0.0"
+description = "Developer tools and utilities for AegisSDK"
+authors = [{name = "AegisIPC Team"}]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "psutil>=5.9.0",
+    "pyyaml>=6.0.0",
+    "nats-py>=2.0.0",
+]
+
+[project.scripts]
+aegis-quickstart = "aegis_sdk_dev.cli.quickstart:main"
+aegis-validate = "aegis_sdk_dev.cli.config_validator:main"
+aegis-test = "aegis_sdk_dev.cli.test_runner:main"
+aegis-bootstrap = "aegis_sdk_dev.cli.bootstrap:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "testcontainers[nats]>=4.0.0",
+]
+
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "testcontainers[nats]>=4.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aegis_sdk_dev*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # Line too long
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_unimported = false
+no_implicit_optional = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+]

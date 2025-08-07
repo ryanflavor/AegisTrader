@@ -1,0 +1,4 @@
+# Dependencies handled by Dockerfile
+# aegis-sdk is installed from /packages/aegis-sdk
+pydantic>=2.0.0
+python-dateutil>=2.8.2
