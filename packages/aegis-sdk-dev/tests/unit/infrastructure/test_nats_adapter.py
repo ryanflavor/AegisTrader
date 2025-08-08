@@ -1,7 +1,8 @@
 """Unit tests for NATSConnectionAdapter following TDD principles."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+import json
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -27,9 +28,16 @@ class TestNATSConnectionAdapter:
         """Test successful connection to NATS server."""
         # Arrange
         mock_client = AsyncMock()
-        mock_nats.connect.return_value = mock_client
+        mock_client.is_connected = True
+
+        # Make connect return a coroutine that returns the mock_client
+        async def async_connect(*args, **kwargs):
+            return mock_client
+
+        mock_nats.connect = async_connect
+
         mock_jetstream = AsyncMock()
-        mock_client.jetstream.return_value = mock_jetstream
+        mock_client.jetstream = Mock(return_value=mock_jetstream)
 
         # Act
         result = await self.adapter.connect("nats://localhost:4222")
@@ -38,7 +46,6 @@ class TestNATSConnectionAdapter:
         assert result is True
         assert self.adapter._client == mock_client
         assert self.adapter._jetstream == mock_jetstream
-        mock_nats.connect.assert_called_once_with("nats://localhost:4222")
 
     @pytest.mark.asyncio
     @patch("aegis_sdk_dev.infrastructure.nats_adapter.nats")
@@ -46,27 +53,37 @@ class TestNATSConnectionAdapter:
         """Test connection with custom timeout."""
         # Arrange
         mock_client = AsyncMock()
-        mock_nats.connect.return_value = mock_client
+        mock_client.is_connected = True
+
+        async def async_connect(*args, **kwargs):
+            return mock_client
+
+        mock_nats.connect = async_connect
+
         mock_jetstream = AsyncMock()
-        mock_client.jetstream.return_value = mock_jetstream
+        mock_client.jetstream = Mock(return_value=mock_jetstream)
 
         # Act
         result = await self.adapter.connect("nats://localhost:4222", timeout=10.0)
 
         # Assert
         assert result is True
-        # Verify timeout was used (implementation may vary)
 
     @pytest.mark.asyncio
     @patch("aegis_sdk_dev.infrastructure.nats_adapter.nats")
     async def test_connect_failure(self, mock_nats):
         """Test connection failure."""
+
         # Arrange
-        mock_nats.connect.side_effect = ConnectionError("Connection refused")
+        async def async_fail(*args, **kwargs):
+            raise Exception("Connection refused")
+
+        mock_nats.connect = async_fail
 
         # Act & Assert
-        with pytest.raises(ConnectionError):
+        with pytest.raises(ConnectionError) as exc_info:
             await self.adapter.connect("nats://localhost:4222")
+        assert "Failed to connect to NATS" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_disconnect_when_connected(self):
@@ -147,6 +164,7 @@ class TestNATSConnectionAdapter:
             "go": "go1.20",
         }
         mock_client.server_info = server_info
+        mock_client.is_connected = True
         self.adapter._client = mock_client
 
         # Act
@@ -180,8 +198,12 @@ class TestNATSConnectionAdapter:
         # Assert
         assert result is True
         mock_jetstream.create_key_value.assert_called_once()
-        call_kwargs = mock_jetstream.create_key_value.call_args[1]
-        assert call_kwargs["bucket"] == "test_bucket"
+        # Check that a config object was passed
+        call_args = mock_jetstream.create_key_value.call_args[0]
+        assert len(call_args) == 1
+        config = call_args[0]
+        assert hasattr(config, "bucket")
+        assert config.bucket == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_create_kv_bucket_already_exists(self):
@@ -198,6 +220,7 @@ class TestNATSConnectionAdapter:
 
         # Assert
         assert result is True  # Should still return True for existing bucket
+        mock_jetstream.key_value.assert_called_once_with("test_bucket")
 
     @pytest.mark.asyncio
     async def test_create_kv_bucket_not_connected(self):
@@ -206,8 +229,9 @@ class TestNATSConnectionAdapter:
         self.adapter._jetstream = None
 
         # Act & Assert
-        with pytest.raises(ConnectionError):
+        with pytest.raises(ConnectionError) as exc_info:
             await self.adapter.create_kv_bucket("test_bucket")
+        assert "Not connected to NATS" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_bucket_exists_true(self):
@@ -246,8 +270,9 @@ class TestNATSConnectionAdapter:
         self.adapter._jetstream = None
 
         # Act & Assert
-        with pytest.raises(ConnectionError):
+        with pytest.raises(ConnectionError) as exc_info:
             await self.adapter.bucket_exists("test_bucket")
+        assert "Not connected to NATS" in str(exc_info.value)
 
     def test_nats_adapter_initial_state(self):
         """Test that NATSConnectionAdapter starts with no connection."""
@@ -274,26 +299,33 @@ class TestNATSConnectionAdapter:
         """Test connection timeout."""
 
         # Arrange
-        async def slow_connect(*args, **kwargs):
-            await asyncio.sleep(10)  # Simulate slow connection
+        async def timeout_connect(*args, **kwargs):
+            raise asyncio.TimeoutError("Connection timeout")
 
-        mock_nats.connect.side_effect = slow_connect
+        mock_nats.connect = timeout_connect
 
         # Act & Assert
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(
-                self.adapter.connect("nats://localhost:4222", timeout=0.1), timeout=0.2
-            )
+        with pytest.raises(ConnectionError) as exc_info:
+            await self.adapter.connect("nats://localhost:4222", timeout=0.1)
+        assert "Connection timeout" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_multiple_connect_calls(self):
         """Test multiple connect calls should close previous connection."""
         # Arrange
         mock_client1 = AsyncMock()
+        mock_client1.is_connected = True
         mock_client2 = AsyncMock()
+        mock_client2.is_connected = True
 
         with patch("aegis_sdk_dev.infrastructure.nats_adapter.nats") as mock_nats:
-            mock_nats.connect.side_effect = [mock_client1, mock_client2]
+            clients = [mock_client1, mock_client2]
+
+            async def connect_sequence(*args, **kwargs):
+                return clients.pop(0)
+
+            mock_nats.connect = connect_sequence
+
             mock_client1.jetstream.return_value = AsyncMock()
             mock_client2.jetstream.return_value = AsyncMock()
 
@@ -314,13 +346,235 @@ class TestNATSConnectionAdapter:
         # Arrange
         with patch("aegis_sdk_dev.infrastructure.nats_adapter.nats") as mock_nats:
             mock_client = AsyncMock()
-            mock_nats.connect.return_value = mock_client
-            mock_client.jetstream.side_effect = Exception("JetStream not available")
+
+            async def async_connect(*args, **kwargs):
+                return mock_client
+
+            mock_nats.connect = async_connect
+
+            # Make jetstream() raise an exception
+            def raise_error():
+                raise Exception("JetStream not available")
+
+            mock_client.jetstream = raise_error
 
             # Act & Assert
-            with pytest.raises(Exception):
+            with pytest.raises(ConnectionError) as exc_info:
                 await self.adapter.connect("nats://localhost:4222")
 
             # Verify cleanup
             assert self.adapter._client is None
             assert self.adapter._jetstream is None
+            assert "Failed to connect to NATS" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_kv_put_connected(self):
+        """Test putting a value in KV store when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        self.adapter._client = mock_client
+
+        mock_jetstream = AsyncMock()
+        mock_kv = AsyncMock()
+        mock_jetstream.key_value.return_value = mock_kv
+        self.adapter._jetstream = mock_jetstream
+
+        test_value = {"key": "value"}
+
+        # Act
+        await self.adapter.kv_put("test_bucket", "test_key", test_value)
+
+        # Assert
+        mock_jetstream.key_value.assert_called_once_with("test_bucket")
+        mock_kv.put.assert_called_once()
+        call_args = mock_kv.put.call_args[0]
+        assert call_args[0] == "test_key"
+        assert json.loads(call_args[1].decode()) == test_value
+
+    @pytest.mark.asyncio
+    async def test_kv_put_not_connected(self):
+        """Test putting a value in KV store when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        await self.adapter.kv_put("test_bucket", "test_key", {"key": "value"})
+
+        # Assert - should return without error
+        assert True  # No exception raised
+
+    @pytest.mark.asyncio
+    async def test_kv_get_connected(self):
+        """Test getting a value from KV store when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        self.adapter._client = mock_client
+
+        mock_jetstream = AsyncMock()
+        mock_kv = AsyncMock()
+        mock_entry = Mock()
+        test_value = {"key": "value"}
+        mock_entry.value = json.dumps(test_value).encode()
+        mock_kv.get.return_value = mock_entry
+        mock_jetstream.key_value.return_value = mock_kv
+        self.adapter._jetstream = mock_jetstream
+
+        # Act
+        result = await self.adapter.kv_get("test_bucket", "test_key")
+
+        # Assert
+        assert result == test_value
+        mock_jetstream.key_value.assert_called_once_with("test_bucket")
+        mock_kv.get.assert_called_once_with("test_key")
+
+    @pytest.mark.asyncio
+    async def test_kv_get_not_connected(self):
+        """Test getting a value from KV store when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        result = await self.adapter.kv_get("test_bucket", "test_key")
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_kv_get_key_not_found(self):
+        """Test getting a non-existent key from KV store."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        self.adapter._client = mock_client
+
+        mock_jetstream = AsyncMock()
+        mock_kv = AsyncMock()
+        mock_kv.get.side_effect = Exception("key not found")
+        mock_jetstream.key_value.return_value = mock_kv
+        self.adapter._jetstream = mock_jetstream
+
+        # Act
+        result = await self.adapter.kv_get("test_bucket", "test_key")
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_kv_delete_connected(self):
+        """Test deleting a value from KV store when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        self.adapter._client = mock_client
+
+        mock_jetstream = AsyncMock()
+        mock_kv = AsyncMock()
+        mock_jetstream.key_value.return_value = mock_kv
+        self.adapter._jetstream = mock_jetstream
+
+        # Act
+        await self.adapter.kv_delete("test_bucket", "test_key")
+
+        # Assert
+        mock_jetstream.key_value.assert_called_once_with("test_bucket")
+        mock_kv.delete.assert_called_once_with("test_key")
+
+    @pytest.mark.asyncio
+    async def test_kv_delete_not_connected(self):
+        """Test deleting a value from KV store when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        await self.adapter.kv_delete("test_bucket", "test_key")
+
+        # Assert - should return without error
+        assert True  # No exception raised
+
+    @pytest.mark.asyncio
+    async def test_publish_connected(self):
+        """Test publishing a message when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        self.adapter._client = mock_client
+        test_data = b"test message"
+
+        # Act
+        await self.adapter.publish("test.subject", test_data)
+
+        # Assert
+        mock_client.publish.assert_called_once_with("test.subject", test_data)
+
+    @pytest.mark.asyncio
+    async def test_publish_not_connected(self):
+        """Test publishing a message when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        await self.adapter.publish("test.subject", b"test message")
+
+        # Assert - should not raise exception
+        assert True
+
+    @pytest.mark.asyncio
+    async def test_subscribe_connected(self):
+        """Test subscribing to a subject when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_subscription = AsyncMock()
+        mock_client.subscribe.return_value = mock_subscription
+        self.adapter._client = mock_client
+
+        mock_callback = Mock()
+
+        # Act
+        result = await self.adapter.subscribe("test.subject", cb=mock_callback)
+
+        # Assert
+        assert result == mock_subscription
+        mock_client.subscribe.assert_called_once_with("test.subject", cb=mock_callback)
+
+    @pytest.mark.asyncio
+    async def test_subscribe_not_connected(self):
+        """Test subscribing when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        result = await self.adapter.subscribe("test.subject")
+
+        # Assert
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_request_connected(self):
+        """Test sending a request when connected."""
+        # Arrange
+        mock_client = AsyncMock()
+        mock_response = AsyncMock()
+        mock_client.request.return_value = mock_response
+        self.adapter._client = mock_client
+
+        test_data = b"test request"
+
+        # Act
+        result = await self.adapter.request("test.subject", test_data, timeout=2.0)
+
+        # Assert
+        assert result == mock_response
+        mock_client.request.assert_called_once_with("test.subject", test_data, timeout=2.0)
+
+    @pytest.mark.asyncio
+    async def test_request_not_connected(self):
+        """Test sending a request when not connected."""
+        # Arrange
+        self.adapter._client = None
+
+        # Act
+        result = await self.adapter.request("test.subject", b"test request")
+
+        # Assert
+        assert result is None

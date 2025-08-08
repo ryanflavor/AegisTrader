@@ -291,7 +291,10 @@ class TestConfigValidator:
         result = ValidationResult(environment="local")
         result.add_issue(
             ValidationIssue(
-                level="ERROR", category="NATS", message="Connection failed", resolution="Check NATS"
+                level="ERROR",
+                category="NATS",
+                message="Connection failed",
+                resolution="Check NATS",
             )
         )
 

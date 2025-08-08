@@ -154,9 +154,20 @@ class TestServiceRegistration:
 def test_make_commands():
     """Test that make commands are working properly."""
     import subprocess
+    from pathlib import Path
 
-    # Test make status command
-    result = subprocess.run(["make", "status"], capture_output=True, text=True, timeout=10)
+    # Find project root (where Makefile exists)
+    current_dir = Path(__file__).parent
+    project_root = current_dir.parent.parent.parent.parent  # Go up to project root
+
+    # Test make status command from project root
+    result = subprocess.run(
+        ["make", "status"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        cwd=str(project_root),  # Run from project root
+    )
     assert result.returncode == 0
     assert "aegis-trader" in result.stdout
 

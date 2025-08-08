@@ -194,7 +194,9 @@ class TestK8sPracticalUsage:
     )
     async def test_environment_specific_config(self, environment, expected):
         """Test environment-specific configuration."""
-        from aegis_sdk_dev.infrastructure.configuration_adapter import ConfigurationAdapter
+        from aegis_sdk_dev.infrastructure.configuration_adapter import (
+            ConfigurationAdapter,
+        )
 
         adapter = ConfigurationAdapter()
 

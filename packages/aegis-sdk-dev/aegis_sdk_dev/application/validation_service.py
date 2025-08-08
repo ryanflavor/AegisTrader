@@ -143,7 +143,10 @@ class ValidationService:
             category="ENVIRONMENT",
             message="Not running in Kubernetes environment",
             resolution="This is expected for local development. Use port-forwarding to connect to K8s services.",
-            details={"k8s_detected": False, "environment": self._environment.detect_environment()},
+            details={
+                "k8s_detected": False,
+                "environment": self._environment.detect_environment(),
+            },
         )
 
     def _add_environment_recommendations(self, result: ValidationResult) -> None:

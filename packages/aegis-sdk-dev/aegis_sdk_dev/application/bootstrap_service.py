@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from aegis_sdk_dev.domain.models import BootstrapConfig, ProjectTemplate, ServiceConfiguration
+from aegis_sdk_dev.domain.models import (
+    BootstrapConfig,
+    ProjectTemplate,
+    ServiceConfiguration,
+)
 from aegis_sdk_dev.ports.console import ConsolePort
 from aegis_sdk_dev.ports.environment import EnvironmentPort
 from aegis_sdk_dev.ports.nats import NATSConnectionPort

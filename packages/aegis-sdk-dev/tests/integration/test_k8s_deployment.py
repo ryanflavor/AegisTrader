@@ -115,7 +115,9 @@ class TestK8sDeploymentIntegration:
 
             # Register a test service
             service = ServiceMetadata(
-                name="test-k8s-service", version="1.0.0", description="K8s integration test service"
+                name="test-k8s-service",
+                version="1.0.0",
+                description="K8s integration test service",
             )
 
             instance = InstanceMetadata(
@@ -187,7 +189,9 @@ class TestK8sDeploymentIntegration:
 
                 # Register instance
                 service = ServiceMetadata(
-                    name="coordinated-service", version="1.0.0", description="Multi-instance test"
+                    name="coordinated-service",
+                    version="1.0.0",
+                    description="Multi-instance test",
                 )
 
                 instance = InstanceMetadata(
@@ -267,7 +271,9 @@ class TestK8sDeploymentIntegration:
             registry = KVServiceRegistry(kv_store, logger)
 
             service = ServiceMetadata(
-                name="failover-service", version="1.0.0", description="Failover test service"
+                name="failover-service",
+                version="1.0.0",
+                description="Failover test service",
             )
 
             primary_instance = InstanceMetadata(

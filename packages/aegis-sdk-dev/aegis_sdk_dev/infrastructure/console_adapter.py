@@ -22,6 +22,8 @@ class ConsoleAdapter:
 
     def print(self, message: str, style: str | None = None) -> None:
         """Print a message to the console."""
+        if message is None:
+            raise TypeError("Message cannot be None")
         if style:
             self._console.print(f"[{style}]{message}[/{style}]")
         else:
@@ -49,12 +51,16 @@ class ConsoleAdapter:
             table.add_column(header)
 
         for row in rows:
-            table.add_row(*row)
+            # Convert None values to empty strings for display
+            display_row = [str(val) if val is not None else "" for val in row]
+            table.add_row(*display_row)
 
         self._console.print(table)
 
     def print_panel(self, content: str, title: str | None = None, style: str | None = None) -> None:
         """Print a formatted panel to the console."""
+        if content is None:
+            raise TypeError("Content cannot be None")
         panel = Panel(content, title=title, box=box.ROUNDED)
         if style:
             self._console.print(panel, style=style)

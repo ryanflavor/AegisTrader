@@ -55,14 +55,24 @@ class ConfigurationValidator:
 
     def validate_environment(self, environment: str) -> ValidationIssue | None:
         """Validate environment configuration."""
-        valid_envs = {"auto", "local", "kubernetes", "development", "staging", "production"}
+        valid_envs = {
+            "auto",
+            "local",
+            "kubernetes",
+            "development",
+            "staging",
+            "production",
+        }
         if environment not in valid_envs:
             return ValidationIssue(
                 level=ValidationLevel.WARNING,
                 category="CONFIG",
                 message=f"Unknown environment: {environment}",
                 resolution=f"Use one of: {', '.join(sorted(valid_envs))}",
-                details={"environment": environment, "valid_environments": list(valid_envs)},
+                details={
+                    "environment": environment,
+                    "valid_environments": list(valid_envs),
+                },
             )
         return None
 

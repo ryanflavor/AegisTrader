@@ -15,6 +15,8 @@ class EnvironmentAdapter:
 
     def set_environment_variable(self, name: str, value: str) -> None:
         """Set an environment variable."""
+        if not name:
+            raise ValueError("Environment variable name cannot be empty")
         os.environ[name] = value
 
     def is_kubernetes_environment(self) -> bool:

@@ -71,7 +71,14 @@ class RunConfigurationValidator:
 
     def test_validate_environment_valid(self):
         """Test validation of valid environments."""
-        valid_envs = ["auto", "local", "kubernetes", "development", "staging", "production"]
+        valid_envs = [
+            "auto",
+            "local",
+            "kubernetes",
+            "development",
+            "staging",
+            "production",
+        ]
         for env in valid_envs:
             issue = self.validator.validate_environment(env)
             assert issue is None

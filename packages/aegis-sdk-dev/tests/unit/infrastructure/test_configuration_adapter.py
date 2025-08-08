@@ -10,7 +10,7 @@ import yaml
 from aegis_sdk_dev.infrastructure.configuration_adapter import ConfigurationAdapter
 
 
-class RunConfigurationAdapter:
+class TestConfigurationAdapter:
     """Test ConfigurationAdapter infrastructure implementation."""
 
     @pytest.fixture
@@ -337,7 +337,14 @@ class RunConfigurationAdapter:
     def test_validate_configuration_valid_environments(self, adapter: ConfigurationAdapter):
         """Test validating configuration with valid environments."""
         # Arrange
-        valid_envs = ["auto", "local", "kubernetes", "development", "staging", "production"]
+        valid_envs = [
+            "auto",
+            "local",
+            "kubernetes",
+            "development",
+            "staging",
+            "production",
+        ]
 
         # Act & Assert
         for env in valid_envs:
@@ -423,3 +430,61 @@ class RunConfigurationAdapter:
 
         # Assert
         assert loaded == config_data
+
+    def test_get_nats_url_from_env_var(self, adapter: ConfigurationAdapter, monkeypatch):
+        """Test getting NATS URL from environment variable."""
+        # Arrange
+        expected_url = "nats://custom.nats.server:4222"
+        monkeypatch.setenv("NATS_URL", expected_url)
+
+        # Act
+        result = adapter.get_nats_url()
+
+        # Assert
+        assert result == expected_url
+
+    def test_get_nats_url_kubernetes_environment(self, adapter: ConfigurationAdapter, monkeypatch):
+        """Test getting NATS URL in Kubernetes environment."""
+        # Arrange
+        monkeypatch.delenv("NATS_URL", raising=False)
+        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
+
+        # Act
+        result = adapter.get_nats_url()
+
+        # Assert
+        assert result == "nats://nats.default.svc.cluster.local:4222"
+
+    def test_get_nats_url_default(self, adapter: ConfigurationAdapter, monkeypatch):
+        """Test getting default NATS URL."""
+        # Arrange
+        monkeypatch.delenv("NATS_URL", raising=False)
+        monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+
+        # Act
+        result = adapter.get_nats_url()
+
+        # Assert
+        assert result == "nats://localhost:4222"
+
+    def test_get_environment_from_env_var(self, adapter: ConfigurationAdapter, monkeypatch):
+        """Test getting environment from environment variable."""
+        # Arrange
+        monkeypatch.setenv("ENVIRONMENT", "production")
+
+        # Act
+        result = adapter.get_environment()
+
+        # Assert
+        assert result == "production"
+
+    def test_get_environment_default(self, adapter: ConfigurationAdapter, monkeypatch):
+        """Test getting default environment."""
+        # Arrange
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+        # Act
+        result = adapter.get_environment()
+
+        # Assert
+        assert result == "local"

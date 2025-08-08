@@ -199,9 +199,11 @@ class TestConsoleAdapterEdgeCases:
         headers = ["Name", "Value"]
         rows = [["Item1", None], [None, "Value2"]]
 
-        # Act & Assert - should handle None gracefully
-        with pytest.raises(TypeError):
-            self.adapter.print_table(headers, rows)
+        # Act - should handle None gracefully by converting to empty strings
+        # No exception should be raised
+        self.adapter.print_table(headers, rows)
+
+        # Assert - test passes if no exception is raised
 
     def test_print_table_with_very_long_content(self):
         """Test table with very long content in cells."""

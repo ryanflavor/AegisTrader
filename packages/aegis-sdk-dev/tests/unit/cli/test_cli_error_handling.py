@@ -111,7 +111,8 @@ class TestConfigValidatorCLIErrorHandling:
 
         # Act
         result = self.runner.invoke(
-            config_validator_main, ["--service-name", "test-service", "--nats-url", "not-a-url"]
+            config_validator_main,
+            ["--service-name", "test-service", "--nats-url", "not-a-url"],
         )
 
         # Assert
@@ -153,7 +154,8 @@ class TestConfigValidatorCLIErrorHandling:
 
         # Act
         result = self.runner.invoke(
-            config_validator_main, ["--service-name", "test", "--nats-url", "nats://localhost:4222"]
+            config_validator_main,
+            ["--service-name", "test", "--nats-url", "nats://localhost:4222"],
         )
 
         # Assert
@@ -172,7 +174,14 @@ class TestConfigValidatorCLIErrorHandling:
         # Act
         result = self.runner.invoke(
             config_validator_main,
-            ["--service-name", "test", "--nats-url", "nats://localhost:4222", "--timeout", "1"],
+            [
+                "--service-name",
+                "test",
+                "--nats-url",
+                "nats://localhost:4222",
+                "--timeout",
+                "1",
+            ],
         )
 
         # Assert
@@ -264,7 +273,7 @@ class TestTestRunnerCLIErrorHandling:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_no_tests_found(self, mock_service_class):
         """Test runner when no tests are found."""
         # Arrange
@@ -278,12 +287,15 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_test_framework_missing(self, mock_service_class):
         """Test runner when test framework is missing."""
         # Arrange
         mock_service = Mock()
-        mock_service.check_test_dependencies.return_value = (False, ["pytest", "coverage"])
+        mock_service.check_test_dependencies.return_value = (
+            False,
+            ["pytest", "coverage"],
+        )
         mock_service_class.return_value = mock_service
 
         # Act
@@ -292,7 +304,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_invalid_test_type(self, mock_service_class):
         """Test runner with invalid test type."""
         # Arrange
@@ -306,7 +318,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_coverage_threshold_violation(self, mock_service_class):
         """Test runner when coverage is below threshold."""
         # Arrange
@@ -323,7 +335,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_test_execution_timeout(self, mock_service_class):
         """Test runner when test execution times out."""
         # Arrange
@@ -337,7 +349,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_permission_denied(self, mock_service_class):
         """Test runner with permission denied error."""
         # Arrange
@@ -351,7 +363,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_keyboard_interrupt(self, mock_service_class):
         """Test runner handling keyboard interrupt."""
         # Arrange
@@ -365,7 +377,7 @@ class TestTestRunnerCLIErrorHandling:
         # Assert
         assert result.exit_code != 0
 
-    @patch("aegis_sdk_dev.cli.test_runner.TestRunnerService")
+    @patch("aegis_sdk_dev.cli.test_runner.TestExecutionService")
     def test_test_runner_continuous_mode_failure(self, mock_service_class):
         """Test runner continuous mode failure."""
         # Arrange

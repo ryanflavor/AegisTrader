@@ -320,7 +320,7 @@ class TestProcessExecutorAdapter:
     async def test_execute_command_empty_command_list(self):
         """Test executing with empty command list."""
         # Act & Assert
-        with pytest.raises((ValueError, IndexError)):
+        with pytest.raises(ValueError, match="Command list cannot be empty"):
             await self.adapter.execute_command([])
 
     @patch("shutil.which")

@@ -134,7 +134,9 @@ class TestBootstrapSDK:
         """Test bootstrapping SDK with watchable discovery."""
         # Arrange
         config = BootstrapConfig(
-            nats_url="nats://localhost:4222", service_name="test-service", enable_watchable=True
+            nats_url="nats://localhost:4222",
+            service_name="test-service",
+            enable_watchable=True,
         )
 
         # Setup mocks
@@ -194,7 +196,9 @@ class TestBootstrapSDK:
         """Test bootstrapping SDK without watchable discovery."""
         # Arrange
         config = BootstrapConfig(
-            nats_url="nats://localhost:4222", service_name="test-service", enable_watchable=False
+            nats_url="nats://localhost:4222",
+            service_name="test-service",
+            enable_watchable=False,
         )
 
         # Setup mocks

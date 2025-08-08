@@ -253,5 +253,12 @@ class TestInfrastructureFactory:
         assert set(adapters1.keys()) == set(adapters2.keys())
         assert all(
             key in adapters1
-            for key in ["console", "environment", "file_system", "configuration", "nats", "process"]
+            for key in [
+                "console",
+                "environment",
+                "file_system",
+                "configuration",
+                "nats",
+                "process",
+            ]
         )

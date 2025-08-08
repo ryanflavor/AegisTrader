@@ -113,7 +113,9 @@ async def test_load_balancing():
         for i in range(10):
             try:
                 msg = await nc.request(
-                    "echo.service.echo", json.dumps({"message": f"Test {i}"}).encode(), timeout=2.0
+                    "echo.service.echo",
+                    json.dumps({"message": f"Test {i}"}).encode(),
+                    timeout=2.0,
                 )
                 response = json.loads(msg.data)
                 responses.append(response)

@@ -53,6 +53,8 @@ class FileSystemAdapter:
             return [p.name for p in Path(path).iterdir()]
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Directory not found: {path}") from e
+        except NotADirectoryError as e:
+            raise FileNotFoundError(f"Directory not found: {path} (path is a file)") from e
 
     def delete_file(self, path: str) -> None:
         """Delete a file."""
@@ -68,6 +70,10 @@ class FileSystemAdapter:
         try:
             shutil.copy2(source, destination)
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"Source file not found: {source}") from e
+            # Check if source exists to provide better error message
+            if not Path(source).exists():
+                raise FileNotFoundError(f"Source file not found: {source}") from e
+            else:
+                raise OSError(f"Unable to copy file to {destination}: {e}") from e
         except Exception as e:
             raise OSError(f"Unable to copy file from {source} to {destination}: {e}") from e

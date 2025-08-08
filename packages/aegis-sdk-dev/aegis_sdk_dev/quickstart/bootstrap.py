@@ -91,7 +91,9 @@ async def bootstrap_sdk(config: BootstrapConfig) -> ServiceContext:
     if config.enable_watchable:
         discovery = WatchableCachedServiceDiscovery(registry, clock)
     else:
-        from aegis_sdk.infrastructure.cached_service_discovery import CachedServiceDiscovery
+        from aegis_sdk.infrastructure.cached_service_discovery import (
+            CachedServiceDiscovery,
+        )
 
         discovery = CachedServiceDiscovery(registry, clock)
 

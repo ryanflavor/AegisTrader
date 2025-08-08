@@ -244,6 +244,8 @@ class TestIntegrationCoverage:
     @pytest.mark.asyncio
     async def test_service_registry_service_coverage(self) -> None:
         """Test service registry service methods."""
+        from datetime import datetime
+
         from app.application.service_registry_service import ServiceRegistryService
         from app.domain.models import ServiceDefinition
 
@@ -251,10 +253,14 @@ class TestIntegrationCoverage:
         service = ServiceRegistryService(mock_kv)
 
         # Test create_or_update_service
+        now = datetime.now()
         definition = ServiceDefinition(
             service_name="test-service",
+            owner="test-team",
             description="Test service",
             version="1.0.0",
+            created_at=now,
+            updated_at=now,
             endpoints=["echo", "health"],
             metadata={"type": "rpc"},
         )
@@ -289,10 +295,14 @@ class TestIntegrationCoverage:
         assert config.api_port == 8080
 
         # Test ServiceDefinition model_dump
+        now = datetime.now()
         definition = ServiceDefinition(
             service_name="test",
+            owner="test-team",
             description="Test service",
             version="1.0.0",
+            created_at=now,
+            updated_at=now,
             endpoints=["test"],
             metadata={},
         )
@@ -319,8 +329,8 @@ class TestIntegrationCoverage:
             get_service,
         )
 
-        # Mock service registry
-        mock_registry = Mock()
+        # Mock service registry with AsyncMock
+        mock_registry = AsyncMock()
 
         # Test get_service not found
         mock_registry.get_service_definition = AsyncMock(return_value=None)

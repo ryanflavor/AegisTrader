@@ -83,8 +83,8 @@ class TestEnvironmentAdapterEdgeCases:
     def test_set_environment_variable_with_empty_name_raises(self):
         """Test setting env var with empty name raises error."""
         # Act & Assert
-        with pytest.raises(ValueError):
-            os.environ[""] = "value"  # This is what happens internally
+        with pytest.raises(ValueError, match="Environment variable name cannot be empty"):
+            self.adapter.set_environment_variable("", "value")
 
     def test_set_environment_variable_overwrites_existing(self):
         """Test setting env var overwrites existing value."""

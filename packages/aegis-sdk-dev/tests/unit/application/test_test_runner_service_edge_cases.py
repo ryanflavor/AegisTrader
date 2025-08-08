@@ -1,4 +1,4 @@
-"""Comprehensive edge case and error scenario tests for TestRunnerService following TDD principles."""
+"""Comprehensive edge case and error scenario tests for TestExecutionService following TDD principles."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from aegis_sdk_dev.application.test_runner_service import TestRunnerService
+from aegis_sdk_dev.application.test_runner_service import TestExecutionService
 from aegis_sdk_dev.domain.models import (
     ExecutionResult,
     ExecutionType,
@@ -17,14 +17,14 @@ from aegis_sdk_dev.domain.models import (
 )
 
 
-class TestTestRunnerServiceEdgeCases:
-    """Test TestRunnerService edge cases and error conditions."""
+class TestTestExecutionServiceEdgeCases:
+    """Test TestExecutionService edge cases and error conditions."""
 
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_console = Mock()
         self.mock_process_executor = Mock()
-        self.service = TestRunnerService(
+        self.service = TestExecutionService(
             console=self.mock_console,
             process_executor=self.mock_process_executor,
         )
@@ -34,7 +34,7 @@ class TestTestRunnerServiceEdgeCases:
         """Test initialization with None console raises error."""
         # Act & Assert
         with pytest.raises(AttributeError):
-            service = TestRunnerService(
+            service = TestExecutionService(
                 console=None,
                 process_executor=self.mock_process_executor,
             )
@@ -45,7 +45,7 @@ class TestTestRunnerServiceEdgeCases:
         """Test initialization with None process executor raises error."""
         # Act & Assert
         with pytest.raises(AttributeError):
-            service = TestRunnerService(
+            service = TestExecutionService(
                 console=self.mock_console,
                 process_executor=None,
             )
@@ -55,7 +55,7 @@ class TestTestRunnerServiceEdgeCases:
     def test_init_with_invalid_dependencies(self):
         """Test initialization with invalid dependency types."""
         # Act & Assert - should work due to duck typing
-        service = TestRunnerService(
+        service = TestExecutionService(
             console="not_a_console",  # Wrong type but might work with duck typing
             process_executor=123,  # Wrong type
         )
@@ -424,16 +424,22 @@ class TestTestRunnerServiceEdgeCases:
 
         validation_issues = [
             ValidationIssue(
-                level=ValidationLevel.ERROR, category="COVERAGE", message="Coverage below threshold"
+                level=ValidationLevel.ERROR,
+                category="COVERAGE",
+                message="Coverage below threshold",
             ),
             ValidationIssue(
-                level=ValidationLevel.WARNING, category="PERFORMANCE", message="Tests took too long"
+                level=ValidationLevel.WARNING,
+                category="PERFORMANCE",
+                message="Tests took too long",
             ),
             ValidationIssue(level=ValidationLevel.INFO, category="GENERAL", message="Info message"),
         ]
 
         with patch.object(
-            self.service._orchestrator, "validate_test_results", return_value=validation_issues
+            self.service._orchestrator,
+            "validate_test_results",
+            return_value=validation_issues,
         ):
             # Act
             result = await self.service.run_tests(test_type="unit")

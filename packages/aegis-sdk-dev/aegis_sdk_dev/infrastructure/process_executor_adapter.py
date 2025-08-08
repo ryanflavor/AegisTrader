@@ -16,6 +16,9 @@ class ProcessExecutorAdapter:
         timeout: float | None = None,
     ) -> tuple[int, str, str]:
         """Execute an external command."""
+        if not command:
+            raise ValueError("Command list cannot be empty")
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,

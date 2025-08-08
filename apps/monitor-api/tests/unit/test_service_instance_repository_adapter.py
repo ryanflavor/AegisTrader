@@ -81,7 +81,7 @@ class TestServiceInstanceRepositoryAdapter:
         assert instances[0].service_name == sample_instance.service_name
         assert instances[0].instance_id == sample_instance.instance_id
         mock_kv_store.keys.assert_called_once()
-        mock_kv_store.get.assert_called_once_with("service-instances__test-service__test-123")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service.test-123")
 
     @pytest.mark.asyncio
     async def test_get_all_instances_empty(
@@ -183,7 +183,7 @@ class TestServiceInstanceRepositoryAdapter:
         assert instance is not None
         assert instance.service_name == "test-service"
         assert instance.instance_id == "test-123"
-        mock_kv_store.get.assert_called_once_with("service-instances__test-service__test-123")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service.test-123")
 
     @pytest.mark.asyncio
     async def test_get_instance_not_found(
@@ -200,7 +200,7 @@ class TestServiceInstanceRepositoryAdapter:
 
         # Assert
         assert instance is None
-        mock_kv_store.get.assert_called_once_with("service-instances__test-service__unknown-id")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service.unknown-id")
 
     @pytest.mark.asyncio
     async def test_get_instance_invalid_json(

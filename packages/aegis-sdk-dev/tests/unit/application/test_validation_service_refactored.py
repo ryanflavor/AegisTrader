@@ -38,7 +38,9 @@ class TestValidationServiceRefactored:
 
         # Act
         result = await self.service.validate_service_configuration(
-            service_name="test-service", nats_url="nats://localhost:4222", environment="auto"
+            service_name="test-service",
+            nats_url="nats://localhost:4222",
+            environment="auto",
         )
 
         # Assert

@@ -249,7 +249,14 @@ class TestServiceConfiguration:
 
     def test_valid_environments(self):
         """Test all valid environments."""
-        environments = ["auto", "local", "kubernetes", "development", "staging", "production"]
+        environments = [
+            "auto",
+            "local",
+            "kubernetes",
+            "development",
+            "staging",
+            "production",
+        ]
         for env in environments:
             config = ServiceConfiguration(
                 service_name="test",

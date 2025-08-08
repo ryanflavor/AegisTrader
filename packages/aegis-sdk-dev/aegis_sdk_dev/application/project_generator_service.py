@@ -152,7 +152,7 @@ class ProjectGeneratorService:
 
         return templates
 
-    def _get_template_description(self, template: ProjectTemplate) -> str:
+    def _get_template_description(self, template) -> str:
         """Get description for a project template.
 
         Args:
@@ -161,6 +161,8 @@ class ProjectGeneratorService:
         Returns:
             Template description
         """
+        from aegis_sdk_dev.domain.models import ProjectTemplate
+
         descriptions = {
             ProjectTemplate.BASIC: "Simple service with minimal structure",
             ProjectTemplate.SINGLE_ACTIVE: "Service with single-active pattern",

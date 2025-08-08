@@ -21,17 +21,41 @@ class NATSConnectionAdapter:
         self._js = None
 
     async def connect(self, url: str, timeout: float = 5.0) -> bool:
-        """Connect to NATS server."""
+        """Connect to NATS server.
+
+        Args:
+            url: NATS server URL
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if connected successfully
+
+        Raises:
+            ConnectionError: If unable to connect
+        """
         try:
+            # Validate URL format
+            if not url.startswith(("nats://", "tls://")):
+                raise ConnectionError(f"Invalid URL format: {url}")
+
+            # Close existing connection if any
+            if self._client:
+                await self._client.close()
+
             self._client = await nats.connect(url, connect_timeout=timeout)
             self._nc = self._client  # Compatibility
             self._jetstream = self._client.jetstream()
             self._js = self._jetstream  # Compatibility
             return True
         except asyncio.TimeoutError:
-            return False
-        except Exception:
-            return False
+            raise ConnectionError(f"Connection timeout after {timeout} seconds")
+        except Exception as e:
+            # Clean up on error
+            self._client = None
+            self._jetstream = None
+            self._nc = None
+            self._js = None
+            raise ConnectionError(f"Failed to connect to NATS: {e}")
 
     async def disconnect(self) -> None:
         """Disconnect from NATS server."""
@@ -47,20 +71,42 @@ class NATSConnectionAdapter:
         return self._client is not None and self._client.is_connected
 
     async def get_server_info(self) -> dict[str, Any]:
-        """Get NATS server information."""
-        if not await self.is_connected():
+        """Get NATS server information.
+
+        Returns:
+            Server information dictionary
+
+        Raises:
+            ConnectionError: If not connected
+        """
+        if not self._client:
             raise ConnectionError("Not connected to NATS")
 
-        # Get basic server info
-        return {
-            "connected": True,
-            "client_id": self._client.client_id if self._client else None,
-        }
+        # Return actual server info from the client
+        if hasattr(self._client, "server_info"):
+            return self._client.server_info
+        else:
+            # Fallback for testing
+            return {
+                "connected": True,
+                "client_id": self._client.client_id if hasattr(self._client, "client_id") else None,
+            }
 
     async def create_kv_bucket(self, bucket: str, ttl_seconds: int = 0) -> bool:
-        """Create a KV bucket."""
-        if not await self.is_connected():
-            return False
+        """Create a KV bucket.
+
+        Args:
+            bucket: Bucket name
+            ttl_seconds: TTL for keys in seconds (0 for no TTL)
+
+        Returns:
+            True if created successfully
+
+        Raises:
+            ConnectionError: If not connected
+        """
+        if not self._jetstream:
+            raise ConnectionError("Not connected to NATS")
 
         try:
             config = nats.js.api.KeyValueConfig(
@@ -69,13 +115,31 @@ class NATSConnectionAdapter:
             )
             await self._jetstream.create_key_value(config)
             return True
-        except Exception:
+        except Exception as e:
+            # Check if bucket already exists
+            if "already exists" in str(e).lower():
+                # Try to get the existing bucket
+                try:
+                    await self._jetstream.key_value(bucket)
+                    return True
+                except Exception:
+                    pass
             return False
 
     async def bucket_exists(self, bucket: str) -> bool:
-        """Check if a KV bucket exists."""
-        if not await self.is_connected():
-            return False
+        """Check if a KV bucket exists.
+
+        Args:
+            bucket: Bucket name
+
+        Returns:
+            True if bucket exists, False otherwise
+
+        Raises:
+            ConnectionError: If not connected
+        """
+        if not self._jetstream:
+            raise ConnectionError("Not connected to NATS")
 
         try:
             await self._jetstream.key_value(bucket)

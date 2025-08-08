@@ -238,10 +238,14 @@ class TestFinalCoverage:
         from app.domain.models import ServiceDefinition, ServiceInstance
 
         # Test ServiceDefinition to/from JSON
+        now = datetime.now()
         definition = ServiceDefinition(
             service_name="test",
+            owner="test-team",
             description="Test service",
             version="1.0.0",
+            created_at=now,
+            updated_at=now,
             endpoints=["test"],
             metadata={"key": "value"},
         )

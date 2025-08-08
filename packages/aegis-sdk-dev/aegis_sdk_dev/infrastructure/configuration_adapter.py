@@ -87,7 +87,14 @@ class ConfigurationAdapter:
 
         # Validate environment if present
         if "environment" in config:
-            valid_envs = {"auto", "local", "kubernetes", "development", "staging", "production"}
+            valid_envs = {
+                "auto",
+                "local",
+                "kubernetes",
+                "development",
+                "staging",
+                "production",
+            }
             if config["environment"] not in valid_envs:
                 errors.append(f"Invalid environment. Must be one of: {valid_envs}")
 
