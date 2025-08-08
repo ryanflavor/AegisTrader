@@ -8,9 +8,6 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-
-# Python 3.10 compatibility
-UTC = UTC
 from typing import Any
 
 from aegis_sdk.domain.enums import ServiceStatus
@@ -19,6 +16,9 @@ from aegis_sdk.ports.kv_store import KVStorePort
 
 from ..domain.models import ServiceRegistrationData
 from ..ports.service_registry import RegistrationError, ServiceRegistryPort
+
+# Python 3.10 compatibility
+UTC = UTC
 
 logger = logging.getLogger(__name__)
 

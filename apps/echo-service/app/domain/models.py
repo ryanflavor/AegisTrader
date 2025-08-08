@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
-
-# Python 3.10 compatibility - UTC was added in Python 3.11
-UTC = UTC
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Python 3.10 compatibility - UTC was added in Python 3.11
+UTC = UTC
 
 
 class EchoMode(str, Enum):
