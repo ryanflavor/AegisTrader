@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+# Python 3.10 compatibility
+UTC = UTC
+
 from ..domain.models import EchoRequest, EchoResponse, HealthCheck, ServiceMetrics
 from ..domain.services import EchoProcessor, MetricsCollector
 

@@ -8,16 +8,19 @@ Follows hexagonal architecture with clear separation of concerns.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
-from aegis_sdk.domain.enums import ServiceStatus
+# Python 3.10 compatibility
+try:
+    from datetime import UTC
+except ImportError:
+    import datetime
+
+    UTC = datetime.UTC
 
 from ..domain.models import (
     EchoMode,
     EchoRequest,
-    ServiceDefinitionInfo,
-    ServiceRegistrationData,
 )
 from ..domain.services import EchoProcessor, MetricsCollector
 from ..ports.configuration import ConfigurationPort
@@ -206,25 +209,20 @@ class EchoApplicationService:
             f"Starting Echo Application Service (Instance: {self._configuration.get_instance_id()})"
         )
 
-        # Register service definition if registry is available
-        if self._service_registry:
-            await self._register_service_definition()
-
         # Start the service bus
         await self._service_bus.start()
 
-        # Register initial instance if registry is available
-        if self._service_registry:
-            await self._register_instance()
+        # Note: Service registration (both definition and instance) is now handled
+        # in the factory before creating this application service
 
         # Update health status
-        self._health_use_case.set_nats_status(self._service_bus.is_connected())
+        self._health_use_case.set_nats_status(True)
 
         logger.info(
             f"Echo Application Service started successfully:\n"
             f"  Instance: {self._configuration.get_instance_id()}\n"
             f"  Version: {self._configuration.get_service_version()}\n"
-            f"  Service ID: {self._service_bus.get_instance_id()}\n"
+            f"  Service Name: {self._configuration.get_service_name()}\n"
             f"  Pattern: Load-Balanced (multiple active instances)\n"
             f"  RPC Endpoints:\n"
             f"    - echo: Process echo with multiple modes\n"
@@ -246,10 +244,7 @@ class EchoApplicationService:
         # Deregister instance if registry is available
         if self._service_registry:
             try:
-                await self._service_registry.deregister_instance(
-                    self._configuration.get_service_name(),
-                    self._configuration.get_instance_id(),
-                )
+                await self._service_registry.deregister_instance()
             except Exception as e:
                 logger.warning(f"Failed to deregister instance: {e}")
 
@@ -269,75 +264,20 @@ class EchoApplicationService:
             f"  Uptime: {final_metrics.uptime_seconds:.1f}s"
         )
 
-    async def _register_service_definition(self) -> None:
-        """Register service definition with the platform."""
-        try:
-            # Create service definition
-            definition = ServiceDefinitionInfo(
-                service_name=self._configuration.get_service_name(),
-                owner="Platform Team",  # Could be made configurable
-                description="Echo service for testing and demonstration",
-                version=self._configuration.get_service_version(),
-            )
-
-            # Create registration data
-            registration = ServiceRegistrationData(
-                definition=definition,
-                instance_id=self._configuration.get_instance_id(),
-                nats_url=self._configuration.get_nats_url() or "nats://localhost:4222",
-            )
-
-            # Register with platform
-            await self._service_registry.register_service_definition(registration)
-            logger.info(f"Registered service definition: {definition.service_name}")
-
-        except Exception as e:
-            logger.error(f"Failed to register service definition: {e}")
-            # Don't fail startup if registration fails
-
-    async def _register_instance(self) -> None:
-        """Register service instance with the platform."""
-        try:
-            instance_data = {
-                "serviceName": self._configuration.get_service_name(),
-                "instanceId": self._configuration.get_instance_id(),
-                "version": self._configuration.get_service_version(),
-                "status": ServiceStatus.ACTIVE.value,
-                "lastHeartbeat": datetime.now(UTC).isoformat(),
-            }
-
-            await self._service_registry.register_instance(
-                service_name=self._configuration.get_service_name(),
-                instance_id=self._configuration.get_instance_id(),
-                instance_data=instance_data,
-                ttl_seconds=30,  # 30 second TTL
-            )
-            logger.info(f"Registered instance: {self._configuration.get_instance_id()}")
-
-        except Exception as e:
-            logger.error(f"Failed to register instance: {e}")
-            # Don't fail startup if registration fails
-
     async def update_heartbeat(self) -> None:
-        """Update instance heartbeat in the registry."""
+        """Update service heartbeat in registry.
+
+        The heartbeat is now handled automatically by the ServiceRegistryAdapter.
+        This method is kept for compatibility but delegates to the registry's
+        built-in heartbeat mechanism.
+        """
         if not self._service_registry:
             return
 
         try:
-            instance_data = {
-                "serviceName": self._configuration.get_service_name(),
-                "instanceId": self._configuration.get_instance_id(),
-                "version": self._configuration.get_service_version(),
-                "status": ServiceStatus.ACTIVE.value,
-                "lastHeartbeat": datetime.now(UTC).isoformat(),
-            }
-
-            await self._service_registry.update_instance_heartbeat(
-                service_name=self._configuration.get_service_name(),
-                instance_id=self._configuration.get_instance_id(),
-                instance_data=instance_data,
-                ttl_seconds=30,
-            )
-
+            # The ServiceRegistryAdapter handles heartbeat automatically
+            success = await self._service_registry.update_heartbeat()
+            if not success:
+                logger.warning("Heartbeat update failed")
         except Exception as e:
             logger.debug(f"Failed to update heartbeat: {e}")

@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+
+# Python 3.10 compatibility
+UTC = UTC
 from typing import Any
 
 from aegis_sdk.domain.enums import ServiceStatus

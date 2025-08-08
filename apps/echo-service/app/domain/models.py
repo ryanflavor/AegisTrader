@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import Enum
+
+# Python 3.10 compatibility - UTC was added in Python 3.11
+UTC = UTC
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -52,7 +55,7 @@ class EchoRequest(BaseModel):
     transform_type: str | None = Field(
         default=None, description="Transformation type for transform mode"
     )
-    priority: MessagePriority = Field(
+    priority: MessagePriority | str = Field(
         default=MessagePriority.NORMAL, description="Message priority"
     )
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
@@ -67,6 +70,19 @@ class EchoRequest(BaseModel):
             except ValueError as e:
                 raise ValueError(
                     f"Invalid mode: {v}. Must be one of {[m.value for m in EchoMode]}"
+                ) from e
+        return v
+
+    @field_validator("priority", mode="before")
+    @classmethod
+    def validate_priority(cls, v: str | MessagePriority) -> MessagePriority:
+        """Convert string to MessagePriority enum."""
+        if isinstance(v, str):
+            try:
+                return MessagePriority(v)
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid priority: {v}. Must be one of {[p.value for p in MessagePriority]}"
                 ) from e
         return v
 

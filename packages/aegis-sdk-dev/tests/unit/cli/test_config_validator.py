@@ -151,20 +151,40 @@ class TestConfigValidator:
     async def test_validate_nats_connection_success(self):
         """Test successful NATS connection validation."""
         # Arrange
-        with patch("aegis_sdk_dev.cli.config_validator.asyncio.wait_for") as mock_wait_for:
-            with patch("aegis_sdk_dev.cli.config_validator.NATSAdapter") as MockNATSAdapter:
-                mock_nats = AsyncMock()
-                MockNATSAdapter.return_value = mock_nats
-                mock_wait_for.return_value = None
+        with patch("aegis_sdk.infrastructure.nats_adapter.NATSAdapter") as MockNATSAdapter:
+            mock_nats = AsyncMock()
+            mock_nats.connect = AsyncMock(return_value=None)
+            mock_nats.disconnect = AsyncMock(return_value=None)
+            MockNATSAdapter.return_value = mock_nats
 
-                # Act
-                valid, issue = await self.validator.validate_nats_connection(
-                    "nats://localhost:4222"
-                )
+            # Act
+            valid, issue = await self.validator.validate_nats_connection("nats://localhost:4222")
 
-                # Assert
-                assert valid is True
-                assert issue is None
+            # Assert
+            assert valid is True
+            assert issue is None
+            mock_nats.connect.assert_called_once()
+            mock_nats.disconnect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_validate_nats_connection_with_close_method(self):
+        """Test successful NATS connection validation with close method fallback."""
+        # Arrange - test close method fallback (lines 84-85)
+        with patch("aegis_sdk.infrastructure.nats_adapter.NATSAdapter") as MockNATSAdapter:
+            mock_nats = AsyncMock()
+            mock_nats.connect = AsyncMock(return_value=None)
+            # No disconnect method, only close
+            mock_nats.close = AsyncMock(return_value=None)
+            MockNATSAdapter.return_value = mock_nats
+
+            # Act
+            valid, issue = await self.validator.validate_nats_connection("nats://localhost:4222")
+
+            # Assert
+            assert valid is True
+            assert issue is None
+            mock_nats.connect.assert_called_once()
+            mock_nats.close.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_validate_nats_connection_timeout(self):
@@ -282,8 +302,17 @@ class TestConfigValidator:
         # Assert
         self.console.print.assert_called()
         # Check that Panel was created with success status
+        from rich.panel import Panel
+
         calls = self.console.print.call_args_list
-        assert any("✓ VALID" in str(call) for call in calls)
+        # Find the Panel call
+        panel_call = None
+        for call in calls:
+            if call.args and isinstance(call.args[0], Panel):
+                panel_call = call.args[0]
+                break
+        assert panel_call is not None
+        assert "✓ VALID" in panel_call.renderable
 
     def test_display_results_with_issues(self):
         """Test displaying results with issues."""
@@ -304,8 +333,22 @@ class TestConfigValidator:
         # Assert
         self.console.print.assert_called()
         # Check that error was displayed
+        from rich.panel import Panel
+        from rich.table import Table
+
         calls = self.console.print.call_args_list
-        assert any("✗ INVALID" in str(call) for call in calls)
+        # Find the Panel call
+        panel_found = False
+        table_found = False
+        for call in calls:
+            if call.args:
+                if isinstance(call.args[0], Panel):
+                    panel_found = True
+                    assert "✗ INVALID" in call.args[0].renderable
+                elif isinstance(call.args[0], Table):
+                    table_found = True
+        assert panel_found
+        assert table_found
 
 
 class TestConfigValidatorCLI:
