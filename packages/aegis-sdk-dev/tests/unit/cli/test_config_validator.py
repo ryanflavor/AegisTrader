@@ -235,6 +235,25 @@ class TestConfigValidator:
             assert issue is None
 
     @pytest.mark.asyncio
+    async def test_validate_k8s_environment_with_env_vars(self):
+        """Test K8s environment validation using environment variables."""
+        # Arrange - test line 115: K8s detection via env vars
+        with patch("os.path.exists", return_value=False):
+
+            def mock_getenv(var):
+                if var in ["KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT"]:
+                    return "value"
+                return None
+
+            with patch("os.getenv", side_effect=mock_getenv):
+                # Act
+                valid, issue = await self.validator.validate_k8s_environment()
+
+                # Assert
+                assert valid is True
+                assert issue is None
+
+    @pytest.mark.asyncio
     async def test_validate_k8s_environment_false(self):
         """Test K8s environment validation when not in K8s."""
         # Arrange

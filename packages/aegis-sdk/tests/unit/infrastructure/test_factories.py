@@ -1,5 +1,9 @@
 """Unit tests for infrastructure factory classes."""
 
+from unittest.mock import MagicMock
+
+import pytest
+
 from aegis_sdk.domain.models import Event, KVOptions, RPCRequest
 from aegis_sdk.infrastructure.factories import (
     DiscoveryRequestFactory,
@@ -7,6 +11,7 @@ from aegis_sdk.infrastructure.factories import (
     KVOptionsFactory,
     MessagePackSerializer,
     SerializationFactory,
+    create_service_dependencies,
 )
 
 
@@ -318,3 +323,214 @@ class TestDiscoveryRequestFactory:
         for method in methods:
             request = method()
             assert isinstance(request, dict)
+
+
+class TestCreateServiceDependencies:
+    """Tests for create_service_dependencies function."""
+
+    @pytest.fixture
+    def mock_message_bus(self):
+        """Create mock message bus."""
+        return MagicMock()
+
+    def test_create_with_defaults(self, mock_message_bus):
+        """Test creating dependencies with all defaults."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=True,
+            enable_registry=True,
+        )
+
+        # Should have logger, metrics, discovery, registry, and kv_store
+        assert "logger" in deps
+        assert "metrics" in deps
+        assert "service_discovery" in deps
+        assert "service_registry" in deps
+        assert "kv_store" in deps
+
+        # Check types
+        from aegis_sdk.infrastructure.basic_service_discovery import BasicServiceDiscovery
+        from aegis_sdk.infrastructure.in_memory_metrics import InMemoryMetrics
+        from aegis_sdk.infrastructure.kv_service_registry import KVServiceRegistry
+        from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
+        from aegis_sdk.infrastructure.simple_logger import SimpleLogger
+
+        assert isinstance(deps["logger"], SimpleLogger)
+        assert isinstance(deps["metrics"], InMemoryMetrics)
+        assert isinstance(deps["service_discovery"], BasicServiceDiscovery)
+        assert isinstance(deps["service_registry"], KVServiceRegistry)
+        assert isinstance(deps["kv_store"], NATSKVStore)
+
+    def test_create_with_custom_logger(self, mock_message_bus):
+        """Test creating dependencies with custom logger."""
+        custom_logger = MagicMock()
+        deps = create_service_dependencies(
+            mock_message_bus,
+            logger=custom_logger,
+            enable_discovery=False,
+            enable_registry=False,
+        )
+
+        assert deps["logger"] == custom_logger
+        assert "service_discovery" not in deps
+        assert "service_registry" not in deps
+
+    def test_create_with_custom_metrics(self, mock_message_bus):
+        """Test creating dependencies with custom metrics."""
+        custom_metrics = MagicMock()
+        deps = create_service_dependencies(
+            mock_message_bus,
+            metrics=custom_metrics,
+            enable_discovery=False,
+            enable_registry=False,
+        )
+
+        assert deps["metrics"] == custom_metrics
+
+    def test_create_discovery_only(self, mock_message_bus):
+        """Test creating dependencies with discovery only."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=True,
+            enable_registry=False,
+        )
+
+        assert "service_discovery" in deps
+        assert "service_registry" not in deps
+        assert "kv_store" not in deps
+
+        # Discovery should have a no-op registry
+        from aegis_sdk.infrastructure.basic_service_discovery import BasicServiceDiscovery
+
+        discovery = deps["service_discovery"]
+        assert isinstance(discovery, BasicServiceDiscovery)
+
+    def test_create_registry_only(self, mock_message_bus):
+        """Test creating dependencies with registry only."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=False,
+            enable_registry=True,
+        )
+
+        assert "service_discovery" not in deps
+        assert "service_registry" in deps
+        assert "kv_store" in deps  # Registry needs KV store
+
+    def test_create_minimal(self, mock_message_bus):
+        """Test creating minimal dependencies."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=False,
+            enable_registry=False,
+        )
+
+        # Should only have logger and metrics
+        assert "logger" in deps
+        assert "metrics" in deps
+        assert "service_discovery" not in deps
+        assert "service_registry" not in deps
+        assert "kv_store" not in deps
+
+    @pytest.mark.asyncio
+    async def test_noop_registry_methods(self, mock_message_bus):
+        """Test that NoOpRegistry methods work correctly."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=True,
+            enable_registry=False,
+        )
+
+        # Get the NoOpRegistry from discovery
+        discovery = deps["service_discovery"]
+        noop_registry = discovery._registry
+
+        # Test all methods return expected values
+        await noop_registry.register("service", "instance")
+        await noop_registry.deregister("service", "instance")
+        result = await noop_registry.get_instance("service", "instance")
+        assert result is None
+        instances = await noop_registry.list_instances("service")
+        assert instances == []
+
+    def test_create_with_all_custom_components(self, mock_message_bus):
+        """Test creating dependencies with all custom components."""
+        custom_logger = MagicMock()
+        custom_metrics = MagicMock()
+
+        deps = create_service_dependencies(
+            mock_message_bus,
+            logger=custom_logger,
+            metrics=custom_metrics,
+            enable_discovery=True,
+            enable_registry=True,
+        )
+
+        # Custom components should be used
+        assert deps["logger"] == custom_logger
+        assert deps["metrics"] == custom_metrics
+
+        # Other components should be created
+        assert "service_discovery" in deps
+        assert "service_registry" in deps
+        assert "kv_store" in deps
+
+    def test_imports_are_local(self, mock_message_bus):
+        """Test that imports inside function don't cause issues."""
+        # This tests that the local imports in the function work correctly
+        # even when called multiple times
+        deps1 = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=True,
+            enable_registry=True,
+        )
+
+        deps2 = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=True,
+            enable_registry=True,
+        )
+
+        # Should create different instances
+        assert deps1["logger"] is not deps2["logger"]
+        assert deps1["metrics"] is not deps2["metrics"]
+
+    def test_service_discovery_uses_provided_logger(self, mock_message_bus):
+        """Test that service discovery uses the provided logger."""
+        custom_logger = MagicMock()
+        deps = create_service_dependencies(
+            mock_message_bus,
+            logger=custom_logger,
+            enable_discovery=True,
+            enable_registry=False,
+        )
+
+        discovery = deps["service_discovery"]
+        # Check that discovery has the custom logger
+        assert discovery._logger == custom_logger
+
+    def test_service_registry_uses_provided_logger(self, mock_message_bus):
+        """Test that service registry uses the provided logger."""
+        custom_logger = MagicMock()
+        deps = create_service_dependencies(
+            mock_message_bus,
+            logger=custom_logger,
+            enable_discovery=False,
+            enable_registry=True,
+        )
+
+        registry = deps["service_registry"]
+        # Check that registry has the custom logger
+        assert registry._logger == custom_logger
+
+    def test_kv_store_uses_message_bus(self, mock_message_bus):
+        """Test that KV store uses the provided message bus."""
+        deps = create_service_dependencies(
+            mock_message_bus,
+            enable_discovery=False,
+            enable_registry=True,
+        )
+
+        kv_store = deps["kv_store"]
+        # Check that KV store has the message bus as adapter
+        assert kv_store._nats_adapter == mock_message_bus

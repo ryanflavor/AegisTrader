@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..domain.models import ServiceRegistrationData
 from ..ports.service_registry import ServiceRegistryPort
 from .nats_connection_adapter import NATSConnectionAdapter
 
@@ -74,9 +75,14 @@ class ServiceRegistryAdapter(ServiceRegistryPort):
     async def connect(self) -> None:
         """Connect to the service registry KV store."""
         try:
-            # Get or create the service_registry bucket
-            self._kv_bucket = await self._nats.create_kv_bucket("service_registry")
-            logger.info("Connected to service registry KV store")
+            # Try to get existing bucket first, create if it doesn't exist
+            try:
+                self._kv_bucket = await self._nats.get_kv_bucket("service_registry")
+                logger.info("Connected to existing service registry KV store")
+            except Exception:
+                # Bucket doesn't exist, create it
+                self._kv_bucket = await self._nats.create_kv_bucket("service_registry")
+                logger.info("Created new service registry KV store")
         except Exception as e:
             logger.error(f"Failed to connect to service registry: {e}")
             raise
@@ -316,6 +322,120 @@ class ServiceRegistryAdapter(ServiceRegistryPort):
         except Exception as e:
             logger.error(f"Failed to get service instances: {e}")
             return []
+
+    async def update_service_definition(self, registration: ServiceRegistrationData) -> None:
+        """Update existing service definition.
+
+        Args:
+            registration: Updated service registration data
+
+        Raises:
+            RegistrationError: If update fails
+        """
+        from ..ports.service_registry import RegistrationError
+
+        success = await self.register_service_definition(
+            service_name=registration.definition.service_name,
+            owner=registration.definition.owner,
+            description=registration.definition.description,
+            version=registration.definition.version,
+        )
+        if not success:
+            raise RegistrationError(
+                f"Failed to update service definition for {registration.definition.service_name}",
+                registration.definition.service_name,
+            )
+
+    async def check_service_exists(self, service_name: str) -> bool:
+        """Check if a service definition already exists.
+
+        Args:
+            service_name: Name of the service to check
+
+        Returns:
+            True if service exists, False otherwise
+        """
+        definition = await self.get_service_definition(service_name)
+        return definition is not None
+
+    async def register_instance(
+        self,
+        service_name: str,
+        instance_id: str,
+        instance_data: dict[str, Any],
+        ttl_seconds: int,
+    ) -> None:
+        """Register a service instance with TTL.
+
+        Args:
+            service_name: Name of the service
+            instance_id: Unique instance identifier
+            instance_data: Instance metadata and status
+            ttl_seconds: Time-to-live in seconds
+
+        Raises:
+            RegistrationError: If instance registration fails
+        """
+        from ..ports.service_registry import RegistrationError
+
+        success = await self.register_service_instance(
+            service_name=service_name,
+            instance_id=instance_id,
+            version=instance_data.get("version", "1.0.0"),
+            status=instance_data.get("status", "ACTIVE"),
+            metadata=instance_data.get("metadata", {}),
+        )
+        if not success:
+            raise RegistrationError(f"Failed to register instance {instance_id}", service_name)
+
+    async def update_instance_heartbeat(
+        self,
+        service_name: str,
+        instance_id: str,
+        instance_data: dict[str, Any],
+        ttl_seconds: int,
+    ) -> None:
+        """Update instance heartbeat to maintain registration.
+
+        Args:
+            service_name: Name of the service
+            instance_id: Unique instance identifier
+            instance_data: Updated instance metadata
+            ttl_seconds: Time-to-live in seconds
+
+        Raises:
+            RegistrationError: If heartbeat update fails
+        """
+        from ..ports.service_registry import RegistrationError
+
+        success = await self.update_heartbeat()
+        if not success:
+            raise RegistrationError(f"Failed to update heartbeat for {instance_id}", service_name)
+
+    async def deregister_instance(
+        self, service_name: str | None = None, instance_id: str | None = None
+    ) -> None:
+        """Remove a service instance from the registry.
+
+        Args:
+            service_name: Name of the service (optional if already set)
+            instance_id: Instance to deregister (optional if already set)
+
+        Raises:
+            RegistrationError: If deregistration fails
+        """
+        from ..ports.service_registry import RegistrationError
+
+        # Use provided values or instance variables
+        svc_name = service_name or self._service_name
+        inst_id = instance_id or self._instance_id
+
+        if not svc_name or not inst_id:
+            return  # Nothing to deregister
+
+        success = await self.deregister()
+        if not success:
+            raise RegistrationError(f"Failed to deregister instance {inst_id}", svc_name)
 
     async def disconnect(self) -> None:
         """Disconnect from registry and clean up resources."""

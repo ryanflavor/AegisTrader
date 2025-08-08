@@ -690,7 +690,6 @@ class NATSKVStore(KVStorePort):
             # Add config info if available
             if self._config:
                 result["config"] = {
-                    "enable_ttl": self._config.enable_ttl,
                     "max_value_size": self._config.max_value_size,
                     "history_size": self._config.history_size,
                 }

@@ -295,10 +295,10 @@ def create_service_dependencies(
         Dictionary with configured dependencies
     """
     from .basic_service_discovery import BasicServiceDiscovery
+    from .in_memory_metrics import InMemoryMetrics
     from .kv_service_registry import KVServiceRegistry
-    from .logger import SimpleLogger
-    from .metrics import InMemoryMetrics
     from .nats_kv_store import NATSKVStore
+    from .simple_logger import SimpleLogger
 
     deps: dict[str, Any] = {}
 
