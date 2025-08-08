@@ -1,7 +1,12 @@
-"""Domain services for Echo Service."""
+"""Domain services for Echo Service.
+
+This module contains domain services that encapsulate business logic
+not naturally belonging to any single entity or value object.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from .models import EchoMode, EchoRequest, EchoResponse
@@ -33,32 +38,35 @@ class EchoProcessor:
 
         # Process based on mode
         if request.mode == EchoMode.SIMPLE:
-            echo_message = request.message
+            echoed_message = request.message
+        elif request.mode == EchoMode.REVERSE:
+            echoed_message = request.message[::-1]
+        elif request.mode == EchoMode.UPPERCASE:
+            echoed_message = request.message.upper()
         elif request.mode == EchoMode.DELAYED:
-            # Simulate delay
-            import asyncio
-
-            await asyncio.sleep(request.delay_seconds)
-            echo_message = f"[Delayed {request.delay_seconds}s] {request.message}"
+            # Apply delay if specified
+            if request.delay > 0:
+                await asyncio.sleep(request.delay)
+            echoed_message = f"[Delayed {request.delay}s] {request.message}"
         elif request.mode == EchoMode.TRANSFORM:
-            echo_message = self._transform_message(request.message, request.transform_type)
+            echoed_message = self._transform_message(request.message, request.transform_type)
         elif request.mode == EchoMode.BATCH:
             # For batch mode, repeat the message
-            echo_message = " | ".join([request.message] * 3)
+            echoed_message = " | ".join([request.message] * 3)
         else:
-            echo_message = request.message
+            echoed_message = request.message
 
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
 
         # Build response
         response = EchoResponse(
-            echo=echo_message,
             original=request.message,
+            echoed=echoed_message,
             mode=request.mode,
             instance_id=self.instance_id,
-            sequence_number=self.sequence_counter,
             processing_time_ms=processing_time_ms,
+            sequence_number=self.sequence_counter,
             metadata={
                 "priority": request.priority.value,
                 "request_metadata": request.metadata,
@@ -124,7 +132,10 @@ class MetricsCollector:
         self.successful_requests = 0
         self.failed_requests = 0
         self.latencies: list[float] = []
-        self.mode_counts: dict[EchoMode, int] = dict.fromkeys(EchoMode, 0)
+        # Initialize mode counts properly
+        self.mode_counts: dict[EchoMode, int] = {}
+        for mode in EchoMode:
+            self.mode_counts[mode] = 0
         self.start_time = time.time()
 
     def record_request(self, mode: EchoMode, latency_ms: float, success: bool = True) -> None:

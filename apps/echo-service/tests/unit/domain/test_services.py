@@ -21,7 +21,7 @@ class TestEchoProcessor:
         response = await processor.process_echo(request)
 
         # Assert
-        assert response.echo == "Hello World"
+        assert response.echoed == "Hello World"
         assert response.original == "Hello World"
         assert response.mode == EchoMode.SIMPLE
         assert response.instance_id == "test-instance"
@@ -36,14 +36,14 @@ class TestEchoProcessor:
         request = EchoRequest(
             message="Test",
             mode=EchoMode.DELAYED,
-            delay_seconds=0.01,  # Small delay for testing
+            delay=0.01,  # Small delay for testing
         )
 
         # Act
         response = await processor.process_echo(request)
 
         # Assert
-        assert "[Delayed 0.01s] Test" in response.echo
+        assert "[Delayed 0.01s] Test" in response.echoed
         assert response.original == "Test"
         assert response.mode == EchoMode.DELAYED
         assert response.processing_time_ms >= 10  # At least 10ms due to delay
@@ -63,7 +63,7 @@ class TestEchoProcessor:
         response = await processor.process_echo(request)
 
         # Assert
-        assert response.echo == "HELLO"
+        assert response.echoed == "HELLO"
         assert response.original == "hello"
 
     @pytest.mark.asyncio
@@ -77,7 +77,7 @@ class TestEchoProcessor:
         response = await processor.process_echo(request)
 
         # Assert
-        assert response.echo == "olleh"
+        assert response.echoed == "olleh"
         assert response.original == "hello"
 
     @pytest.mark.asyncio
@@ -91,7 +91,7 @@ class TestEchoProcessor:
         response = await processor.process_echo(request)
 
         # Assert
-        assert response.echo == "Test | Test | Test"
+        assert response.echoed == "Test | Test | Test"
         assert response.mode == EchoMode.BATCH
 
     @pytest.mark.asyncio

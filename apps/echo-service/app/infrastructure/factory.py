@@ -10,12 +10,15 @@ import logging
 from typing import Any
 
 from aegis_sdk.developer import quick_setup
+from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
 
 from ..application.echo_service import EchoApplicationService
 from ..ports.configuration import ConfigurationPort
 from ..ports.service_bus import ServiceBusPort
+from ..ports.service_registry import ServiceRegistryPort
 from .aegis_service_bus_adapter import AegisServiceBusAdapter
 from .environment_configuration_adapter import EnvironmentConfigurationAdapter
+from .kv_service_registry_adapter import KVServiceRegistryAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +60,30 @@ class EchoServiceFactory:
             # Create service bus adapter
             service_bus = AegisServiceBusAdapter(aegis_service)
 
+            # Create KV store and service registry
+            service_registry = None
+            try:
+                # Access the NATS connection from the aegis service
+                if hasattr(aegis_service, "_bus") and hasattr(aegis_service._bus, "_conn"):
+                    nats_conn = aegis_service._bus._conn
+                    kv_store = NATSKVStore(
+                        conn=nats_conn,
+                        bucket="AEGIS_REGISTRY",  # Same bucket as monitor-api
+                    )
+                    await kv_store.initialize()
+                    service_registry = KVServiceRegistryAdapter(kv_store)
+                    logger.info("Service registry initialized successfully")
+                else:
+                    logger.warning("Could not access NATS connection for service registry")
+            except Exception as e:
+                logger.warning(f"Failed to initialize service registry: {e}")
+                # Continue without registry - non-critical for echo service
+
             # Create and return application service
             return EchoApplicationService(
                 service_bus=service_bus,
                 configuration=configuration,
+                service_registry=service_registry,
             )
 
         except Exception as e:
@@ -71,6 +94,7 @@ class EchoServiceFactory:
     def create_test_service(
         service_bus: ServiceBusPort,
         configuration: ConfigurationPort | None = None,
+        service_registry: ServiceRegistryPort | None = None,
         config_defaults: dict[str, Any] | None = None,
     ) -> EchoApplicationService:
         """Create a test echo service with injected dependencies.
@@ -95,16 +119,18 @@ class EchoServiceFactory:
                 test_defaults.update(config_defaults)
             configuration = EnvironmentConfigurationAdapter(defaults=test_defaults)
 
-        # Create and return application service
+        # Create and return application service with test registry
         return EchoApplicationService(
             service_bus=service_bus,
             configuration=configuration,
+            service_registry=service_registry,
         )
 
     @staticmethod
     async def create_with_custom_adapters(
         service_bus: ServiceBusPort,
         configuration: ConfigurationPort,
+        service_registry: ServiceRegistryPort | None = None,
     ) -> EchoApplicationService:
         """Create echo service with custom adapter implementations.
 
@@ -122,4 +148,5 @@ class EchoServiceFactory:
         return EchoApplicationService(
             service_bus=service_bus,
             configuration=configuration,
+            service_registry=service_registry,
         )

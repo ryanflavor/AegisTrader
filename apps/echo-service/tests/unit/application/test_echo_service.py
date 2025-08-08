@@ -14,7 +14,9 @@ class TestEchoApplicationService:
     def test_initialization(self, mock_service_bus, mock_configuration):
         """Test that the service initializes correctly."""
         # Act
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Assert
         assert service._service_bus == mock_service_bus
@@ -34,7 +36,9 @@ class TestEchoApplicationService:
     async def test_start(self, mock_service_bus, mock_configuration):
         """Test starting the application service."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Act
         await service.start()
@@ -47,7 +51,9 @@ class TestEchoApplicationService:
     async def test_stop(self, mock_service_bus, mock_configuration):
         """Test stopping the application service."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         await service.start()
 
         # Act
@@ -61,14 +67,16 @@ class TestEchoApplicationService:
     async def test_handle_echo_success(self, mock_service_bus, mock_configuration):
         """Test successful echo request handling."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         params = {"message": "Hello Test", "mode": "simple"}
 
         # Act
         result = await service._handle_echo(params)
 
         # Assert
-        assert "echo" in result
+        assert "echoed" in result
         assert "original" in result
         assert result["original"] == "Hello Test"
         assert result["instance_id"] == "test-instance-1"
@@ -78,7 +86,9 @@ class TestEchoApplicationService:
     async def test_handle_echo_invalid_request(self, mock_service_bus, mock_configuration):
         """Test echo request with invalid parameters."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         params = {}  # Missing required 'message' field
 
         # Act
@@ -93,7 +103,9 @@ class TestEchoApplicationService:
     async def test_handle_batch_echo(self, mock_service_bus, mock_configuration):
         """Test batch echo request handling."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         params = {"messages": ["First", "Second", "Third"]}
 
         # Act
@@ -110,7 +122,9 @@ class TestEchoApplicationService:
     async def test_handle_metrics(self, mock_service_bus, mock_configuration):
         """Test metrics endpoint handling."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Act
         result = await service._handle_metrics({})
@@ -126,7 +140,9 @@ class TestEchoApplicationService:
     async def test_handle_health(self, mock_service_bus, mock_configuration):
         """Test health check endpoint handling."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         await service.start()  # Sets NATS as connected
 
         # Act
@@ -144,7 +160,9 @@ class TestEchoApplicationService:
     async def test_handle_ping(self, mock_service_bus, mock_configuration):
         """Test ping endpoint handling."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
         params = {"timestamp": "2024-01-01T00:00:00"}
 
         # Act
@@ -159,7 +177,9 @@ class TestEchoApplicationService:
     async def test_handle_echo_generic_exception(self, mock_service_bus, mock_configuration):
         """Test echo request handling with generic exception."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Mock the use case to raise a generic exception
         from unittest.mock import AsyncMock
@@ -180,12 +200,12 @@ class TestEchoApplicationService:
     async def test_handle_batch_echo_with_error(self, mock_service_bus, mock_configuration):
         """Test batch echo with some messages failing."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Mock to fail on second message
         from unittest.mock import AsyncMock
-
-        original_execute = service._echo_use_case.execute
 
         async def execute_with_error(request):
             if request.message == "fail_this":
@@ -195,7 +215,7 @@ class TestEchoApplicationService:
 
             return EchoResponse(
                 original=request.message,
-                echo=request.message,
+                echoed=request.message,
                 mode=EchoMode.BATCH,
                 processing_time_ms=1.0,
                 sequence_number=1,
@@ -224,7 +244,9 @@ class TestEchoApplicationService:
     async def test_handle_metrics_exception(self, mock_service_bus, mock_configuration):
         """Test metrics endpoint with exception."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Mock the use case to raise exception
         from unittest.mock import AsyncMock
@@ -242,7 +264,9 @@ class TestEchoApplicationService:
     async def test_handle_health_exception(self, mock_service_bus, mock_configuration):
         """Test health endpoint with exception."""
         # Arrange
-        service = EchoApplicationService(mock_service_bus, mock_configuration)
+        service = EchoApplicationService(
+            mock_service_bus, mock_configuration, service_registry=None
+        )
 
         # Mock the use case to raise exception
         from unittest.mock import AsyncMock

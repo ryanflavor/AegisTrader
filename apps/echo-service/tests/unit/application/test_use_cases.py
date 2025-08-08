@@ -41,7 +41,7 @@ class TestEchoUseCase:
         )
         response = EchoResponse(
             original="test",
-            echo="test",
+            echoed="test",
             mode=EchoMode.SIMPLE,
             processing_time_ms=10.5,
             sequence_number=1,
@@ -137,7 +137,6 @@ class TestGetMetricsUseCase:
     async def test_execute_with_last_request(self, use_case):
         """Test getting metrics after recording last request time."""
         # Update last request time
-        test_time = datetime.now(UTC)
         use_case.update_last_request_time()
 
         # Execute
