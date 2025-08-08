@@ -1,4 +1,9 @@
-"""Factory for creating infrastructure adapters."""
+"""Factory for creating infrastructure adapters following hexagonal architecture.
+
+This module implements the Abstract Factory pattern to provide centralized
+creation of infrastructure adapters. It ensures proper dependency injection
+and supports easy substitution of test doubles for testing.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +26,12 @@ from aegis_sdk_dev.ports.process import ProcessExecutorPort
 
 
 class InfrastructureFactory:
-    """Factory for creating infrastructure adapters following hexagonal architecture."""
+    """Factory for creating infrastructure adapters following hexagonal architecture.
+
+    This factory provides a centralized way to create infrastructure adapters
+    that implement the defined ports. It ensures proper separation of concerns
+    and enables easy dependency injection for testing.
+    """
 
     @staticmethod
     def create_console(console: Console | None = None) -> ConsolePort:

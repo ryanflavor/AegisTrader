@@ -1,4 +1,9 @@
-"""Comprehensive edge case tests for ConsoleAdapter following TDD principles."""
+"""Comprehensive edge case tests for ConsoleAdapter following TDD and hexagonal architecture.
+
+These tests verify the adapter's behavior at architectural boundaries, focusing on
+edge cases and error conditions. Following hexagonal architecture, we test the
+adapter's implementation of the ConsolePort interface.
+"""
 
 from __future__ import annotations
 
@@ -7,37 +12,50 @@ from unittest.mock import Mock, patch
 import pytest
 from rich.console import Console
 
-from aegis_sdk_dev.infrastructure.console_adapter import ConsoleAdapter
+from aegis_sdk_dev.infrastructure.factory import InfrastructureFactory
+from aegis_sdk_dev.ports.console import ConsolePort
 
 
 class TestConsoleAdapterEdgeCases:
-    """Test ConsoleAdapter edge cases and error conditions."""
+    """Test ConsoleAdapter edge cases and error conditions.
+
+    These tests follow the AAA (Arrange-Act-Assert) pattern and focus on
+    testing behavior at the port boundary rather than implementation details.
+    """
 
     def setup_method(self):
-        """Set up test fixtures."""
+        """Set up test fixtures using factory pattern."""
+        # Arrange: Create mock console and adapter through factory
         self.mock_console = Mock(spec=Console)
-        self.adapter = ConsoleAdapter(console=self.mock_console)
+        self.adapter = InfrastructureFactory.create_console(console=self.mock_console)
+
+        # Verify adapter implements the port interface
+        assert isinstance(self.adapter, ConsolePort)
 
     # Test initialization edge cases
     def test_init_with_none_console_creates_default(self):
         """Test adapter creates default console when None provided."""
-        # Arrange & Act
-        adapter = ConsoleAdapter(console=None)
+        # Arrange & Act: Use factory to create adapter with default console
+        adapter = InfrastructureFactory.create_console(console=None)
 
-        # Assert
-        assert adapter._console is not None
-        assert isinstance(adapter._console, Console)
+        # Assert: Verify adapter is properly initialized
+        assert adapter is not None
+        assert isinstance(adapter, ConsolePort)
+        # Note: We don't test internal _console attribute (implementation detail)
 
     def test_init_with_custom_console(self):
         """Test adapter uses provided console instance."""
         # Arrange
         custom_console = Mock(spec=Console)
 
-        # Act
-        adapter = ConsoleAdapter(console=custom_console)
+        # Act: Create adapter through factory
+        adapter = InfrastructureFactory.create_console(console=custom_console)
 
-        # Assert
-        assert adapter._console is custom_console
+        # Test behavior to verify correct console is used
+        adapter.print("test")
+
+        # Assert: Verify the custom console was called
+        custom_console.print.assert_called_once_with("test")
 
     # Test print method edge cases
     def test_print_with_empty_string(self):
@@ -49,9 +67,12 @@ class TestConsoleAdapterEdgeCases:
         self.mock_console.print.assert_called_once_with("")
 
     def test_print_with_none_message_raises(self):
-        """Test printing None raises TypeError."""
-        # Act & Assert
-        with pytest.raises(TypeError):
+        """Test printing None raises TypeError.
+
+        This validates input validation at the port boundary.
+        """
+        # Act & Assert: Verify type safety is enforced
+        with pytest.raises(TypeError, match="cannot be None"):
             self.adapter.print(None)
 
     def test_print_with_very_long_message(self):
@@ -194,16 +215,19 @@ class TestConsoleAdapterEdgeCases:
         self.mock_console.print.assert_called_once()
 
     def test_print_table_with_none_values(self):
-        """Test table with None values in cells."""
+        """Test table with None values in cells.
+
+        Verifies graceful handling of None values in table data.
+        """
         # Arrange
         headers = ["Name", "Value"]
         rows = [["Item1", None], [None, "Value2"]]
 
-        # Act - should handle None gracefully by converting to empty strings
-        # No exception should be raised
+        # Act: Should handle None gracefully by converting to empty strings
         self.adapter.print_table(headers, rows)
 
-        # Assert - test passes if no exception is raised
+        # Assert: Verify print was called (no exception raised)
+        self.mock_console.print.assert_called_once()
 
     def test_print_table_with_very_long_content(self):
         """Test table with very long content in cells."""
@@ -240,9 +264,12 @@ class TestConsoleAdapterEdgeCases:
         self.mock_console.print.assert_called_once()
 
     def test_print_panel_with_none_content_raises(self):
-        """Test panel with None content raises error."""
-        # Act & Assert
-        with pytest.raises(TypeError):
+        """Test panel with None content raises error.
+
+        Validates type safety at the port boundary.
+        """
+        # Act & Assert: Verify input validation
+        with pytest.raises(TypeError, match="cannot be None"):
             self.adapter.print_panel(None)
 
     def test_print_panel_with_invalid_style(self):
@@ -370,10 +397,13 @@ class TestConsoleAdapterEdgeCases:
         self.adapter.print_success("Third")  # Should succeed
 
     def test_console_closed_state(self):
-        """Test operations when console is in closed/invalid state."""
-        # Arrange
+        """Test operations when console is in closed/invalid state.
+
+        Tests error propagation from infrastructure layer.
+        """
+        # Arrange: Simulate infrastructure failure
         self.mock_console.print.side_effect = RuntimeError("Console is closed")
 
-        # Act & Assert
+        # Act & Assert: Verify error is properly propagated
         with pytest.raises(RuntimeError, match="Console is closed"):
             self.adapter.print("Test")
