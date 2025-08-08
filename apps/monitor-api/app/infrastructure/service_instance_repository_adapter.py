@@ -95,8 +95,8 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
             List of service instances for the specified service
         """
         try:
-            # Build pattern for this service (SDK uses dot notation)
-            pattern = f"{self._prefix}{service_name}."
+            # Build pattern for this service (SDK uses __ as separator)
+            pattern = f"{self._prefix}{service_name}__"
 
             # List all keys matching the pattern
             all_keys = await self._kv.keys()
@@ -186,7 +186,7 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
             except ValueError:
                 # Return None if parsing fails
                 return None
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             # Handle Unix timestamp
             return datetime.fromtimestamp(value)
         # Return None for unknown formats
@@ -239,8 +239,8 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
             KVStoreException: If retrieval fails
         """
         try:
-            # Build the key for this specific instance
-            key = f"{self._prefix}{service_name}.{instance_id}"
+            # Build the key for this specific instance (SDK uses __ as separator)
+            key = f"{self._prefix}{service_name}__{instance_id}"
 
             # Get the value from KV Store
             entry = await self._kv.get(key)
@@ -271,6 +271,13 @@ class ServiceInstanceRepositoryAdapter(ServiceInstanceRepositoryPort):
             logger.warning(f"Failed to parse instance data for {service_name}/{instance_id}: {e}")
             return None
         except Exception as e:
+            # Check if this is a "key not found" error from NATS
+            error_msg = str(e).lower()
+            if "key not found" in error_msg or "not found" in error_msg:
+                logger.debug(f"Instance not found in KV store: {service_name}/{instance_id}")
+                return None
+
+            # For other exceptions, log and re-raise
             logger.error(f"Failed to get instance {service_name}/{instance_id}: {e}")
             raise KVStoreException(f"Failed to get instance: {e}") from e
 
