@@ -2,7 +2,7 @@
 
 This factory follows the Factory Pattern to decouple the application core from
 concrete infrastructure implementations, enabling easy swapping for testing.
-Uses aegis-sdk-dev patterns for clean hexagonal architecture.
+Uses aegis-sdk components for clean hexagonal architecture.
 """
 
 from __future__ import annotations
@@ -12,14 +12,21 @@ import os
 import uuid
 from typing import Any
 
+from aegis_sdk.domain.value_objects import InstanceId, ServiceName
+from aegis_sdk.infrastructure import (
+    KVServiceRegistry,
+    NATSAdapter,
+    NATSConnectionConfig,
+    NATSKVStore,
+)
+
 from ..application.echo_service import EchoApplicationService
 from ..ports.configuration import ConfigurationPort
 from ..ports.service_bus import ServiceBusPort
 from ..ports.service_registry import ServiceRegistryPort
+from .aegis_service_bus_adapter import AegisServiceBusAdapter
 from .environment_configuration_adapter import EnvironmentConfigurationAdapter
-from .nats_connection_adapter import NATSConnectionAdapter, NATSConnectionConfig
-from .service_bus_adapter import ServiceBusAdapter
-from .service_registry_adapter import ServiceRegistryAdapter
+from .kv_registry_adapter import KVRegistryAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -44,60 +51,75 @@ class EchoServiceFactory:
             # Log environment detection
             in_k8s = configuration.is_kubernetes_environment()
             instance_id = configuration.get_instance_id()
+            service_name = configuration.get_service_name()
+            version = configuration.get_service_version()
 
             logger.info(
                 f"Environment Detection:\n"
                 f"  Running in Kubernetes: {in_k8s}\n"
                 f"  Instance ID: {instance_id}\n"
-                f"  Service Name: {configuration.get_service_name()}\n"
-                f"  Version: {configuration.get_service_version()}\n"
+                f"  Service Name: {service_name}\n"
+                f"  Version: {version}\n"
                 f"  NATS URL: {configuration.get_nats_url() or 'auto-detect'}"
             )
 
-            # Create NATS connection configuration
+            # Create NATS connection configuration using SDK
             nats_config = NATSConnectionConfig(
-                url=configuration.get_nats_url(),
-                name=f"{configuration.get_service_name()}-{instance_id}",
+                servers=[configuration.get_nats_url()] if configuration.get_nats_url() else None,
+                name=f"{service_name}-{instance_id}",
+                service_name=ServiceName(service_name),
+                instance_id=InstanceId(instance_id),
                 connect_timeout=5.0,
                 reconnect_time_wait=2.0,
                 max_reconnect_attempts=60,
+                enable_jetstream=True,
             )
 
-            # Create NATS adapter and connect
-            nats_adapter = NATSConnectionAdapter(nats_config)
+            # Create SDK's NATS adapter and connect
+            nats_adapter = NATSAdapter(config=nats_config)
             await nats_adapter.connect()
-            logger.info("NATS connection established")
+            logger.info("NATS connection established using SDK")
 
-            # Create service bus adapter
-            service_bus = ServiceBusAdapter(
+            # Create KV store for service registry
+            kv_store = NATSKVStore(
                 nats_adapter=nats_adapter,
-                service_name=configuration.get_service_name(),
+                bucket_name="service_registry",
+                ttl_seconds=30,  # 30 second TTL for heartbeats
             )
+            await kv_store.initialize()
 
-            # Create service registry adapter
-            service_registry = ServiceRegistryAdapter(nats_adapter)
+            # Create SDK's KV-based service registry with auto re-registration
+            kv_service_registry = KVServiceRegistry(kv_store=kv_store)
 
-            # Register service definition
-            await service_registry.register_service_definition(
-                service_name=configuration.get_service_name(),
-                owner="Echo Team",
-                description="Echo service for testing and demonstration",
-                version=configuration.get_service_version(),
-            )
-
-            # Register service instance
-            await service_registry.register_service_instance(
-                service_name=configuration.get_service_name(),
+            # Create our adapter that wraps the SDK registry
+            service_registry = KVRegistryAdapter(
+                kv_registry=kv_service_registry,
+                service_name=service_name,
                 instance_id=instance_id,
-                version=configuration.get_service_version(),
-                status="ACTIVE",
-                metadata={
-                    "environment": "kubernetes" if in_k8s else "local",
-                    "nats_url": configuration.get_nats_url(),
-                },
             )
 
-            logger.info("Service registered successfully")
+            # Register service instance with metadata
+            await service_registry.register_instance(
+                service_name=service_name,
+                instance_id=instance_id,
+                instance_data={
+                    "version": version,
+                    "status": "ACTIVE",
+                    "metadata": {
+                        "environment": "kubernetes" if in_k8s else "local",
+                        "nats_url": configuration.get_nats_url() or "auto",
+                    },
+                },
+                ttl_seconds=30,  # 30 second TTL for auto-expiry
+            )
+            logger.info("Service registered with auto re-registration support")
+
+            # Create service bus adapter wrapping SDK's NATS adapter
+            service_bus = AegisServiceBusAdapter(
+                nats_adapter=nats_adapter,
+                service_name=service_name,
+                instance_id=instance_id,
+            )
 
             # Create and return application service
             return EchoApplicationService(

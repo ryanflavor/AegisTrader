@@ -244,7 +244,15 @@ class EchoApplicationService:
         # Deregister instance if registry is available
         if self._service_registry:
             try:
-                await self._service_registry.deregister_instance()
+                # Use the simplified deregister method if available
+                if hasattr(self._service_registry, "deregister"):
+                    await self._service_registry.deregister()
+                else:
+                    # Fallback to the full deregister method
+                    await self._service_registry.deregister_instance(
+                        service_name=self._configuration.get_service_name(),
+                        instance_id=self._configuration.get_instance_id(),
+                    )
             except Exception as e:
                 logger.warning(f"Failed to deregister instance: {e}")
 
@@ -267,17 +275,28 @@ class EchoApplicationService:
     async def update_heartbeat(self) -> None:
         """Update service heartbeat in registry.
 
-        The heartbeat is now handled automatically by the ServiceRegistryAdapter.
-        This method is kept for compatibility but delegates to the registry's
-        built-in heartbeat mechanism.
+        The KVRegistryAdapter wraps the SDK's KVServiceRegistry which
+        supports automatic re-registration if the instance expires.
         """
         if not self._service_registry:
             return
 
         try:
-            # The ServiceRegistryAdapter handles heartbeat automatically
-            success = await self._service_registry.update_heartbeat()
-            if not success:
-                logger.warning("Heartbeat update failed")
+            # Use the simplified heartbeat method from KVRegistryAdapter
+            if hasattr(self._service_registry, "update_heartbeat"):
+                success = await self._service_registry.update_heartbeat()
+                if not success:
+                    logger.warning("Heartbeat update failed")
+            else:
+                # Fallback to the full heartbeat update
+                await self._service_registry.update_instance_heartbeat(
+                    service_name=self._configuration.get_service_name(),
+                    instance_id=self._configuration.get_instance_id(),
+                    instance_data={
+                        "version": self._configuration.get_service_version(),
+                        "status": "ACTIVE",
+                    },
+                    ttl_seconds=30,
+                )
         except Exception as e:
             logger.debug(f"Failed to update heartbeat: {e}")
