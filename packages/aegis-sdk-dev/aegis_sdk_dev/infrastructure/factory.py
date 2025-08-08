@@ -17,12 +17,14 @@ from aegis_sdk_dev.infrastructure.environment_adapter import EnvironmentAdapter
 from aegis_sdk_dev.infrastructure.file_system_adapter import FileSystemAdapter
 from aegis_sdk_dev.infrastructure.nats_adapter import NATSConnectionAdapter
 from aegis_sdk_dev.infrastructure.process_executor_adapter import ProcessExecutorAdapter
+from aegis_sdk_dev.infrastructure.template_generators import EnterpriseDDDGenerators
 from aegis_sdk_dev.ports.configuration import ConfigurationPort
 from aegis_sdk_dev.ports.console import ConsolePort
 from aegis_sdk_dev.ports.environment import EnvironmentPort
 from aegis_sdk_dev.ports.file_system import FileSystemPort
 from aegis_sdk_dev.ports.nats import NATSConnectionPort
 from aegis_sdk_dev.ports.process import ProcessExecutorPort
+from aegis_sdk_dev.ports.template_generator import TemplateGeneratorPort
 
 
 class InfrastructureFactory:
@@ -90,6 +92,15 @@ class InfrastructureFactory:
         """
         return ProcessExecutorAdapter()
 
+    @staticmethod
+    def create_template_generator() -> TemplateGeneratorPort:
+        """Create a template generator adapter.
+
+        Returns:
+            TemplateGeneratorPort implementation
+        """
+        return EnterpriseDDDGenerators()
+
     @classmethod
     def create_all_adapters(cls, console: Console | None = None) -> dict[str, Any]:
         """Create all infrastructure adapters.
@@ -107,4 +118,5 @@ class InfrastructureFactory:
             "configuration": cls.create_configuration(),
             "nats": cls.create_nats_connection(),
             "process": cls.create_process_executor(),
+            "template_generator": cls.create_template_generator(),
         }

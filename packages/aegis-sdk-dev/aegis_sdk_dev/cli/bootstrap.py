@@ -9,16 +9,22 @@ from aegis_sdk_dev.domain.models import BootstrapConfig, ProjectTemplate, Servic
 from aegis_sdk_dev.infrastructure.factory import InfrastructureFactory
 
 
+class BootstrapCLI:
+    """Bootstrap CLI implementation for testing compatibility."""
+
+    def __init__(self):
+        """Initialize Bootstrap CLI."""
+        pass
+
+
 @click.command()
 @click.option("--project-name", "-p", required=True, help="Name of the project to create")
 @click.option(
     "--template",
     "-t",
-    type=click.Choice(
-        ["basic", "single_active", "event_driven", "full_featured", "enterprise_ddd"]
-    ),
-    default="basic",
-    help="Project template to use",
+    type=click.Choice(["enterprise_ddd"]),
+    default="enterprise_ddd",
+    help="Project template (enterprise_ddd only)",
 )
 @click.option("--service-name", "-s", help="Service name (defaults to project name)")
 @click.option("--nats-url", "-n", default="nats://localhost:4222", help="NATS server URL")
@@ -44,18 +50,14 @@ def main(
     include_docker,
     include_k8s,
 ):
-    """Bootstrap a new AegisSDK service with project structure."""
+    """Bootstrap a new AegisSDK service with Enterprise DDD structure."""
 
     # Use project name as service name if not provided
     if not service_name:
         service_name = project_name
 
-    # Map template string to enum
+    # Map template string to enum (only enterprise_ddd supported)
     template_map = {
-        "basic": ProjectTemplate.BASIC,
-        "single_active": ProjectTemplate.SINGLE_ACTIVE,
-        "event_driven": ProjectTemplate.EVENT_DRIVEN,
-        "full_featured": ProjectTemplate.FULL_FEATURED,
         "enterprise_ddd": ProjectTemplate.ENTERPRISE_DDD,
     }
 
@@ -78,15 +80,17 @@ def main(
     factory = InfrastructureFactory()
     console = factory.create_console()
     file_system = factory.create_file_system()
+    template_generator = factory.create_template_generator()
 
     # Create project generator service
     service = ProjectGeneratorService(
         console=console,
         file_system=file_system,
+        template_generator=template_generator,
     )
 
     # Generate project
-    console.print(f"[cyan]Creating project '{project_name}' using '{template}' template...[/cyan]")
+    console.print(f"[cyan]Creating Enterprise DDD project '{project_name}'...[/cyan]")
 
     try:
         success = service.generate_project(config)

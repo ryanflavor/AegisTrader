@@ -10,7 +10,7 @@ from aegis_sdk_dev.ports.console import ConsolePort
 from aegis_sdk_dev.ports.process import ProcessExecutorPort
 
 
-class TestExecutionService:
+class TestRunnerApplicationService:
     """Application service for test execution use cases."""
 
     def __init__(
@@ -205,3 +205,7 @@ class TestExecutionService:
 
         all_available = len(missing) == 0
         return all_available, missing
+
+
+# Alias for backward compatibility
+TestExecutionService = TestRunnerApplicationService

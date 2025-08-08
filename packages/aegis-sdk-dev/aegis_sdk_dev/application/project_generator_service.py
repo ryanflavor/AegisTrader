@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aegis_sdk_dev.domain.models import BootstrapConfig
-from aegis_sdk_dev.domain.services import ProjectGenerator
+from aegis_sdk_dev.domain.simple_project_generator import SimpleProjectGenerator
 from aegis_sdk_dev.ports.console import ConsolePort
 from aegis_sdk_dev.ports.file_system import FileSystemPort
 
@@ -15,16 +15,18 @@ class ProjectGeneratorService:
         self,
         console: ConsolePort,
         file_system: FileSystemPort,
+        template_generator=None,
     ):
         """Initialize project generator service.
 
         Args:
             console: Console port for user interaction
             file_system: File system port for file operations
+            template_generator: Optional template generator for enterprise DDD templates
         """
         self._console = console
         self._file_system = file_system
-        self._generator = ProjectGenerator()
+        self._generator = SimpleProjectGenerator(template_generator)
 
     def generate_project(self, config: BootstrapConfig) -> bool:
         """Generate a new project based on configuration.
@@ -41,7 +43,7 @@ class ProjectGeneratorService:
 
         try:
             # Generate file structure
-            files = self._generator.generate_project_structure(config)
+            files = self._generator.generate_project(config)
 
             # Create directories and write files
             for file_path, content in files.items():
@@ -131,9 +133,10 @@ class ProjectGeneratorService:
         # Check for __init__.py files in Python packages
         for dir_name in required_dirs:
             init_file = f"{project_path}/{dir_name}/__init__.py"
-            if self._file_system.path_exists(f"{project_path}/{dir_name}"):
-                if not self._file_system.path_exists(init_file):
-                    issues.append(f"Missing __init__.py in {dir_name}")
+            if self._file_system.path_exists(
+                f"{project_path}/{dir_name}"
+            ) and not self._file_system.path_exists(init_file):
+                issues.append(f"Missing __init__.py in {dir_name}")
 
         is_valid = len(issues) == 0
         return is_valid, issues

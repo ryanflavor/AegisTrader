@@ -1,7 +1,5 @@
 """Unit tests for Bootstrap CLI following TDD principles."""
 
-from unittest.mock import patch
-
 from click.testing import CliRunner
 
 from aegis_sdk_dev.cli.bootstrap import BootstrapCLI, main
@@ -29,13 +27,16 @@ class TestBootstrapCLI:
 
     def test_main_command_execution(self):
         """Test main command executes successfully."""
-        # Act
-        result = self.runner.invoke(main)
+        # Act - project-name is required now
+        with self.runner.isolated_filesystem():
+            result = self.runner.invoke(main, ["--project-name", "test-project"])
 
         # Assert
         assert result.exit_code == 0
-        assert "Bootstrap service" in result.output
-        assert "aegis-sdk-examples" in result.output
+        assert (
+            "Enterprise DDD project" in result.output
+            or "Project 'test-project' created successfully" in result.output
+        )
 
     def test_main_command_help(self):
         """Test main command help text."""
@@ -47,17 +48,24 @@ class TestBootstrapCLI:
         assert "Bootstrap a new AegisSDK service" in result.output
         assert "Show this message and exit" in result.output
 
-    @patch("aegis_sdk_dev.cli.bootstrap.click.echo")
-    def test_main_command_output(self, mock_echo):
-        """Test that main command produces expected output."""
+    def test_main_command_with_options(self):
+        """Test that main command accepts various options."""
         # Act
-        result = self.runner.invoke(main)
+        with self.runner.isolated_filesystem():
+            result = self.runner.invoke(
+                main,
+                [
+                    "--project-name",
+                    "test-project",
+                    "--template",
+                    "enterprise_ddd",
+                    "--service-name",
+                    "test-service",
+                ],
+            )
 
         # Assert
         assert result.exit_code == 0
-        mock_echo.assert_called_once_with(
-            "Bootstrap service - see aegis-sdk-examples for templates"
-        )
 
     def test_bootstrap_cli_class_empty(self):
         """Test BootstrapCLI class has no methods yet."""
@@ -67,11 +75,12 @@ class TestBootstrapCLI:
         # Assert - should be empty as the class is a placeholder
         assert len(methods) == 0
 
-    def test_main_command_no_arguments(self):
-        """Test main command requires no arguments."""
-        # Act
-        result = self.runner.invoke(main, ["unexpected-arg"])
+    def test_main_command_requires_project_name(self):
+        """Test main command requires project-name option."""
+        # Act - call without required --project-name
+        result = self.runner.invoke(main, [])
 
-        # Assert - Click should handle unexpected arguments
+        # Assert - should fail without required argument
         assert result.exit_code != 0
+        assert "--project-name" in result.output or "Missing option" in result.output
         assert "Error" in result.output or "Usage" in result.output
