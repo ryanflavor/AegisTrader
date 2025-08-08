@@ -6,17 +6,15 @@ following the repository pattern for clean separation of concerns.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from ..domain.models import ServiceInstance
 
 
-class ServiceInstanceRepositoryPort(ABC):
-    """Abstract interface for service instance repository operations."""
+class ServiceInstanceRepositoryPort(Protocol):
+    """Protocol interface for service instance repository operations."""
 
-    @abstractmethod
     async def get_all_instances(self) -> list[ServiceInstance]:
         """Retrieve all service instances.
 
@@ -28,7 +26,6 @@ class ServiceInstanceRepositoryPort(ABC):
         """
         ...
 
-    @abstractmethod
     async def get_instances_by_service(self, service_name: str) -> list[ServiceInstance]:
         """Retrieve all instances of a specific service.
 
@@ -43,7 +40,6 @@ class ServiceInstanceRepositoryPort(ABC):
         """
         ...
 
-    @abstractmethod
     async def get_instance(self, service_name: str, instance_id: str) -> ServiceInstance | None:
         """Retrieve a specific service instance.
 
@@ -59,7 +55,6 @@ class ServiceInstanceRepositoryPort(ABC):
         """
         ...
 
-    @abstractmethod
     async def count_active_instances(self) -> int:
         """Count the number of active service instances.
 
@@ -71,7 +66,6 @@ class ServiceInstanceRepositoryPort(ABC):
         """
         ...
 
-    @abstractmethod
     async def get_instances_by_status(self, status: str) -> list[ServiceInstance]:
         """Retrieve all instances with a specific status.
 

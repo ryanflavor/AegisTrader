@@ -20,6 +20,11 @@ nats:
       memoryStore:
         enabled: false
         maxSize: 0
+  # KV Store configuration
+  kvStore:
+    # TTL for service registry entries (in seconds)
+    # This controls how long services remain in registry after last heartbeat
+    ttlSeconds: 30
   container:
     merge:
       resources:
@@ -37,7 +42,7 @@ monitor-api:
   image:
     repository: aegistrader-monitor-api
     pullPolicy: IfNotPresent
-    tag: "20250804-114418"
+    tag: "20250807-191635"
   service:
     port: 8100
   containerPort: 8100
@@ -73,7 +78,7 @@ monitor-ui:
   image:
     repository: aegistrader-monitor-ui
     pullPolicy: IfNotPresent
-    tag: "20250804-114418"
+    tag: "20250807-191635"
   service:
     type: ClusterIP
     port: 3100
@@ -89,11 +94,66 @@ monitor-ui:
       cpu: 300m
       memory: 512Mi
 
-# Trading services configuration - TO BE IMPLEMENTED
-# vnpy-based services will be added here:
-# - market-data-service
-# - trading-service
-# - algo-service
+# Echo Service - SDK showcase
+echo-service:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: aegis-echo-service
+    pullPolicy: IfNotPresent
+    tag: "20250807-191635"
+  service:
+    port: 8080
+  containerPort: 8080
+  # Disable health checks since this is an RPC service
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  configMap:
+    data:
+      SERVICE_NAME: "echo-service"
+      NATS_URL: "nats://aegis-trader-nats:4222"
+      SERVICE_VERSION: "1.0.0"
+      LOG_LEVEL: "INFO"
+  env:
+    - name: INSTANCE_ID
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+  initContainers:
+    - name: wait-for-nats
+      image: busybox:1.36
+      command: ['sh', '-c']
+      args: ['until nc -z aegis-trader-nats 4222; do echo "Waiting for NATS..."; sleep 2; done']
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+
+# Trading services configuration - DISABLED FOR NOW
+order-service:
+  enabled: false
+
+pricing-service:
+  enabled: false
+
+risk-service:
+  enabled: false
 
 # Post-install configuration
 postInstall:

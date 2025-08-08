@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://aegis-trader-monitor-api:8100'
+// Use runtime environment variable (not NEXT_PUBLIC_ which is build-time)
+// This ensures the server-side proxy uses the correct internal K8s service URL
+const API_BASE_URL = process.env.API_URL || 'http://aegis-trader-monitor-api:8100'
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   request: NextRequest,
@@ -28,6 +33,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/json',
       },
+      cache: 'no-store',
     })
 
     const data = await response.json()
@@ -36,7 +42,9 @@ export async function GET(
     return NextResponse.json(data, {
       status: response.status,
       headers: {
-        'Cache-Control': 'no-store',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     })
   } catch (error) {

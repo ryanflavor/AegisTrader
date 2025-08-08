@@ -22,7 +22,7 @@ class TestNatsKvElectionRepository:
         """Test successful leadership acquisition."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -52,7 +52,7 @@ class TestNatsKvElectionRepository:
         """Test leadership acquisition when another leader exists."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -96,7 +96,7 @@ class TestNatsKvElectionRepository:
         """Test updating leadership heartbeat."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -136,7 +136,7 @@ class TestNatsKvElectionRepository:
         """Test updating leadership when not the leader."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -168,7 +168,7 @@ class TestNatsKvElectionRepository:
         """Test voluntary leadership release."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -202,7 +202,7 @@ class TestNatsKvElectionRepository:
         """Test detection of expired leader."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -238,7 +238,7 @@ class TestNatsKvElectionRepository:
         """Test watching for leadership changes."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -306,7 +306,7 @@ class TestNatsKvElectionRepository:
         """Test saving and restoring election aggregate state."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -356,7 +356,7 @@ class TestNatsKvElectionRepository:
         """Test multiple instances attempting election concurrently."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 
@@ -400,7 +400,7 @@ class TestNatsKvElectionRepository:
         """Test elections in different service groups."""
         # Setup
         kv_store = NATSKVStore(nats_adapter)
-        await kv_store.connect("test_election", enable_ttl=True)
+        await kv_store.connect("test_election")
 
         repo = NatsKvElectionRepository(kv_store)
 

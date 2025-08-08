@@ -6,19 +6,18 @@ following Interface Segregation Principle.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from typing import Protocol
 
 from ..domain.models import ServiceDefinition
 
 
-class ServiceRegistryKVStorePort(ABC):
-    """Port interface for service registry KV store operations.
+class ServiceRegistryKVStorePort(Protocol):
+    """Protocol interface for service registry KV store operations.
 
     This interface defines only the operations needed by the service registry,
     ensuring a clean separation between domain needs and infrastructure capabilities.
     """
 
-    @abstractmethod
     async def connect(self, nats_url: str) -> None:
         """Connect to the KV store.
 
@@ -30,12 +29,10 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def disconnect(self) -> None:
         """Disconnect from the KV store."""
         ...
 
-    @abstractmethod
     async def get(self, key: str) -> ServiceDefinition | None:
         """Retrieve a service definition by key.
 
@@ -50,7 +47,6 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def put(self, key: str, value: ServiceDefinition) -> None:
         """Store a service definition.
 
@@ -64,7 +60,6 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def update(self, key: str, value: ServiceDefinition, revision: int | None = None) -> None:
         """Update an existing service definition.
 
@@ -80,7 +75,6 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete a service definition.
 
@@ -93,7 +87,6 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def list_all(self) -> list[ServiceDefinition]:
         """List all service definitions.
 
@@ -105,7 +98,6 @@ class ServiceRegistryKVStorePort(ABC):
         """
         ...
 
-    @abstractmethod
     async def get_with_revision(self, key: str) -> tuple[ServiceDefinition | None, int | None]:
         """Get a service definition with its revision number.
 

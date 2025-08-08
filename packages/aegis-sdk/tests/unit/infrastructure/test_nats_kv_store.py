@@ -9,7 +9,6 @@ from aegis_sdk.domain.exceptions import (
     KVKeyAlreadyExistsError,
     KVNotConnectedError,
     KVStoreError,
-    KVTTLNotSupportedError,
 )
 from aegis_sdk.domain.models import KVEntry, KVOptions
 from aegis_sdk.infrastructure.config import KVStoreConfig
@@ -29,7 +28,6 @@ class TestNATSKVStoreInit:
         assert store._config is None
         assert store._kv is None
         assert store._bucket_name is None
-        assert store._key_mapping == {}
 
     def test_init_with_custom_components(self):
         """Test initialization with custom components."""
@@ -49,80 +47,60 @@ class TestNATSKVStoreInit:
 
     def test_init_with_config(self):
         """Test initialization with config."""
-        config = KVStoreConfig(
-            bucket="test_bucket", enable_ttl=False, sanitize_keys=True, max_value_size=512 * 1024
-        )
+        config = KVStoreConfig(bucket="test_bucket", max_value_size=512 * 1024)
         store = NATSKVStore(config=config)
 
         assert store._config == config
 
 
-class TestNATSKVStoreKeySanitization:
-    """Test key sanitization functionality."""
+class TestNATSKVStoreKeyValidation:
+    """Test key validation functionality."""
 
-    @pytest.fixture
-    def store_with_sanitization(self):
-        """Create store with key sanitization enabled."""
-        config = KVStoreConfig(bucket="test_bucket", sanitize_keys=True)
-        return NATSKVStore(config=config)
+    def test_validate_key_with_dots(self):
+        """Test that keys with dots are rejected."""
+        store = NATSKVStore()
 
-    @pytest.fixture
-    def store_without_sanitization(self):
-        """Create store with key sanitization disabled."""
-        config = KVStoreConfig(bucket="test_bucket", sanitize_keys=False)
-        return NATSKVStore(config=config)
+        with pytest.raises(ValueError, match="contains invalid character '\\.'"):
+            store._validate_key("key.with.dots")
 
-    def test_sanitize_key_enabled(self, store_with_sanitization):
-        """Test key sanitization when enabled."""
-        store = store_with_sanitization
+    def test_validate_key_with_spaces(self):
+        """Test that keys with spaces are rejected."""
+        store = NATSKVStore()
 
-        # Mock the KeySanitizer
-        with patch("aegis_sdk.infrastructure.key_sanitizer.KeySanitizer") as mock_sanitizer:
-            mock_sanitizer.sanitize.return_value = "safe_key"
+        with pytest.raises(ValueError, match="contains invalid character ' '"):
+            store._validate_key("key with spaces")
 
-            original, sanitized = store._sanitize_key("unsafe.key")
+    def test_validate_key_with_asterisk(self):
+        """Test that keys with asterisks are rejected."""
+        store = NATSKVStore()
 
-            assert original == "unsafe.key"
-            assert sanitized == "safe_key"
-            mock_sanitizer.sanitize.assert_called_once_with("unsafe.key")
+        with pytest.raises(ValueError, match="contains invalid character '\\*'"):
+            store._validate_key("key*with*asterisk")
 
-            # Verify mapping stored
-            assert store._key_mapping["safe_key"] == "unsafe.key"
+    def test_validate_key_with_greater_than(self):
+        """Test that keys with > are rejected."""
+        store = NATSKVStore()
 
-    def test_sanitize_key_disabled(self, store_without_sanitization):
-        """Test key sanitization when disabled."""
-        store = store_without_sanitization
+        with pytest.raises(ValueError, match="contains invalid character '>'"):
+            store._validate_key("key>test")
 
-        original, sanitized = store._sanitize_key("any.key")
+    def test_validate_key_with_slash(self):
+        """Test that keys with slashes are rejected."""
+        store = NATSKVStore()
 
-        assert original == "any.key"
-        assert sanitized == "any.key"
-        assert store._key_mapping == {}
+        with pytest.raises(ValueError, match="contains invalid character '/'"):
+            store._validate_key("key/with/slash")
 
-    def test_sanitize_key_no_change(self, store_with_sanitization):
-        """Test key sanitization when no change needed."""
-        store = store_with_sanitization
+    def test_validate_key_valid(self):
+        """Test that valid keys pass validation."""
+        store = NATSKVStore()
 
-        with patch("aegis_sdk.infrastructure.key_sanitizer.KeySanitizer") as mock_sanitizer:
-            mock_sanitizer.sanitize.return_value = "safe_key"
-
-            original, sanitized = store._sanitize_key("safe_key")
-
-            assert original == "safe_key"
-            assert sanitized == "safe_key"
-            # No mapping should be stored when key doesn't change
-            assert store._key_mapping == {}
-
-    def test_get_original_key(self, store_with_sanitization):
-        """Test retrieving original key from mapping."""
-        store = store_with_sanitization
-        store._key_mapping["sanitized"] = "original.key"
-
-        # Key in mapping
-        assert store._get_original_key("sanitized") == "original.key"
-
-        # Key not in mapping
-        assert store._get_original_key("not_found") == "not_found"
+        # Should not raise
+        store._validate_key("valid_key")
+        store._validate_key("valid-key-123")
+        store._validate_key("VALID_KEY_456")
+        store._validate_key("key_with_underscores")
+        store._validate_key("key-with-hyphens")
 
 
 class TestNATSKVStoreConnection:
@@ -156,24 +134,30 @@ class TestNATSKVStoreConnection:
         store._metrics.gauge.assert_called_with("kv.buckets.active", 1)
 
     @pytest.mark.asyncio
-    async def test_connect_create_bucket_without_ttl(self, store):
-        """Test connection creating new bucket without TTL."""
+    async def test_connect_create_bucket_with_ttl_fallback(self, store):
+        """Test connection creating new bucket with TTL fallback."""
         store._nats_adapter.is_connected = AsyncMock(return_value=True)
         store._nats_adapter._js = MagicMock()
         store._metrics = MagicMock()
 
-        # First call fails (no bucket), second succeeds after creation
-        mock_kv = MagicMock()
-        store._nats_adapter._js.key_value = AsyncMock(side_effect=[Exception("not found"), mock_kv])
-        store._nats_adapter._js.stream_info = AsyncMock(side_effect=Exception("stream not found"))
-        store._nats_adapter._js.add_stream = AsyncMock()
+        # Mock TTL creation to fail, triggering fallback
+        with patch.object(store, "_create_kv_stream_with_ttl", return_value=False):
+            # First call fails (no bucket), second succeeds after creation
+            mock_kv = MagicMock()
+            store._nats_adapter._js.key_value = AsyncMock(
+                side_effect=[Exception("not found"), mock_kv]
+            )
+            store._nats_adapter._js.stream_info = AsyncMock(
+                side_effect=Exception("stream not found")
+            )
+            store._nats_adapter._js.add_stream = AsyncMock()
 
-        await store.connect("test_bucket", enable_ttl=False)
+            await store.connect("test_bucket")
 
-        # Verify stream created and bucket connected
-        store._nats_adapter._js.add_stream.assert_called_once()
-        assert store._kv == mock_kv
-        assert store._bucket_name == "test_bucket"
+            # Verify fallback stream created and bucket connected
+            store._nats_adapter._js.add_stream.assert_called_once()
+            assert store._kv == mock_kv
+            assert store._bucket_name == "test_bucket"
 
     @pytest.mark.asyncio
     async def test_connect_create_bucket_with_ttl(self, store):
@@ -192,7 +176,7 @@ class TestNATSKVStoreConnection:
                 side_effect=Exception("stream not found")
             )
 
-            await store.connect("test_bucket", enable_ttl=True)
+            await store.connect("test_bucket")
 
             # Verify TTL stream created
             mock_create.assert_called_once_with("test_bucket")
@@ -220,14 +204,12 @@ class TestNATSKVStoreConnection:
         """Test disconnection."""
         store._kv = MagicMock()
         store._bucket_name = "test_bucket"
-        store._key_mapping = {"sanitized": "original"}
         store._metrics = MagicMock()
 
         await store.disconnect()
 
         assert store._kv is None
         assert store._bucket_name is None
-        assert store._key_mapping == {}
         store._metrics.gauge.assert_called_with("kv.buckets.active", 0)
 
     @pytest.mark.asyncio
@@ -262,7 +244,7 @@ class TestNATSKVStoreBasicOperations:
         mock_entry = MagicMock()
         mock_entry.value = b'{"test": "data"}'
         mock_entry.revision = 5
-        mock_entry.delta = 300  # TTL in seconds
+        mock_entry.delta = None  # Stream-level TTL, not per-message
         mock_entry.created = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
         # Make get method async and return the mock entry
@@ -274,7 +256,7 @@ class TestNATSKVStoreBasicOperations:
         assert result.key == "test-key"
         assert result.value == {"test": "data"}
         assert result.revision == 5
-        assert result.ttl == 300
+        assert result.ttl is None  # Stream-level TTL
         store._metrics.increment.assert_called_with("kv.get.success")
 
     @pytest.mark.asyncio
@@ -402,12 +384,11 @@ class TestNATSKVStoreBatchOperations:
         store = connected_store
         store._kv.keys = AsyncMock(return_value=["key1", "key2", "sanitized_key"])
 
-        # Mock key mapping for reverse lookup
-        store._key_mapping = {"sanitized_key": "original.key"}
+        # No key mapping needed anymore
 
         result = await store.keys()
 
-        expected = ["key1", "key2", "original.key"]
+        expected = ["key1", "key2", "sanitized_key"]
         assert result == expected
 
     @pytest.mark.asyncio
@@ -581,23 +562,8 @@ class TestNATSKVStoreErrorHandling:
 
         store._metrics.increment.assert_called_with("kv.put.error")
 
-    @pytest.mark.asyncio
-    async def test_ttl_not_supported_error(self, connected_store):
-        """Test TTL not supported error."""
-        store = connected_store
-
-        # Mock NATS adapter with proper type
-        from aegis_sdk.infrastructure.nats_adapter import NATSAdapter
-
-        mock_adapter = MagicMock(spec=NATSAdapter)
-        mock_adapter._js = MagicMock()
-        mock_adapter._js.publish = AsyncMock(side_effect=Exception("per-message TTL is disabled"))
-        store._nats_adapter = mock_adapter
-
-        options = KVOptions(ttl=300)
-
-        with pytest.raises(KVTTLNotSupportedError):
-            await store.put("test-key", {"data": "value"}, options)
+    # TTL test removed - NATS KV now uses stream-level TTL configuration
+    # Per-message TTL is no longer supported in the current implementation
 
 
 class TestNATSKVStoreIntegration:

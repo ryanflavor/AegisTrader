@@ -34,7 +34,7 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
     that the application layer can translate.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the adapter."""
         self._nats_adapter: NATSAdapter | None = None
         self._kv_store: NATSKVStore | None = None
@@ -51,7 +51,7 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
         """
         try:
             # Initialize NATS adapter
-            self._nats_adapter = NATSAdapter(pool_size=1, use_msgpack=False)
+            self._nats_adapter = NATSAdapter()
             await self._nats_adapter.connect([nats_url])
 
             # Initialize KV Store
@@ -240,8 +240,8 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
 
             # Get all values, but skip service instances
             for key in keys:
-                # Skip service instance keys (they start with "service-instances_")
-                if key.startswith("service-instances_"):
+                # Skip service instance keys (they start with "service-instances__")
+                if key.startswith("service-instances__"):
                     continue
 
                 entry = await self._kv_store.get(key)
@@ -268,7 +268,7 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
             raise KVStoreException(f"Failed to list keys: {e}") from e
 
     @property
-    def raw_kv(self):
+    def raw_kv(self) -> object | None:
         """Get the raw NATS KV Store for direct operations.
 
         Returns:

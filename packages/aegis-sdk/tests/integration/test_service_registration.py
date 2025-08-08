@@ -35,7 +35,7 @@ class TestServiceRegistrationIntegration:
 
         # Create KV store
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry", enable_ttl=True)
+        await kv_store.connect("service_registry")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -98,7 +98,7 @@ class TestServiceRegistrationIntegration:
 
         # Create shared KV store
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry", enable_ttl=True)
+        await kv_store.connect("service_registry")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -159,7 +159,7 @@ class TestServiceRegistrationIntegration:
 
         # Use a separate bucket for TTL testing to avoid conflicts
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry-ttl-test", enable_ttl=True)  # Enable TTL support
+        await kv_store.connect("service_registry_ttl_test")  # Enable TTL support
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -181,9 +181,8 @@ class TestServiceRegistrationIntegration:
             instance = await registry.get_instance("ttl-test-service", service.instance_id)
             assert instance is not None
 
-            # Stop heartbeat to simulate failure
-            if service._heartbeat_task:
-                service._heartbeat_task.cancel()
+            # Stop the service to stop heartbeats
+            await service.stop()
 
             # Wait for TTL to expire (add buffer)
             await asyncio.sleep(7)
@@ -193,8 +192,7 @@ class TestServiceRegistrationIntegration:
             assert expired_instance is None
 
         finally:
-            # Cleanup
-            await service.stop()
+            # Cleanup - service already stopped above
             await adapter.disconnect()
 
     async def test_heartbeat_keeps_registration_alive(self):
@@ -208,7 +206,7 @@ class TestServiceRegistrationIntegration:
 
         # Use a separate bucket for TTL testing to avoid conflicts
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry-ttl-test", enable_ttl=True)
+        await kv_store.connect("service_registry_ttl_test")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -258,7 +256,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry", enable_ttl=True)
+        await kv_store.connect("service_registry")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -307,7 +305,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry", enable_ttl=True)
+        await kv_store.connect("service_registry")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)
@@ -355,7 +353,7 @@ class TestServiceRegistrationIntegration:
         await adapter.connect([nats_url])
 
         kv_store = NATSKVStore(nats_adapter=adapter)
-        await kv_store.connect("service_registry", enable_ttl=True)
+        await kv_store.connect("service_registry")
 
         # Create registry
         registry = KVServiceRegistry(kv_store)

@@ -42,7 +42,7 @@ class TestWatchableServiceDiscoveryIntegration:
     async def kv_store(self, nats_adapter):
         """Create KV Store for testing."""
         store = NATSKVStore(nats_adapter)
-        await store.connect("test-service-discovery-watch", enable_ttl=True)
+        await store.connect("test-service-discovery-watch")
 
         # Clear any existing data
         await store.clear()

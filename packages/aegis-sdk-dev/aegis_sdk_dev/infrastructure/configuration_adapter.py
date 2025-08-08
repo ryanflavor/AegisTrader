@@ -118,3 +118,25 @@ class ConfigurationAdapter:
                 value = f'"{value}"'
             lines.append(f"{env_key}={value}")
         return "\n".join(lines)
+
+    def get_nats_url(self) -> str:
+        """Get the NATS URL based on environment."""
+        import os
+
+        # Check environment variable first
+        nats_url = os.getenv("NATS_URL")
+        if nats_url:
+            return nats_url
+
+        # Check if we're in Kubernetes
+        if os.getenv("KUBERNETES_SERVICE_HOST"):
+            return "nats://nats.default.svc.cluster.local:4222"
+
+        # Default to localhost
+        return "nats://localhost:4222"
+
+    def get_environment(self) -> str:
+        """Get the current environment."""
+        import os
+
+        return os.getenv("ENVIRONMENT", "local")

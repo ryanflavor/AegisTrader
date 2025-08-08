@@ -36,23 +36,25 @@ class ConnectionManager:
     async def startup(self) -> None:
         """Initialize all connections during application startup."""
         try:
-            # Initialize KV Store connection using AegisSDK
-            from .aegis_sdk_kv_adapter import AegisSDKKVAdapter
-            from .service_instance_repository_adapter import ServiceInstanceRepositoryAdapter
+            # Use InfrastructureFactory for creating adapters
+            from .factory import InfrastructureFactory
 
-            logger.info("Initializing KV Store connection...")
-            self._kv_store = AegisSDKKVAdapter()
-            await self._kv_store.connect(self.config.nats_url)
+            logger.info("Initializing KV Store connection using factory...")
+            self._kv_store = await InfrastructureFactory.create_kv_store_port(self.config.nats_url)
             logger.info("KV Store connected successfully")
 
             # Store raw KV for instance repository
             logger.info("Getting raw KV store...")
-            self._raw_kv = self._kv_store.raw_kv
+            self._raw_kv = (
+                self._kv_store.raw_kv if hasattr(self._kv_store, "raw_kv") else self._kv_store
+            )
             logger.info(f"Raw KV store obtained: {self._raw_kv is not None}")
 
-            # Initialize instance repository
-            logger.info("Initializing instance repository...")
-            self._instance_repository = ServiceInstanceRepositoryAdapter(self._raw_kv)
+            # Initialize instance repository using factory
+            logger.info("Initializing instance repository using factory...")
+            self._instance_repository = InfrastructureFactory.create_service_instance_repository(
+                self._kv_store, self.config.stale_threshold_seconds
+            )
             logger.info(f"Instance repository initialized: {self._instance_repository is not None}")
 
             logger.info("Successfully connected to NATS KV Store and initialized repositories")

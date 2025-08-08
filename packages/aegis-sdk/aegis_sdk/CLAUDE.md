@@ -170,8 +170,8 @@ AegisSDK provides two fundamental service patterns:
 2. **Single-Active Pattern** (`SingleActiveService`)
    - Only leader instance processes exclusive requests
    - Sticky behavior through client retry configuration
-   
-Note: There is no separate `StickyActiveService` class. The "sticky" 
+
+Note: There is no separate `StickyActiveService` class. The "sticky"
 behavior is achieved by configuring client-side retry policies when
 calling SingleActiveService instances that return NOT_ACTIVE errors.
 

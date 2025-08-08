@@ -157,8 +157,9 @@ class TestIntegrationCoverage:
         health_exc = HealthCheckFailedException("Health check failed")
         assert str(health_exc) == "Health check failed"
 
-        not_found_exc = ServiceNotFoundException("Service not found")
-        assert str(not_found_exc) == "Service not found"
+        not_found_exc = ServiceNotFoundException("test-service")
+        assert str(not_found_exc) == "Service 'test-service' not found"
+        assert not_found_exc.key == "test-service"
 
         unavail_exc = ServiceUnavailableException("Service unavailable")
         assert str(unavail_exc) == "Service unavailable"

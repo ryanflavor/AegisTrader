@@ -56,7 +56,7 @@ class DefaultElectionRepositoryFactory(ElectionRepositoryFactory):
         kv_store = NATSKVStore(nats_adapter=message_bus)
         # Replace hyphens with underscores for valid bucket name
         bucket_name = f"election_{service_name}".replace("-", "_")
-        await kv_store.connect(bucket_name, enable_ttl=True)
+        await kv_store.connect(bucket_name)
 
         return NatsKvElectionRepository(
             kv_store=kv_store,
@@ -75,14 +75,12 @@ class DefaultKVStoreFactory(KVStoreFactory):
         self,
         bucket_name: str,
         message_bus: MessageBusPort,
-        enable_ttl: bool = True,
     ) -> KVStorePort:
         """Create a NATS-based KV store.
 
         Args:
             bucket_name: Name of the KV bucket
             message_bus: Message bus for KV operations
-            enable_ttl: Whether to enable TTL support
 
         Returns:
             Connected NATS KV store instance
@@ -92,7 +90,7 @@ class DefaultKVStoreFactory(KVStoreFactory):
         kv_store = NATSKVStore(nats_adapter=message_bus)
         # Ensure bucket name is valid (replace hyphens with underscores)
         safe_bucket_name = bucket_name.replace("-", "_")
-        await kv_store.connect(safe_bucket_name, enable_ttl=enable_ttl)
+        await kv_store.connect(safe_bucket_name)
         return kv_store
 
 

@@ -20,6 +20,12 @@ export function useRelativeTime(timestamp: string | undefined): string {
       const diffMs = now.getTime() - date.getTime();
       const diffSecs = Math.floor(diffMs / 1000);
 
+      // Handle negative time (when timestamp is in the future)
+      if (diffSecs < 0) {
+        setRelativeTime('just now');
+        return;
+      }
+
       if (diffSecs < 60) {
         setRelativeTime(`${diffSecs}s ago`);
       } else {

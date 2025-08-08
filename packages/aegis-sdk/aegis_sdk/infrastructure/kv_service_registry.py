@@ -35,9 +35,10 @@ class KVServiceRegistry(ServiceRegistryPort):
             instance_id: Instance identifier
 
         Returns:
-            Registry key following pattern: service-instances.{service}.{instance}
+            Registry key following pattern: service-instances__{service}__{instance}
         """
-        return f"{self._key_prefix}.{service_name}.{instance_id}"
+        # Use double underscore as separator to avoid conflicts
+        return f"{self._key_prefix}__{service_name}__{instance_id}"
 
     async def register(self, instance: ServiceInstance, ttl_seconds: int) -> None:
         """Register a service instance with TTL.
@@ -209,7 +210,7 @@ class KVServiceRegistry(ServiceRegistryPort):
 
     async def list_instances(self, service_name: str) -> list[ServiceInstance]:
         """List all instances of a service."""
-        prefix = f"{self._key_prefix}.{service_name}."
+        prefix = f"{self._key_prefix}__{service_name}__"
         instances = []
 
         try:
@@ -219,7 +220,8 @@ class KVServiceRegistry(ServiceRegistryPort):
             # Fetch all instances
             for key in keys:
                 # Extract instance_id from key
-                parts = key.split(".")
+                # Format: service-instances__{service}__{instance}
+                parts = key.split("__")
                 if len(parts) >= 3:
                     instance_id = parts[-1]
                     instance = await self.get_instance(service_name, instance_id)
@@ -243,20 +245,27 @@ class KVServiceRegistry(ServiceRegistryPort):
 
         try:
             # Get all registry keys
-            all_keys = await self._kv_store.keys(f"{self._key_prefix}.")
+            all_keys = await self._kv_store.keys(f"{self._key_prefix}__")
 
             # Group by service name
             for key in all_keys:
-                parts = key.split(".")
-                if len(parts) >= 3:
-                    service_name = parts[1]
-                    instance_id = parts[2]
+                # Key format: service-instances__{service_name}__{instance_id}
+                # Split by double underscore separator
+                if key.startswith(f"{self._key_prefix}__"):
+                    remainder = key[len(f"{self._key_prefix}__") :]
+                    # Split by double underscore to get service_name and instance_id
+                    parts = remainder.split("__")
+                    if len(parts) >= 2:
+                        service_name = parts[0]
+                        instance_id = "__".join(
+                            parts[1:]
+                        )  # Handle instance IDs that might contain double underscores
 
-                    instance = await self.get_instance(service_name, instance_id)
-                    if instance:
-                        if service_name not in services:
-                            services[service_name] = []
-                        services[service_name].append(instance)
+                        instance = await self.get_instance(service_name, instance_id)
+                        if instance:
+                            if service_name not in services:
+                                services[service_name] = []
+                            services[service_name].append(instance)
 
             return services
 

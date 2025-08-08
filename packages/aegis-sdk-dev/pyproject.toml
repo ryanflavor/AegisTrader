@@ -12,6 +12,7 @@ dependencies = [
     "psutil>=5.9.0",
     "pyyaml>=6.0.0",
     "nats-py>=2.0.0",
+    "aegis-sdk",
 ]
 
 [project.scripts]
@@ -72,10 +73,14 @@ check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 
+[tool.uv.sources]
+aegis-sdk = { path = "../aegis-sdk" }
+
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "pytest-cov>=6.2.1",
     "pytest-mock>=3.14.1",
+    "testcontainers[nats]>=4.12.0",
 ]

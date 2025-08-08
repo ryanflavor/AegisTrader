@@ -12,7 +12,7 @@ AegisSDK provides **two fundamental service patterns**, not three separate servi
 - **Load Distribution:** Natural load balancing via NATS
 - **Use Cases:** Stateless services, REST APIs, query services
 
-### 2. Sticky Single-Active Pattern  
+### 2. Sticky Single-Active Pattern
 - **Implementation:** `SingleActiveService` class + client-side retry
 - **Server Behavior:** Only leader processes exclusive requests
 - **Client Behavior:** Automatic retry on NOT_ACTIVE errors
@@ -67,7 +67,7 @@ retry_policy = RetryPolicy(
 # Client automatically retries until finding the leader
 response = await rpc_call(
     service="order-processor",
-    method="process_order", 
+    method="process_order",
     retry_policy=retry_policy
 )
 ```

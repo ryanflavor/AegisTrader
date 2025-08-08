@@ -232,7 +232,7 @@ class HealthManager:
         await self._bus.send_heartbeat(self.service_name, self.instance_id)
         if self._registry and service_instance:
             service_instance.update_heartbeat()
-            await self._registry.update_heartbeat(service_instance, self.registry_ttl)
+            await self._registry.update_heartbeat(service_instance, int(self.registry_ttl))
 
     async def _handle_heartbeat_failure(self, error: Exception) -> None:
         """Handle heartbeat failure."""
@@ -447,7 +447,7 @@ class Service:
                 try:
                     await self._registry.register(
                         self._service_instance,
-                        self._config.registry_ttl,
+                        int(self._config.registry_ttl),
                     )
                 except Exception as e:
                     if self._logger:
@@ -790,7 +790,7 @@ class Service:
         try:
             await self._registry.update_heartbeat(
                 self._service_instance,
-                self._config.registry_ttl,
+                int(self._config.registry_ttl),
             )
         except Exception as e:
             if self._logger:

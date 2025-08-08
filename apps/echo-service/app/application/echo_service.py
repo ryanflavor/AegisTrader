@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..domain.models import EchoRequest
+from ..domain.models import EchoMode, EchoRequest
 from ..domain.services import EchoProcessor, MetricsCollector
 from ..ports.configuration import ConfigurationPort
 from ..ports.service_bus import ServiceBusPort
@@ -94,12 +94,16 @@ class EchoApplicationService:
 
         except ValueError as e:
             logger.error(f"Invalid echo request: {e}")
+            # Record failed request in metrics
+            self._metrics.record_request(mode=EchoMode.SIMPLE, latency_ms=0.0, success=False)
             return {
                 "error": f"Invalid request: {str(e)}",
                 "instance_id": self._configuration.get_instance_id(),
             }
         except Exception as e:
             logger.error(f"Error processing echo: {e}", exc_info=True)
+            # Record failed request in metrics
+            self._metrics.record_request(mode=EchoMode.SIMPLE, latency_ms=0.0, success=False)
             return {
                 "error": str(e),
                 "instance_id": self._configuration.get_instance_id(),

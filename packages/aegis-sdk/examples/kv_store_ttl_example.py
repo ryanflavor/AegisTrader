@@ -46,7 +46,7 @@ async def main():
         "login_time": datetime.now().isoformat(),
         "ip": "192.168.1.100",
     }
-    await kv_store.put("session:user123", session_data, KVOptions(ttl=30))
+    await kv_store.put("session__user123", session_data, KVOptions(ttl=30))
     print("✓ Stored session data with 30-second TTL")
 
     # Example 2: Store temporary verification code (expires in 5 minutes)
@@ -55,17 +55,17 @@ async def main():
         "created_at": datetime.now().isoformat(),
         "purpose": "email_verification",
     }
-    await kv_store.put("verify:email:user123", verification_code, KVOptions(ttl=300))
+    await kv_store.put("verify__email__user123", verification_code, KVOptions(ttl=300))
     print("✓ Stored verification code with 5-minute TTL")
 
     # Example 3: Store permanent configuration (no TTL)
     config_data = {"api_version": "v1", "features": ["trading", "monitoring", "alerts"]}
-    await kv_store.put("config:global", config_data)
+    await kv_store.put("config__global", config_data)
     print("✓ Stored permanent configuration (no TTL)")
 
     # Check all values exist immediately
     print("\nVerifying all values exist immediately after storage:")
-    for key in ["session:user123", "verify:email:user123", "config:global"]:
+    for key in ["session__user123", "verify__email__user123", "config__global"]:
         exists = await kv_store.exists(key)
         print(f"  - {key}: {'exists' if exists else 'not found'}")
 

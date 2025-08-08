@@ -15,7 +15,7 @@ import { ApiClientError } from '@/lib/api-client';
  */
 export interface UseServiceInstancesOptions {
   /**
-   * Polling interval in milliseconds (default: 5000)
+   * Polling interval in milliseconds (default: 3000)
    */
   pollingInterval?: number;
   /**
@@ -45,7 +45,7 @@ export function useServiceInstances(
   options: UseServiceInstancesOptions = {}
 ): UseServiceInstancesResult {
   const {
-    pollingInterval = 5000,
+    pollingInterval = 3000,
     enablePolling = true,
     serviceName,
   } = options;

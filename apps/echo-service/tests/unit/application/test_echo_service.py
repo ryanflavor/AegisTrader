@@ -154,3 +154,106 @@ class TestEchoApplicationService:
         assert result["pong"] is True
         assert result["instance_id"] == "test-instance-1"
         assert result["timestamp"] == "2024-01-01T00:00:00"
+
+    @pytest.mark.asyncio
+    async def test_handle_echo_generic_exception(self, mock_service_bus, mock_configuration):
+        """Test echo request handling with generic exception."""
+        # Arrange
+        service = EchoApplicationService(mock_service_bus, mock_configuration)
+
+        # Mock the use case to raise a generic exception
+        from unittest.mock import AsyncMock
+
+        service._echo_use_case.execute = AsyncMock(side_effect=RuntimeError("Processing error"))
+
+        params = {"message": "test", "mode": "simple"}
+
+        # Act
+        result = await service._handle_echo(params)
+
+        # Assert
+        assert "error" in result
+        assert "Processing error" in result["error"]
+        assert result["instance_id"] == "test-instance-1"
+
+    @pytest.mark.asyncio
+    async def test_handle_batch_echo_with_error(self, mock_service_bus, mock_configuration):
+        """Test batch echo with some messages failing."""
+        # Arrange
+        service = EchoApplicationService(mock_service_bus, mock_configuration)
+
+        # Mock to fail on second message
+        from unittest.mock import AsyncMock
+
+        original_execute = service._echo_use_case.execute
+
+        async def execute_with_error(request):
+            if request.message == "fail_this":
+                raise RuntimeError("Batch item failed")
+            # Call real implementation for others
+            from app.domain.models import EchoMode, EchoResponse
+
+            return EchoResponse(
+                original=request.message,
+                echo=request.message,
+                mode=EchoMode.BATCH,
+                processing_time_ms=1.0,
+                sequence_number=1,
+                instance_id="test-instance-1",
+            )
+
+        service._echo_use_case.execute = AsyncMock(side_effect=execute_with_error)
+
+        params = {"messages": ["first", "fail_this", "third"]}
+
+        # Act
+        result = await service._handle_batch_echo(params)
+
+        # Assert
+        assert result["count"] == 3
+        assert len(result["results"]) == 3
+        # First should succeed
+        assert "error" not in result["results"][0]
+        # Second should have error
+        assert "error" in result["results"][1]
+        assert "Batch item failed" in result["results"][1]["error"]
+        # Third should succeed
+        assert "error" not in result["results"][2]
+
+    @pytest.mark.asyncio
+    async def test_handle_metrics_exception(self, mock_service_bus, mock_configuration):
+        """Test metrics endpoint with exception."""
+        # Arrange
+        service = EchoApplicationService(mock_service_bus, mock_configuration)
+
+        # Mock the use case to raise exception
+        from unittest.mock import AsyncMock
+
+        service._metrics_use_case.execute = AsyncMock(side_effect=RuntimeError("Metrics error"))
+
+        # Act
+        result = await service._handle_metrics({})
+
+        # Assert
+        assert "error" in result
+        assert "Metrics error" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_handle_health_exception(self, mock_service_bus, mock_configuration):
+        """Test health endpoint with exception."""
+        # Arrange
+        service = EchoApplicationService(mock_service_bus, mock_configuration)
+
+        # Mock the use case to raise exception
+        from unittest.mock import AsyncMock
+
+        service._health_use_case.execute = AsyncMock(side_effect=RuntimeError("Health check error"))
+
+        # Act
+        result = await service._handle_health({})
+
+        # Assert
+        assert result["status"] == "error"
+        assert "error" in result
+        assert "Health check error" in result["error"]
+        assert result["instance_id"] == "test-instance-1"

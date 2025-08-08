@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from aegis_sdk_dev.domain.models import TestConfiguration, TestResult, TestType
+from aegis_sdk_dev.domain.models import ExecutionResult, ExecutionType, RunConfiguration
 from aegis_sdk_dev.domain.services import TestOrchestrator
 from aegis_sdk_dev.ports.console import ConsolePort
 from aegis_sdk_dev.ports.process import ProcessExecutorPort
@@ -36,7 +36,7 @@ class TestRunnerService:
         min_coverage: float = 80.0,
         test_path: str = "tests",
         markers: list[str] | None = None,
-    ) -> TestResult:
+    ) -> ExecutionResult:
         """Run tests based on configuration.
 
         Args:
@@ -48,17 +48,17 @@ class TestRunnerService:
             markers: Pytest markers to use
 
         Returns:
-            TestResult with execution details
+            ExecutionResult with execution details
         """
         # Create test configuration
         try:
-            test_type_enum = TestType(test_type)
+            test_type_enum = ExecutionType(test_type)
         except ValueError:
             self._console.print_error(f"Invalid test type: {test_type}")
-            self._console.print(f"Valid types: {', '.join([t.value for t in TestType])}")
+            self._console.print(f"Valid types: {', '.join([t.value for t in ExecutionType])}")
             raise
 
-        config = TestConfiguration(
+        config = RunConfiguration(
             test_type=test_type_enum,
             verbose=verbose,
             coverage=coverage,
@@ -79,11 +79,11 @@ class TestRunnerService:
         pytest_args = env["pytest_args"]
 
         # Add test type specific markers
-        if test_type_enum == TestType.UNIT:
+        if test_type_enum == ExecutionType.UNIT:
             pytest_args.extend(["-m", "not integration and not e2e"])
-        elif test_type_enum == TestType.INTEGRATION:
+        elif test_type_enum == ExecutionType.INTEGRATION:
             pytest_args.extend(["-m", "integration"])
-        elif test_type_enum == TestType.E2E:
+        elif test_type_enum == ExecutionType.E2E:
             pytest_args.extend(["-m", "e2e"])
 
         # Run tests
@@ -92,7 +92,7 @@ class TestRunnerService:
             exit_code, output = await self._process_executor.run_pytest(pytest_args, timeout=300.0)
         except TimeoutError:
             self._console.print_error("Test execution timed out after 5 minutes")
-            return TestResult(
+            return ExecutionResult(
                 test_type=test_type_enum,
                 failed=1,
                 duration_seconds=300.0,
@@ -117,7 +117,7 @@ class TestRunnerService:
 
         return result
 
-    def _display_test_results(self, result: TestResult, config: TestConfiguration) -> None:
+    def _display_test_results(self, result: ExecutionResult, config: RunConfiguration) -> None:
         """Display test results in a formatted manner.
 
         Args:
@@ -152,7 +152,7 @@ class TestRunnerService:
     async def run_continuous_tests(
         self,
         watch_path: str = ".",
-        test_config: TestConfiguration | None = None,
+        test_config: RunConfiguration | None = None,
     ) -> None:
         """Run tests continuously, watching for file changes.
 
@@ -167,8 +167,8 @@ class TestRunnerService:
         # This would typically integrate with a file watcher
         # For now, we'll just run tests once
         if test_config is None:
-            test_config = TestConfiguration(
-                test_type=TestType.ALL,
+            test_config = RunConfiguration(
+                test_type=ExecutionType.ALL,
                 verbose=False,
                 coverage=True,
             )

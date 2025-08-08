@@ -135,14 +135,6 @@ class KVStoreConfig(BaseModel):
         min_length=1,
         description="KV store bucket name",
     )
-    enable_ttl: bool = Field(
-        default=True,
-        description="Enable per-message TTL support",
-    )
-    sanitize_keys: bool = Field(
-        default=True,
-        description="Sanitize keys for NATS compatibility",
-    )
     max_value_size: int = Field(
         default=1024 * 1024,  # 1MB
         gt=0,

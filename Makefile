@@ -15,7 +15,7 @@ help: ## 显示帮助信息
 	@echo '╰─────────────────────────────────────────╯'
 	@echo ''
 	@echo '🚀 快速开始:'
-	@echo '  make deploy              # 部署环境 (使用已有镜像)'
+	@echo '  make deploy              # 部署K8s环境 (TTL 30秒)'
 	@echo '  make update              # 更新部署 (构建所有镜像)'
 	@echo '  make forward-start       # 启动端口转发 (非阻塞)'
 	@echo '  make forward-stop        # 停止端口转发'
@@ -24,6 +24,7 @@ help: ## 显示帮助信息
 	@echo '⚡ 快速更新 (修改代码后):'
 	@echo '  make update-api          # 只更新 Monitor API'
 	@echo '  make update-ui           # 只更新 Monitor UI'
+	@echo '  make update-echo         # 只更新 Echo Service (SDK示例)'
 	@echo '  make update-trading      # 更新所有交易服务'
 	@echo '  make update-order        # 只更新订单服务'
 	@echo '  make update-pricing      # 只更新定价服务'
@@ -35,6 +36,8 @@ help: ## 显示帮助信息
 	@echo '├────────────────────┼────────────────────────────────────┤'
 	@awk 'BEGIN {FS = ":.*?## "} /^deploy:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.*?## "} /^update:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^stop:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^start:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.*?## "} /^clean:.*?## / {printf "│ \033[36m%-18s\033[0m │ %-34s │\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo '╰────────────────────┴────────────────────────────────────╯'
 	@echo ''
@@ -88,30 +91,53 @@ help: ## 显示帮助信息
 # ==========部署命令 ==========
 
 .PHONY: deploy
-deploy: ## 一键部署环境（使用现有镜像）
-	@echo "🚀部署 AegisTrader..."
+deploy: ## 部署K8s环境 (TTL 30秒自动清理)
+	@echo "🚀 部署 AegisTrader (TTL 30秒自动清理)..."
 	@# 获取最新的已标记镜像版本
 	@API_TAG=$$(docker images $(DOCKER_API_IMAGE) --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}$$' | head -1); \
 	UI_TAG=$$(docker images $(DOCKER_UI_IMAGE) --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}$$' | head -1); \
-	if [ -z "$$API_TAG" ] || [ -z "$$UI_TAG" ]; then \
-		echo "❌ 未找到已标记的镜像，请先构建镜像"; \
+	ECHO_TAG=$$(docker images aegis-echo-service --format "{{.Tag}}" | grep -E '^[0-9]{8}-[0-9]{6}$$' | head -1); \
+	if [ -z "$$API_TAG" ] || [ -z "$$UI_TAG" ] || [ -z "$$ECHO_TAG" ]; then \
+		echo "❌ 未找到已标记的镜像，请先运行 make build-images"; \
 		exit 1; \
 	fi; \
-	echo "📌 使用镜像版本: API=$$API_TAG, UI=$$UI_TAG"; \
-	$(MAKE) -f Makefile load-images-to-kind API_TAG=$$API_TAG UI_TAG=$$UI_TAG && \
+	echo "📌 使用镜像版本: API=$$API_TAG, UI=$$UI_TAG, ECHO=$$ECHO_TAG"; \
+	$(MAKE) -f Makefile load-images-to-kind API_TAG=$$API_TAG UI_TAG=$$UI_TAG ECHO_TAG=$$ECHO_TAG && \
 	kubectl create namespace $(K8S_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f - && \
 	helm dependency update $(HELM_DIR) && \
 	cp $(HELM_DIR)/values-test.yaml $(HELM_DIR)/values-deploy.yaml && \
 	sed -i "/monitor-api:/,/tag:/ s/tag: \".*\"/tag: \"$$API_TAG\"/" $(HELM_DIR)/values-deploy.yaml && \
 	sed -i "/monitor-ui:/,/tag:/ s/tag: \".*\"/tag: \"$$UI_TAG\"/" $(HELM_DIR)/values-deploy.yaml && \
-	helm install $(HELM_RELEASE_NAME) $(HELM_DIR) \
+	sed -i "/echo-service:/,/tag:/ s/tag: \".*\"/tag: \"$$ECHO_TAG\"/" $(HELM_DIR)/values-deploy.yaml && \
+	(timeout 120 helm install $(HELM_RELEASE_NAME) $(HELM_DIR) \
 		--namespace $(K8S_NAMESPACE) \
 		-f $(HELM_DIR)/values-deploy.yaml \
-		--wait --timeout 5m && \
+		--wait || echo "⚠️ Helm install timeout, continuing...") && \
 	rm -f $(HELM_DIR)/values-deploy.yaml
-	@echo "✅部署完成!"
+	@echo "⏳ 配置KV bucket TTL..."
+	@sleep 5
+	@# 确保KV bucket有正确的TTL配置
+	@kubectl exec -n $(K8S_NAMESPACE) deployment/$(NATS_SERVICE_NAME)-box -- sh -c '\
+		if nats kv ls | grep -q service_registry; then \
+			MAX_AGE=$$(nats kv info service_registry | grep "Maximum Age" | awk "{print \$$3}"); \
+			if [ "$$MAX_AGE" = "unlimited" ] || [ "$$MAX_AGE" = "0.00s" ]; then \
+				echo "♻️  重建KV bucket with TTL..."; \
+				nats stream rm KV_service_registry -f 2>/dev/null; \
+				nats kv add service_registry --ttl 30s --replicas 1; \
+			else \
+				echo "✅ KV bucket TTL已配置: $$MAX_AGE"; \
+			fi \
+		else \
+			echo "🆕 创建KV bucket with TTL..."; \
+			nats kv add service_registry --ttl 30s --replicas 1; \
+		fi' 2>/dev/null || true
+	@echo "✅ 部署完成 (TTL: 30秒)"
+	@echo "📊 验证TTL配置："
+	@kubectl exec -n $(K8S_NAMESPACE) deployment/$(NATS_SERVICE_NAME)-box -- \
+		nats kv info service_registry | grep -E "Maximum Age|Bucket Name" || echo "等待NATS就绪..."
+	@echo ""
 	@echo "📊 使用 'make status' 查看状态"
-	@echo "🔗 使用 'make forward' 访问服务"
+	@echo "🔗 使用 'make forward-start' 访问服务"
 
 .PHONY: update
 update: ## 更新部署（构建所有服务）
@@ -178,6 +204,17 @@ update-pricing: ## 快速更新定价服务
 update-risk: ## 快速更新风险服务
 	@$(MAKE) -f Makefile update-single-trading SERVICE=risk
 
+.PHONY: update-echo
+update-echo: ## 快速更新 Echo Service
+	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
+	echo "🔄 更新 Echo Service (版本: $$VERSION)..." && \
+	docker build --build-arg HTTP_PROXY=$(HTTP_PROXY) --build-arg HTTPS_PROXY=$(HTTPS_PROXY) --build-arg NO_PROXY=$(NO_PROXY) \
+		-t aegis-echo-service:$$VERSION -f apps/echo-service/Dockerfile . && \
+	docker save aegis-echo-service:$$VERSION | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import - && \
+	kubectl set image deployment/$(HELM_RELEASE_NAME)-echo-service echo-service=aegis-echo-service:$$VERSION -n $(K8S_NAMESPACE) && \
+	kubectl rollout status deployment/$(HELM_RELEASE_NAME)-echo-service -n $(K8S_NAMESPACE) --timeout=2m && \
+	echo "✅ Echo Service 更新完成!"
+
 .PHONY: update-single-trading
 update-single-trading: ## 更新单个交易服务（内部使用）
 	@VERSION=$$(date +%Y%m%d-%H%M%S) && \
@@ -194,8 +231,11 @@ build-images: ## 构建并标记版本化镜像
 	@VERSION=$$(date +%Y%m%d-%H%M%S); \
 	echo "🔨 构建 Docker 镜像 (版本: $$VERSION)..."; \
 	docker-compose build monitor-api monitor-ui && \
+	docker build --build-arg HTTP_PROXY=$(HTTP_PROXY) --build-arg HTTPS_PROXY=$(HTTPS_PROXY) --build-arg NO_PROXY=$(NO_PROXY) \
+		-t aegis-echo-service:$$VERSION -f apps/echo-service/Dockerfile . && \
 	docker tag $(DOCKER_API_IMAGE):latest $(DOCKER_API_IMAGE):$$VERSION && \
 	docker tag $(DOCKER_UI_IMAGE):latest $(DOCKER_UI_IMAGE):$$VERSION && \
+	docker tag aegis-echo-service:$$VERSION aegis-echo-service:latest && \
 	echo "✅ 镜像构建完成: $$VERSION"
 
 .PHONY: build-trading-image
@@ -215,6 +255,8 @@ load-images-to-kind: ## 加载指定版本镜像到 Kind
 	@docker save $(DOCKER_API_IMAGE):$(API_TAG) | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import -
 	@echo "📤 导出并导入 UI 镜像: $(DOCKER_UI_IMAGE):$(UI_TAG)..."
 	@docker save $(DOCKER_UI_IMAGE):$(UI_TAG) | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import -
+	@echo "📤 导出并导入 Echo Service 镜像: aegis-echo-service:$(ECHO_TAG)..."
+	@docker save aegis-echo-service:$(ECHO_TAG) | docker exec -i $(KIND_CONTROL_PLANE) ctr -n k8s.io images import -
 	@echo "✅ 镜像加载完成"
 
 .PHONY: status
@@ -330,6 +372,28 @@ forward-status: ## 查看端口转发状态
 logs: ## 查看日志
 	@echo "📋 查看服务日志..."
 	@kubectl logs -f -n $(K8S_NAMESPACE) -l app.kubernetes.io/instance=$(HELM_RELEASE_NAME) --all-containers=true --prefix=true
+
+.PHONY: stop
+stop: ## 停止服务 (保留数据)
+	@echo "⏹️  停止 AegisTrader 服务..."
+	@kubectl scale deployment -n $(K8S_NAMESPACE) -l app.kubernetes.io/instance=$(HELM_RELEASE_NAME) --replicas=0
+	@echo "✅ 服务已停止 (数据保留，TTL配置保持)"
+
+.PHONY: start
+start: ## 启动服务 (TTL自动生效)
+	@echo "▶️  启动 AegisTrader 服务..."
+	@# 恢复部署副本数
+	@kubectl scale deployment -n $(K8S_NAMESPACE) aegis-trader-monitor-api --replicas=1
+	@kubectl scale deployment -n $(K8S_NAMESPACE) aegis-trader-monitor-ui --replicas=1
+	@kubectl scale deployment -n $(K8S_NAMESPACE) aegis-trader-echo-service --replicas=3
+	@kubectl scale deployment -n $(K8S_NAMESPACE) aegis-trader-nats-box --replicas=1
+	@echo "⏳ 等待服务就绪..."
+	@kubectl wait --for=condition=available --timeout=120s deployment -l app.kubernetes.io/instance=$(HELM_RELEASE_NAME) -n $(K8S_NAMESPACE)
+	@echo "✅ 服务已启动"
+	@echo "📊 验证TTL配置:"
+	@kubectl exec -n $(K8S_NAMESPACE) deployment/$(NATS_SERVICE_NAME)-box -- \
+		nats stream info KV_service_registry --json 2>/dev/null | \
+		jq '{name: .config.name, max_age: .config.max_age, ttl_seconds: (.config.max_age / 1000000000)}' || echo "NATS正在初始化..."
 
 .PHONY: clean
 clean: ## 清理环境

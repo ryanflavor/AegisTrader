@@ -10,7 +10,7 @@ import yaml
 from aegis_sdk_dev.infrastructure.configuration_adapter import ConfigurationAdapter
 
 
-class TestConfigurationAdapter:
+class RunConfigurationAdapter:
     """Test ConfigurationAdapter infrastructure implementation."""
 
     @pytest.fixture
@@ -372,7 +372,7 @@ class TestConfigurationAdapter:
         DEBUG='true'
         PORT=8080
         EMPTY_LINE
-        
+
         # Another comment
         FEATURE_FLAG=enabled
         """

@@ -13,11 +13,11 @@ from aegis_sdk.infrastructure.system_clock import SystemClock
 from aegis_sdk.infrastructure.watchable_cached_service_discovery import (
     WatchableCachedServiceDiscovery,
 )
-from aegis_sdk.ports.clock import Clock
-from aegis_sdk.ports.logger import Logger
-from aegis_sdk.ports.message_bus import MessageBus
-from aegis_sdk.ports.service_discovery import ServiceDiscovery
-from aegis_sdk.ports.service_registry import ServiceRegistry
+from aegis_sdk.ports.clock import ClockPort
+from aegis_sdk.ports.logger import LoggerPort as Logger
+from aegis_sdk.ports.message_bus import MessageBusPort as MessageBus
+from aegis_sdk.ports.service_discovery import ServiceDiscoveryPort as ServiceDiscovery
+from aegis_sdk.ports.service_registry import ServiceRegistryPort as ServiceRegistry
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -47,7 +47,7 @@ class ServiceContext(BaseModel):
     service_registry: ServiceRegistry
     service_discovery: ServiceDiscovery
     logger: Logger
-    clock: Clock
+    clock: ClockPort
     config: BootstrapConfig
 
     model_config = {"arbitrary_types_allowed": True}

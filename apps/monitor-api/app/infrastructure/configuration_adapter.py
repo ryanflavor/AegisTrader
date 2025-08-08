@@ -10,7 +10,7 @@ import os
 from typing import Literal, cast
 
 from ..domain.exceptions import ConfigurationException
-from ..domain.models import ServiceConfiguration
+from ..domain.models import ServiceConfiguration, ValidationIssue, ValidationLevel, ValidationResult
 from ..ports.configuration import ConfigurationPort
 
 
@@ -36,6 +36,7 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             api_port = int(os.getenv("API_PORT", default_api_port))
             log_level = os.getenv("LOG_LEVEL", "INFO").upper()
             environment = os.getenv("ENVIRONMENT", "development").lower()
+            stale_threshold_seconds = int(os.getenv("STALE_THRESHOLD_SECONDS", "35"))
 
             # Validate and convert to proper types
             if log_level not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
@@ -44,31 +45,55 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             if environment not in ["development", "staging", "production"]:
                 raise ValueError(f"Invalid environment: {environment}")
 
+            if stale_threshold_seconds < 1 or stale_threshold_seconds > 300:
+                raise ValueError(
+                    f"Invalid stale threshold: {stale_threshold_seconds} (must be 1-300)"
+                )
+
             config = ServiceConfiguration(
                 nats_url=nats_url,
                 api_port=api_port,
                 log_level=cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level),
                 environment=cast(Literal["development", "staging", "production"], environment),
+                stale_threshold_seconds=stale_threshold_seconds,
             )
 
-            self.validate_configuration(config)
+            validation_result = self.validate_configuration(config)
+            if not validation_result.is_valid:
+                error_messages = [
+                    issue.message
+                    for issue in validation_result.get_issues_by_level(ValidationLevel.ERROR)
+                ]
+                raise ConfigurationException(
+                    f"Configuration validation failed: {'; '.join(error_messages)}"
+                )
             return config
 
         except Exception as e:
             raise ConfigurationException(f"Failed to load configuration: {str(e)}") from e
 
-    def validate_configuration(self, config: ServiceConfiguration) -> None:
+    def validate_configuration(self, config: ServiceConfiguration) -> ValidationResult:
         """Validate a configuration object.
 
         Args:
             config: Configuration to validate
 
-        Raises:
-            ConfigurationException: If configuration is invalid
+        Returns:
+            ValidationResult: Result with validation status and any issues
         """
-        # Additional validation beyond Pydantic
+        result = ValidationResult(context="ServiceConfiguration")
+
+        # Check port privileges
         if config.api_port < 1024 and os.getuid() != 0:
-            raise ConfigurationException(f"Port {config.api_port} requires root privileges")
+            result.add_issue(
+                ValidationIssue(
+                    level=ValidationLevel.ERROR,
+                    category="CONFIG",
+                    message=f"Port {config.api_port} requires root privileges",
+                    resolution="Use a port >= 1024 or run with root privileges",
+                    details={"port": config.api_port, "uid": os.getuid()},
+                )
+            )
 
         # In production, ensure we're not using blacklisted NATS hosts
         if config.environment == "production":
@@ -77,6 +102,19 @@ class EnvironmentConfigurationAdapter(ConfigurationPort):
             )
             for host in blacklist:
                 if host.strip() in config.nats_url:
-                    raise ConfigurationException(
-                        f"Production environment should not use {host} in NATS URL"
+                    result.add_issue(
+                        ValidationIssue(
+                            level=ValidationLevel.ERROR,
+                            category="CONFIG",
+                            message=f"Production environment should not use {host} in NATS URL",
+                            resolution="Use a proper production NATS server URL",
+                            details={"host": host, "nats_url": config.nats_url},
+                        )
                     )
+
+        # Add diagnostic information
+        result.diagnostics["environment"] = config.environment
+        result.diagnostics["nats_url"] = config.nats_url
+        result.diagnostics["api_port"] = config.api_port
+
+        return result

@@ -69,3 +69,13 @@ dependencies:
     tags:
       - backend
       - trading
+
+  # Echo Service - SDK showcase service
+  - name: base-microservice
+    alias: echo-service
+    version: "1.0.0"
+    repository: "file://./charts/base-microservice"
+    condition: echo-service.enabled
+    tags:
+      - backend
+      - showcase

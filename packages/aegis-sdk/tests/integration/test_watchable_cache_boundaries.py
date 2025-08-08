@@ -40,7 +40,7 @@ class TestWatchableCacheBoundaries:
     async def kv_store(self, nats_adapter):
         """Create KV Store for testing."""
         store = NATSKVStore(nats_adapter)
-        await store.connect("test-cache-boundaries", enable_ttl=True)
+        await store.connect("test-cache-boundaries")
         await store.clear()
         yield store
         await store.clear()

@@ -25,8 +25,8 @@ class ProjectTemplate(str, Enum):
     FULL_FEATURED = "full_featured"
 
 
-class TestType(str, Enum):
-    """Value object representing test types."""
+class ExecutionType(str, Enum):
+    """Value object representing test execution types."""
 
     UNIT = "unit"
     INTEGRATION = "integration"
@@ -89,7 +89,12 @@ class ValidationResult(BaseModel):
 class ServiceConfiguration(BaseModel):
     """Entity representing service configuration."""
 
-    service_name: str = Field(..., min_length=1, description="Name of the service")
+    service_name: str = Field(
+        ...,
+        min_length=3,
+        pattern=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
+        description="Name of the service (alphanumeric and hyphens, min 3 chars)",
+    )
     nats_url: str = Field(..., description="NATS connection URL")
     environment: str = Field(default="auto", description="Target environment")
     kv_bucket: str = Field(default="service_registry", description="KV bucket name")
@@ -109,7 +114,15 @@ class ServiceConfiguration(BaseModel):
     @classmethod
     def validate_environment(cls, v: str) -> str:
         """Validate environment value."""
-        valid_envs = {"auto", "local", "kubernetes", "development", "staging", "production"}
+        valid_envs = {
+            "auto",
+            "local",
+            "docker",
+            "kubernetes",
+            "development",
+            "staging",
+            "production",
+        }
         if v not in valid_envs:
             raise ValueError(f"Environment must be one of {valid_envs}")
         return v
@@ -143,10 +156,10 @@ class BootstrapConfig(BaseModel):
     model_config = {"frozen": True, "strict": True}
 
 
-class TestConfiguration(BaseModel):
-    """Value object for test configuration."""
+class RunConfiguration(BaseModel):
+    """Value object for test run configuration."""
 
-    test_type: TestType = Field(..., description="Type of tests to run")
+    test_type: ExecutionType = Field(..., description="Type of tests to run")
     verbose: bool = Field(default=False, description="Verbose output")
     coverage: bool = Field(default=True, description="Generate coverage report")
     min_coverage: float = Field(
@@ -158,10 +171,10 @@ class TestConfiguration(BaseModel):
     model_config = {"frozen": True, "strict": True}
 
 
-class TestResult(BaseModel):
+class ExecutionResult(BaseModel):
     """Value object representing test execution results."""
 
-    test_type: TestType = Field(..., description="Type of tests executed")
+    test_type: ExecutionType = Field(..., description="Type of tests executed")
     passed: int = Field(default=0, ge=0, description="Number of passed tests")
     failed: int = Field(default=0, ge=0, description="Number of failed tests")
     skipped: int = Field(default=0, ge=0, description="Number of skipped tests")

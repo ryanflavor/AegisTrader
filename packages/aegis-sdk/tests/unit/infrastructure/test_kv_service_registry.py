@@ -57,7 +57,7 @@ class TestKVServiceRegistry:
         call_args = mock_kv_store.put.call_args
 
         # Check key format
-        assert call_args[0][0] == "service-instances.test-service.test-123"
+        assert call_args[0][0] == "service-instances__test-service__test-123"
 
         # Check data includes camelCase fields
         data = call_args[0][1]
@@ -100,7 +100,7 @@ class TestKVServiceRegistry:
         await registry.update_heartbeat(sample_instance, ttl_seconds=30)
 
         # Verify get and put were called
-        mock_kv_store.get.assert_called_once_with("service-instances.test-service.test-123")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service__test-123")
         mock_kv_store.put.assert_called_once()
 
     @pytest.mark.asyncio
@@ -115,7 +115,7 @@ class TestKVServiceRegistry:
         # Should re-register
         mock_kv_store.put.assert_called_once()
         call_args = mock_kv_store.put.call_args
-        assert call_args[0][0] == "service-instances.test-service.test-123"
+        assert call_args[0][0] == "service-instances__test-service__test-123"
 
     @pytest.mark.asyncio
     async def test_deregister_success(self, mock_kv_store, mock_logger):
@@ -126,7 +126,7 @@ class TestKVServiceRegistry:
 
         await registry.deregister("test-service", "test-123")
 
-        mock_kv_store.delete.assert_called_once_with("service-instances.test-service.test-123")
+        mock_kv_store.delete.assert_called_once_with("service-instances__test-service__test-123")
         mock_logger.info.assert_called_once()
 
     @pytest.mark.asyncio
@@ -203,8 +203,8 @@ class TestKVServiceRegistry:
         """Test listing service instances."""
         # Mock keys
         mock_kv_store.keys.return_value = [
-            "service-instances.test-service.inst-1",
-            "service-instances.test-service.inst-2",
+            "service-instances__test-service__inst-1",
+            "service-instances__test-service__inst-2",
         ]
 
         # Mock get calls for each instance
@@ -243,9 +243,9 @@ class TestKVServiceRegistry:
         """Test listing all services."""
         # Mock keys for different services
         mock_kv_store.keys.return_value = [
-            "service-instances.service-a.inst-1",
-            "service-instances.service-a.inst-2",
-            "service-instances.service-b.inst-1",
+            "service-instances__service-a__inst-1",
+            "service-instances__service-a__inst-2",
+            "service-instances__service-b__inst-1",
         ]
 
         # Mock get calls
@@ -455,9 +455,9 @@ class TestKVServiceRegistry:
         """Test list_instances with invalid key format."""
         # Mock keys with invalid format
         mock_kv_store.keys.return_value = [
-            "service-instances.test-service",  # Missing instance ID
+            "service-instances__test-service",  # Missing instance ID
             "invalid-key",  # Completely invalid
-            "service-instances.test-service.valid-instance",  # Valid
+            "service-instances__test-service__valid-instance",  # Valid
         ]
 
         # Only mock the valid instance
@@ -484,8 +484,8 @@ class TestKVServiceRegistry:
         """Test list_instances when get_instance fails."""
         # Mock keys
         mock_kv_store.keys.return_value = [
-            "service-instances.test-service.inst-1",
-            "service-instances.test-service.inst-2",
+            "service-instances__test-service__inst-1",
+            "service-instances__test-service__inst-2",
         ]
 
         # First get succeeds, second fails
@@ -528,8 +528,8 @@ class TestKVServiceRegistry:
         # Mix of valid and invalid keys
         mock_kv_store.keys.return_value = [
             "service-instances",  # Too short
-            "service-instances.service-a",  # Missing instance
-            "service-instances.service-a.inst-1",  # Valid
+            "service-instances__service-a",  # Missing instance
+            "service-instances__service-a__inst-1",  # Valid
             "other-prefix.service-b.inst-1",  # Wrong prefix
         ]
 
@@ -545,7 +545,7 @@ class TestKVServiceRegistry:
 
         # Mock get to return entry only for valid key
         async def get_side_effect(key):
-            if key == "service-instances.service-a.inst-1":
+            if key == "service-instances__service-a__inst-1":
                 return entry
             return None
 
@@ -586,11 +586,11 @@ class TestKVServiceRegistry:
         registry = KVServiceRegistry(MagicMock())
 
         key = registry._make_key("my-service", "instance-123")
-        assert key == "service-instances.my-service.instance-123"
+        assert key == "service-instances__my-service__instance-123"
 
         # Test with special characters
         key = registry._make_key("service_name", "inst_id")
-        assert key == "service-instances.service_name.inst_id"
+        assert key == "service-instances__service_name__inst_id"
 
     @pytest.mark.asyncio
     async def test_get_instance_sticky_active_group_camelcase(self, mock_kv_store):

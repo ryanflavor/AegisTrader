@@ -6,6 +6,7 @@ Domain models are free from any infrastructure dependencies.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import (
@@ -18,6 +19,65 @@ from pydantic import (
 )
 
 from ..utils.timezone import utc8_timestamp_factory
+
+
+class ValidationLevel(str, Enum):
+    """Value object representing validation issue severity levels."""
+
+    ERROR = "ERROR"
+    WARNING = "WARNING"
+    INFO = "INFO"
+
+
+class ValidationIssue(BaseModel):
+    """Value object representing a configuration validation issue."""
+
+    level: ValidationLevel = Field(..., description="Issue severity")
+    category: str = Field(..., description="Issue category: NATS, CONFIG, SERVICE, etc.")
+    message: str = Field(..., description="Human-readable issue description")
+    resolution: str | None = Field(None, description="Suggested resolution steps")
+    details: dict[str, Any] = Field(default_factory=dict, description="Additional context")
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """Ensure category is uppercase."""
+        return v.upper()
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+
+class ValidationResult(BaseModel):
+    """Aggregate root representing the complete validation result."""
+
+    is_valid: bool = Field(default=True, description="Overall validation status")
+    context: str = Field(default="", description="Validation context")
+    issues: list[ValidationIssue] = Field(default_factory=list, description="All validation issues")
+    diagnostics: dict[str, Any] = Field(default_factory=dict, description="Diagnostic information")
+
+    def add_issue(self, issue: ValidationIssue) -> None:
+        """Add a validation issue to the result."""
+        self.issues.append(issue)
+        if issue.level == ValidationLevel.ERROR:
+            self.is_valid = False
+
+    def get_issues_by_level(self, level: ValidationLevel) -> list[ValidationIssue]:
+        """Get all issues of a specific level."""
+        return [issue for issue in self.issues if issue.level == level]
+
+    def get_issues_by_category(self, category: str) -> list[ValidationIssue]:
+        """Get all issues in a specific category."""
+        return [issue for issue in self.issues if issue.category == category.upper()]
+
+    def has_errors(self) -> bool:
+        """Check if validation has any errors."""
+        return any(issue.level == ValidationLevel.ERROR for issue in self.issues)
+
+    def has_warnings(self) -> bool:
+        """Check if validation has any warnings."""
+        return any(issue.level == ValidationLevel.WARNING for issue in self.issues)
+
+    model_config = ConfigDict(strict=True)
 
 
 class HealthStatus(BaseModel):
@@ -97,6 +157,12 @@ class ServiceConfiguration(BaseModel):
     )
     environment: Literal["development", "staging", "production"] = Field(
         ..., description="Deployment environment"
+    )
+    stale_threshold_seconds: int = Field(
+        default=35,
+        ge=1,
+        le=300,
+        description="Seconds after which a service instance is considered stale (default: 35)",
     )
 
     @field_validator("nats_url")
@@ -298,3 +364,18 @@ class ServiceInstance(BaseModel):
     def serialize_datetime(self, value: datetime) -> str:
         """Serialize datetime to ISO format string."""
         return value.isoformat()
+
+
+class ServiceInstanceLog(BaseModel):
+    """Domain model representing a service instance log entry."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    timestamp: datetime = Field(..., description="Log timestamp")
+    service_name: str = Field(..., description="Service name", min_length=1)
+    instance_id: str = Field(..., description="Instance ID", min_length=1)
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        ..., description="Log level"
+    )
+    message: str = Field(..., description="Log message", min_length=1)
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")

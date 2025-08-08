@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 import pytest
 from app.domain.models import ServiceInstance
 from app.main import app
-from httpx import AsyncClient
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -54,8 +54,7 @@ def sample_instances():
 class TestServiceInstanceEndpoints:
     """Test cases for service instance API endpoints."""
 
-    @pytest.mark.asyncio
-    async def test_list_all_instances(self, mock_kv_store, sample_instances):
+    def test_list_all_instances(self, mock_kv_store, sample_instances):
         """Test GET /api/instances endpoint."""
         # Arrange
         mock_kv_store.keys.return_value = [
@@ -72,8 +71,8 @@ class TestServiceInstanceEndpoints:
         mock_kv_store.get.side_effect = entries
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/instances")
+        with TestClient(app) as client:
+            response = client.get("/api/instances")
 
         # Assert
         assert response.status_code == 200
@@ -81,8 +80,7 @@ class TestServiceInstanceEndpoints:
         assert len(data) == 4
         assert all(isinstance(inst, dict) for inst in data)
 
-    @pytest.mark.asyncio
-    async def test_list_instances_by_service(self, mock_kv_store, sample_instances):
+    def test_list_instances_by_service(self, mock_kv_store, sample_instances):
         """Test GET /api/instances/{service_name} endpoint."""
         # Arrange
         service_name = "order-service"
@@ -101,8 +99,8 @@ class TestServiceInstanceEndpoints:
         mock_kv_store.get.side_effect = entries
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get(f"/api/instances/{service_name}")
+        with TestClient(app) as client:
+            response = client.get(f"/api/instances/{service_name}")
 
         # Assert
         assert response.status_code == 200
@@ -110,8 +108,7 @@ class TestServiceInstanceEndpoints:
         assert len(data) == 2
         assert all(inst["service_name"] == service_name for inst in data)
 
-    @pytest.mark.asyncio
-    async def test_get_specific_instance(self, mock_kv_store, sample_instances):
+    def test_get_specific_instance(self, mock_kv_store, sample_instances):
         """Test GET /api/instances/{service_name}/{instance_id} endpoint."""
         # Arrange
         service_name = "order-service"
@@ -127,8 +124,8 @@ class TestServiceInstanceEndpoints:
         mock_kv_store.get.return_value = entry
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get(f"/api/instances/{service_name}/{instance_id}")
+        with TestClient(app) as client:
+            response = client.get(f"/api/instances/{service_name}/{instance_id}")
 
         # Assert
         assert response.status_code == 200
@@ -138,23 +135,21 @@ class TestServiceInstanceEndpoints:
         assert data["version"] == "1.0.0"
         assert data["status"] == "ACTIVE"
 
-    @pytest.mark.asyncio
-    async def test_get_instance_not_found(self, mock_kv_store):
+    def test_get_instance_not_found(self, mock_kv_store):
         """Test GET /api/instances/{service_name}/{instance_id} with non-existent instance."""
         # Arrange
         mock_kv_store.get.return_value = None
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/instances/unknown-service/unknown-id")
+        with TestClient(app) as client:
+            response = client.get("/api/instances/unknown-service/unknown-id")
 
         # Assert
         assert response.status_code == 404
         data = response.json()
         assert "not found" in data["detail"].lower()
 
-    @pytest.mark.asyncio
-    async def test_get_health_summary(self, mock_kv_store, sample_instances):
+    def test_get_health_summary(self, mock_kv_store, sample_instances):
         """Test GET /api/instances/health/summary endpoint."""
         # Arrange
         mock_kv_store.keys.return_value = [
@@ -170,8 +165,8 @@ class TestServiceInstanceEndpoints:
         mock_kv_store.get.side_effect = entries
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/instances/health/summary")
+        with TestClient(app) as client:
+            response = client.get("/api/instances/health/summary")
 
         # Assert
         assert response.status_code == 200
@@ -181,8 +176,7 @@ class TestServiceInstanceEndpoints:
         assert data["unhealthy"] == 1
         assert data["standby"] == 1
 
-    @pytest.mark.asyncio
-    async def test_get_instances_by_status(self, mock_kv_store, sample_instances):
+    def test_get_instances_by_status(self, mock_kv_store, sample_instances):
         """Test GET /api/instances/status/{status} endpoint."""
         # Arrange
         status = "ACTIVE"
@@ -199,8 +193,8 @@ class TestServiceInstanceEndpoints:
         mock_kv_store.get.side_effect = entries
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get(f"/api/instances/status/{status}")
+        with TestClient(app) as client:
+            response = client.get(f"/api/instances/status/{status}")
 
         # Assert
         assert response.status_code == 200
@@ -208,27 +202,25 @@ class TestServiceInstanceEndpoints:
         assert len(data) == 2
         assert all(inst["status"] == status for inst in data)
 
-    @pytest.mark.asyncio
-    async def test_get_instances_by_invalid_status(self):
+    def test_get_instances_by_invalid_status(self):
         """Test GET /api/instances/status/{status} with invalid status."""
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/instances/status/INVALID")
+        with TestClient(app) as client:
+            response = client.get("/api/instances/status/INVALID")
 
         # Assert
         assert response.status_code == 400
         data = response.json()
         assert "Invalid status" in data["detail"]
 
-    @pytest.mark.asyncio
-    async def test_error_handling(self, mock_kv_store):
+    def test_error_handling(self, mock_kv_store):
         """Test proper error handling when KV store fails."""
         # Arrange
         mock_kv_store.keys.side_effect = Exception("Connection failed")
 
         # Act
-        async with AsyncClient(app=app, base_url="http://test") as client:
-            response = await client.get("/api/instances")
+        with TestClient(app) as client:
+            response = client.get("/api/instances")
 
         # Assert
         assert response.status_code == 500

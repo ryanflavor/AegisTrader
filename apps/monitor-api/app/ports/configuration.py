@@ -1,17 +1,18 @@
 """Configuration port interface.
 
-Defines the abstract interface for configuration management.
+Defines the protocol interface for configuration management.
 """
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
-from ..domain.models import ServiceConfiguration
+from typing import Protocol
+
+from ..domain.models import ServiceConfiguration, ValidationResult
 
 
-class ConfigurationPort(ABC):
-    """Abstract interface for configuration operations."""
+class ConfigurationPort(Protocol):
+    """Protocol interface for configuration operations."""
 
-    @abstractmethod
     def load_configuration(self) -> ServiceConfiguration:
         """Load service configuration from external sources.
 
@@ -21,16 +22,15 @@ class ConfigurationPort(ABC):
         Raises:
             ConfigurationException: If configuration is invalid or missing
         """
-        pass
+        ...
 
-    @abstractmethod
-    def validate_configuration(self, config: ServiceConfiguration) -> None:
+    def validate_configuration(self, config: ServiceConfiguration) -> ValidationResult:
         """Validate a configuration object.
 
         Args:
             config: Configuration to validate
 
-        Raises:
-            ConfigurationException: If configuration is invalid
+        Returns:
+            ValidationResult: Result with validation status and any issues
         """
-        pass
+        ...

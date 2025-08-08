@@ -41,6 +41,9 @@ ENV HTTPS_PROXY=""
 ENV http_proxy=""
 ENV https_proxy=""
 
+# Set API URL for Kubernetes environment (runtime variable)
+ENV API_URL=http://aegis-trader-monitor-api:8100
+
 # Expose port
 ARG UI_PORT=3100
 ENV PORT=${UI_PORT}

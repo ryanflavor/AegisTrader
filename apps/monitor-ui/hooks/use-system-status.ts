@@ -14,7 +14,7 @@ import { ApiClientError } from '@/lib/api-client';
  */
 export interface UseSystemStatusOptions {
   /**
-   * Polling interval in milliseconds (default: 5000)
+   * Polling interval in milliseconds (default: 3000)
    */
   pollingInterval?: number;
   /**
@@ -41,7 +41,7 @@ export function useSystemStatus(
   options: UseSystemStatusOptions = {}
 ): UseSystemStatusResult {
   const {
-    pollingInterval = 5000,
+    pollingInterval = 3000,
     enablePolling = true,
   } = options;
 

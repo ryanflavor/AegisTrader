@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ...application.monitoring_service import MonitoringService
 from .dependencies import get_monitoring_service
+from .sdk_monitoring_routes import router as sdk_router
 from .service_instance_routes import router as instance_router
 from .service_routes import router as service_router
 
@@ -71,6 +72,9 @@ logger.info(f"Included service_router with prefix: {service_router.prefix}")
 
 router.include_router(instance_router)
 logger.info(f"Included instance_router with prefix: {instance_router.prefix}")
+
+router.include_router(sdk_router)
+logger.info(f"Included sdk_router with prefix: {sdk_router.prefix}")
 
 
 @router.get("/health", response_model=HealthResponse)

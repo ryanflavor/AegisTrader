@@ -10,11 +10,11 @@ import pytest
 
 from aegis_sdk_dev.domain.models import (
     BootstrapConfig,
+    ExecutionResult,
+    ExecutionType,
     ProjectTemplate,
+    RunConfiguration,
     ServiceConfiguration,
-    TestConfiguration,
-    TestResult,
-    TestType,
     ValidationResult,
 )
 
@@ -77,14 +77,14 @@ def bootstrap_config(service_config: ServiceConfiguration) -> BootstrapConfig:
 
 
 @pytest.fixture
-def test_config() -> TestConfiguration:
+def test_config() -> RunConfiguration:
     """Create a sample test configuration.
 
     Returns:
-        A valid TestConfiguration instance
+        A valid RunConfiguration instance
     """
-    return TestConfiguration(
-        test_type=TestType.UNIT,
+    return RunConfiguration(
+        test_type=ExecutionType.UNIT,
         verbose=True,
         coverage=True,
         min_coverage=80.0,
@@ -109,14 +109,14 @@ def validation_result() -> ValidationResult:
 
 
 @pytest.fixture
-def test_result() -> TestResult:
+def test_result() -> ExecutionResult:
     """Create a sample test result.
 
     Returns:
-        A valid TestResult instance
+        A valid ExecutionResult instance
     """
-    return TestResult(
-        test_type=TestType.UNIT,
+    return ExecutionResult(
+        test_type=ExecutionType.UNIT,
         passed=10,
         failed=0,
         skipped=2,

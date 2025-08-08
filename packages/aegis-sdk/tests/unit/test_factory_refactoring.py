@@ -78,7 +78,7 @@ class TestFactoryRefactoring:
 
                 # Verify KV store was created and connected
                 MockKVStore.assert_called_once_with(nats_adapter=message_bus)
-                mock_kv.connect.assert_called_once_with("election_test_service", enable_ttl=True)
+                mock_kv.connect.assert_called_once_with("election_test_service")
 
                 # Verify repository was created
                 MockRepo.assert_called_once_with(kv_store=mock_kv, logger=logger)
@@ -96,12 +96,11 @@ class TestFactoryRefactoring:
             store = await factory.create_kv_store(
                 bucket_name="test-bucket",
                 message_bus=message_bus,
-                enable_ttl=False,
             )
 
             # Verify KV store was created and connected
             MockKVStore.assert_called_once_with(nats_adapter=message_bus)
-            mock_kv.connect.assert_called_once_with("test_bucket", enable_ttl=False)
+            mock_kv.connect.assert_called_once_with("test_bucket")
             assert store == mock_kv
 
     def test_default_use_case_factory(self):

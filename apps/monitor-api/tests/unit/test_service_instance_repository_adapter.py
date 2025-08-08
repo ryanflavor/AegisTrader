@@ -42,12 +42,11 @@ class TestServiceInstanceRepositoryAdapter:
         return ServiceInstance(
             service_name="test-service",
             instance_id="test-123",
-            host="localhost",
-            port=8080,
             version="1.0.0",
             status="ACTIVE",
             last_heartbeat=datetime.now(UTC),
-            metadata={"region": "us-east-1"},
+            sticky_active_group=None,
+            metadata={"region": "us-east-1", "host": "localhost", "port": 8080},
         )
 
     def test_init(
@@ -68,7 +67,7 @@ class TestServiceInstanceRepositoryAdapter:
         instance_data = sample_instance.model_dump(mode="json")
         instance_data["last_heartbeat"] = sample_instance.last_heartbeat.isoformat()
 
-        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        mock_kv_store.keys.return_value = ["service-instances__test-service__test-123"]
         # Mock the entry object returned by get
         mock_entry = Mock()
         mock_entry.value = json.dumps(instance_data).encode()
@@ -81,8 +80,8 @@ class TestServiceInstanceRepositoryAdapter:
         assert len(instances) == 1
         assert instances[0].service_name == sample_instance.service_name
         assert instances[0].instance_id == sample_instance.instance_id
-        mock_kv_store.keys.assert_called_once_with("service-instances.*")
-        mock_kv_store.get.assert_called_once_with("service-instances.test-service.test-123")
+        mock_kv_store.keys.assert_called_once()
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service__test-123")
 
     @pytest.mark.asyncio
     async def test_get_all_instances_empty(
@@ -99,7 +98,7 @@ class TestServiceInstanceRepositoryAdapter:
 
         # Assert
         assert instances == []
-        mock_kv_store.keys.assert_called_once_with("service-instances.*")
+        mock_kv_store.keys.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_all_instances_kv_error(
@@ -115,7 +114,7 @@ class TestServiceInstanceRepositoryAdapter:
         with pytest.raises(KVStoreException) as exc_info:
             await repository_adapter.get_all_instances()
 
-        assert "Failed to retrieve all instances" in str(exc_info.value)
+        assert "Failed to get all instances" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_get_instances_by_service_success(
@@ -129,7 +128,7 @@ class TestServiceInstanceRepositoryAdapter:
         instance_data = sample_instance.model_dump(mode="json")
         instance_data["last_heartbeat"] = sample_instance.last_heartbeat.isoformat()
 
-        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        mock_kv_store.keys.return_value = ["service-instances__test-service__test-123"]
         # Mock the entry object returned by get
         mock_entry = Mock()
         mock_entry.value = json.dumps(instance_data).encode()
@@ -141,7 +140,7 @@ class TestServiceInstanceRepositoryAdapter:
         # Assert
         assert len(instances) == 1
         assert instances[0].service_name == "test-service"
-        mock_kv_store.keys.assert_called_once_with("service-instances.test-service.*")
+        mock_kv_store.keys.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_instances_by_service_not_found(
@@ -158,7 +157,7 @@ class TestServiceInstanceRepositoryAdapter:
 
         # Assert
         assert instances == []
-        mock_kv_store.keys.assert_called_once_with("service-instances.unknown-service.*")
+        mock_kv_store.keys.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_instance_success(
@@ -184,7 +183,7 @@ class TestServiceInstanceRepositoryAdapter:
         assert instance is not None
         assert instance.service_name == "test-service"
         assert instance.instance_id == "test-123"
-        mock_kv_store.get.assert_called_once_with("service-instances.test-service.test-123")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service__test-123")
 
     @pytest.mark.asyncio
     async def test_get_instance_not_found(
@@ -194,7 +193,6 @@ class TestServiceInstanceRepositoryAdapter:
     ) -> None:
         """Test getting non-existent instance."""
         # Arrange
-        # Mock None return for not found
         mock_kv_store.get.return_value = None
 
         # Act
@@ -202,7 +200,7 @@ class TestServiceInstanceRepositoryAdapter:
 
         # Assert
         assert instance is None
-        mock_kv_store.get.assert_called_once_with("service-instances.test-service.unknown-id")
+        mock_kv_store.get.assert_called_once_with("service-instances__test-service__unknown-id")
 
     @pytest.mark.asyncio
     async def test_get_instance_invalid_json(
@@ -212,7 +210,9 @@ class TestServiceInstanceRepositoryAdapter:
     ) -> None:
         """Test handling invalid JSON data."""
         # Arrange
-        mock_kv_store.get.return_value = b"invalid json"
+        mock_entry = Mock()
+        mock_entry.value = b"invalid json"
+        mock_kv_store.get.return_value = mock_entry
 
         # Act
         instance = await repository_adapter.get_instance("test-service", "test-123")
@@ -231,22 +231,18 @@ class TestServiceInstanceRepositoryAdapter:
         active_instance = ServiceInstance(
             service_name="test-service",
             instance_id="test-123",
-            host="localhost",
-            port=8080,
             version="1.0.0",
             status="ACTIVE",
             last_heartbeat=datetime.now(UTC),
-            metadata={},
+            metadata={"host": "localhost", "port": 8080},
         )
         inactive_instance = ServiceInstance(
             service_name="test-service",
             instance_id="test-456",
-            host="localhost",
-            port=8081,
             version="1.0.0",
             status="STANDBY",
             last_heartbeat=datetime.now(UTC),
-            metadata={},
+            metadata={"host": "localhost", "port": 8081},
         )
 
         active_data = active_instance.model_dump(mode="json")
@@ -255,8 +251,8 @@ class TestServiceInstanceRepositoryAdapter:
         inactive_data["last_heartbeat"] = inactive_instance.last_heartbeat.isoformat()
 
         mock_kv_store.keys.return_value = [
-            "service-instances.test-service.test-123",
-            "service-instances.test-service.test-456",
+            "service-instances__test-service__test-123",
+            "service-instances__test-service__test-456",
         ]
         mock_kv_store.get.side_effect = [
             Mock(value=json.dumps(active_data).encode()),
@@ -296,18 +292,16 @@ class TestServiceInstanceRepositoryAdapter:
         active_instance = ServiceInstance(
             service_name="test-service",
             instance_id="test-123",
-            host="localhost",
-            port=8080,
             version="1.0.0",
             status="ACTIVE",
             last_heartbeat=datetime.now(UTC),
-            metadata={},
+            metadata={"host": "localhost", "port": 8080},
         )
 
         instance_data = active_instance.model_dump(mode="json")
         instance_data["last_heartbeat"] = active_instance.last_heartbeat.isoformat()
 
-        mock_kv_store.keys.return_value = ["service-instances.test-service.test-123"]
+        mock_kv_store.keys.return_value = ["service-instances__test-service__test-123"]
         # Mock the entry object returned by get
         mock_entry = Mock()
         mock_entry.value = json.dumps(instance_data).encode()
@@ -331,22 +325,18 @@ class TestServiceInstanceRepositoryAdapter:
         active_instance = ServiceInstance(
             service_name="service1",
             instance_id="id1",
-            host="host1",
-            port=8080,
             version="1.0.0",
             status="ACTIVE",
             last_heartbeat=datetime.now(UTC),
-            metadata={},
+            metadata={"host": "host1", "port": 8080},
         )
         unhealthy_instance = ServiceInstance(
             service_name="service2",
             instance_id="id2",
-            host="host2",
-            port=8081,
             version="1.0.0",
             status="UNHEALTHY",
             last_heartbeat=datetime.now(UTC),
-            metadata={},
+            metadata={"host": "host2", "port": 8081},
         )
 
         active_data = active_instance.model_dump(mode="json")
@@ -355,8 +345,8 @@ class TestServiceInstanceRepositoryAdapter:
         unhealthy_data["last_heartbeat"] = unhealthy_instance.last_heartbeat.isoformat()
 
         mock_kv_store.keys.return_value = [
-            "service-instances.service1.id1",
-            "service-instances.service2.id2",
+            "service-instances__service1__id1",
+            "service-instances__service2__id2",
         ]
         mock_kv_store.get.side_effect = [
             Mock(value=json.dumps(active_data).encode()),

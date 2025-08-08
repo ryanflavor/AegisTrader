@@ -21,37 +21,40 @@ class EchoServiceClient:
 
     def __init__(self):
         """Initialize the client."""
-        self.deps = None
-        self.client = None
+        self.adapter = None
 
     async def setup(self) -> None:
         """Setup the client connection."""
         print("🔌 Connecting to NATS...")
 
-        # Import quick_setup here to avoid import issues
-        from aegis_sdk.developer import quick_setup
+        from aegis_sdk.domain.models import RPCRequest
+        from aegis_sdk.infrastructure.nats_adapter import NATSAdapter, NATSConnectionConfig
 
-        # Create a temporary service for RPC client
-        self.service = await quick_setup(
-            service_name="echo-client",
-            service_type="service",
-            debug=False,
-        )
+        # Create NATS adapter configuration
+        config = NATSConnectionConfig(service_name="echo-client", servers=["nats://localhost:4222"])
 
-        # Get the message bus from the service
-        self.client = self.service._bus  # Access internal message bus for RPC
+        # Create and connect adapter
+        self.adapter = NATSAdapter(config=config)
+        await self.adapter.connect()
+
+        # Store RPCRequest class for later use
+        self.RPCRequest = RPCRequest
+
         print("✅ Connected to NATS")
 
     async def test_echo(self, message: str) -> dict[str, Any]:
         """Test the echo endpoint."""
         print(f"\n📤 Testing echo with message: '{message}'")
 
-        request = {"message": message, "mode": "simple"}
+        request = self.RPCRequest(
+            method="echo", params={"message": message, "mode": "simple"}, target="echo-service"
+        )
 
         try:
-            response = await self.client.request("echo-service.echo", request, timeout=5.0)
-            print(f"📥 Response: {json.dumps(response, indent=2)}")
-            return response
+            response = await self.adapter.call_rpc(request)
+            result = response.result if response.success else {"error": response.error}
+            print(f"📥 Response: {json.dumps(result, indent=2)}")
+            return result
         except Exception as e:
             print(f"❌ Error: {e}")
             return {"error": str(e)}
@@ -60,12 +63,15 @@ class EchoServiceClient:
         """Test the batch_echo endpoint."""
         print(f"\n📤 Testing batch_echo with {len(messages)} messages")
 
-        request = {"messages": messages}
+        request = self.RPCRequest(
+            method="batch_echo", params={"messages": messages}, target="echo-service"
+        )
 
         try:
-            response = await self.client.request("echo-service.batch_echo", request, timeout=5.0)
-            print(f"📥 Response: {json.dumps(response, indent=2)}")
-            return response
+            response = await self.adapter.call_rpc(request)
+            result = response.result if response.success else {"error": response.error}
+            print(f"📥 Response: {json.dumps(result, indent=2)}")
+            return result
         except Exception as e:
             print(f"❌ Error: {e}")
             return {"error": str(e)}
@@ -74,10 +80,13 @@ class EchoServiceClient:
         """Test the ping endpoint."""
         print("\n🏓 Testing ping...")
 
+        request = self.RPCRequest(method="ping", params={}, target="echo-service")
+
         try:
-            response = await self.client.request("echo-service.ping", {}, timeout=2.0)
-            print(f"📥 Response: {json.dumps(response, indent=2)}")
-            return response
+            response = await self.adapter.call_rpc(request)
+            result = response.result if response.success else {"error": response.error}
+            print(f"📥 Response: {json.dumps(result, indent=2)}")
+            return result
         except Exception as e:
             print(f"❌ Error: {e}")
             return {"error": str(e)}
@@ -86,10 +95,13 @@ class EchoServiceClient:
         """Test the health endpoint."""
         print("\n💊 Testing health check...")
 
+        request = self.RPCRequest(method="health", params={}, target="echo-service")
+
         try:
-            response = await self.client.request("echo-service.health", {}, timeout=2.0)
-            print(f"📥 Response: {json.dumps(response, indent=2)}")
-            return response
+            response = await self.adapter.call_rpc(request)
+            result = response.result if response.success else {"error": response.error}
+            print(f"📥 Response: {json.dumps(result, indent=2)}")
+            return result
         except Exception as e:
             print(f"❌ Error: {e}")
             return {"error": str(e)}
@@ -98,10 +110,13 @@ class EchoServiceClient:
         """Test the metrics endpoint."""
         print("\n📊 Testing metrics...")
 
+        request = self.RPCRequest(method="metrics", params={}, target="echo-service")
+
         try:
-            response = await self.client.request("echo-service.metrics", {}, timeout=2.0)
-            print(f"📥 Response: {json.dumps(response, indent=2)}")
-            return response
+            response = await self.adapter.call_rpc(request)
+            result = response.result if response.success else {"error": response.error}
+            print(f"📥 Response: {json.dumps(result, indent=2)}")
+            return result
         except Exception as e:
             print(f"❌ Error: {e}")
             return {"error": str(e)}
@@ -110,16 +125,20 @@ class EchoServiceClient:
         """Test echo with all available modes."""
         print("\n🎭 Testing all echo modes...")
 
-        modes = ["simple", "reverse", "uppercase", "timestamp", "json"]
+        # Use the actual modes supported by the server
+        modes = ["simple", "delayed", "transform", "batch"]
         test_message = "Hello AegisSDK!"
 
         for mode in modes:
             print(f"\n--- Mode: {mode} ---")
-            request = {"message": test_message, "mode": mode}
+            request = self.RPCRequest(
+                method="echo", params={"message": test_message, "mode": mode}, target="echo-service"
+            )
 
             try:
-                response = await self.client.request("echo-service.echo", request, timeout=5.0)
-                print(f"📥 Response: {json.dumps(response, indent=2)}")
+                response = await self.adapter.call_rpc(request)
+                result = response.result if response.success else {"error": response.error}
+                print(f"📥 Response: {json.dumps(result, indent=2)}")
             except Exception as e:
                 print(f"❌ Error: {e}")
 
@@ -127,24 +146,53 @@ class EchoServiceClient:
         """Run a performance test."""
         print(f"\n⚡ Running performance test with {num_requests} requests...")
 
+        # Limit concurrent requests to avoid overwhelming NATS
+        max_concurrent = 50  # Reasonable limit for concurrent requests
+
         start_time = datetime.now()
         success_count = 0
         error_count = 0
 
-        tasks = []
-        for i in range(num_requests):
-            request = {"message": f"Performance test message {i}", "mode": "simple"}
-            task = self.client.request("echo-service.echo", request, timeout=10.0)
-            tasks.append(task)
+        # Process requests in batches
+        batch_size = min(max_concurrent, num_requests)
+        total_processed = 0
 
-        # Run all requests concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        while total_processed < num_requests:
+            # Create batch of requests
+            batch_tasks = []
+            batch_end = min(total_processed + batch_size, num_requests)
 
-        for result in results:
-            if isinstance(result, Exception):
-                error_count += 1
-            else:
-                success_count += 1
+            for i in range(total_processed, batch_end):
+                request = self.RPCRequest(
+                    method="echo",
+                    params={"message": f"Performance test message {i}", "mode": "simple"},
+                    target="echo-service",
+                )
+                task = self.adapter.call_rpc(request)
+                batch_tasks.append(task)
+
+            # Run batch concurrently
+            results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+            # Count results
+            for result in results:
+                if isinstance(result, Exception):
+                    error_count += 1
+                    print(f"  ❌ Request failed: {str(result)[:50]}")
+                elif hasattr(result, "success") and result.success:
+                    success_count += 1
+                else:
+                    error_count += 1
+
+            total_processed = batch_end
+
+            # Show progress for large tests
+            if num_requests > 100 and total_processed % 100 == 0:
+                print(f"  📊 Progress: {total_processed}/{num_requests} requests processed...")
+
+            # Small delay between batches to avoid overwhelming the connection
+            if total_processed < num_requests:
+                await asyncio.sleep(0.01)
 
         elapsed = (datetime.now() - start_time).total_seconds()
         rps = num_requests / elapsed if elapsed > 0 else 0
@@ -158,8 +206,8 @@ class EchoServiceClient:
 
     async def cleanup(self) -> None:
         """Cleanup client resources."""
-        if hasattr(self, "service") and self.service:
-            await self.service.stop()
+        if self.adapter:
+            await self.adapter.disconnect()
             print("\n🧹 Client cleaned up")
 
 
@@ -207,11 +255,15 @@ async def main():
         print("=" * 60)
 
         # Ask user if they want to run performance test
-        user_input = input("\n🤔 Run performance test? (y/n): ")
-        if user_input.lower() == "y":
-            num_requests = input("How many requests? (default 100): ")
-            num_requests = int(num_requests) if num_requests else 100
-            await client.performance_test(num_requests)
+        try:
+            user_input = input("\n🤔 Run performance test? (y/n): ")
+            if user_input.lower() == "y":
+                num_requests = input("How many requests? (default 100): ")
+                num_requests = int(num_requests) if num_requests else 100
+                await client.performance_test(num_requests)
+        except EOFError:
+            # Handle non-interactive mode
+            print("Skipping performance test (non-interactive mode)")
 
         print("\n" + "=" * 60)
         print("✅ All tests completed!")
@@ -219,6 +271,9 @@ async def main():
 
     except Exception as e:
         print(f"\n❌ Fatal error: {e}")
+        import traceback
+
+        traceback.print_exc()
     finally:
         await client.cleanup()
 

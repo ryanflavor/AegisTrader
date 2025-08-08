@@ -60,6 +60,7 @@ class AegisServiceBusAdapter(ServiceBusPort):
         except Exception as e:
             logger.error(f"Error stopping service bus: {e}")
             # Don't raise - we want graceful shutdown even if stop fails
+            self._is_connected = False
 
     def register_rpc_handler(
         self, method: str, handler: Callable[[dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]]

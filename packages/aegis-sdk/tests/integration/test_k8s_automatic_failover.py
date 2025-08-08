@@ -77,7 +77,7 @@ async def service_registry(nats_adapter: NATSAdapter) -> KVServiceRegistry:
     from aegis_sdk.infrastructure.nats_kv_store import NATSKVStore
 
     kv_store = NATSKVStore(nats_adapter)
-    await kv_store.connect("service_registry", enable_ttl=True)
+    await kv_store.connect("service_registry")
 
     registry = KVServiceRegistry(kv_store)
     yield registry

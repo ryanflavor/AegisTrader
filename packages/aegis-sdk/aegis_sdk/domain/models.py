@@ -161,6 +161,32 @@ class ServiceInfo(BaseModel):
             raise ValueError(f"Invalid version format: {v}. Use semantic versioning (e.g., 1.0.0)")
         return v
 
+    @field_validator("service_name")
+    @classmethod
+    def validate_service_name(cls, v: str) -> str:
+        """Validate service name format - no dots allowed."""
+        import re
+
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9-_]*$", v):
+            raise ValueError(
+                f"Invalid service name: {v}. Must start with letter, "
+                "can only contain letters, numbers, hyphens, underscores."
+            )
+        return v
+
+    @field_validator("instance_id")
+    @classmethod
+    def validate_instance_id(cls, v: str) -> str:
+        """Validate instance ID format - no dots allowed."""
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$", v):
+            raise ValueError(
+                f"Invalid instance ID: {v}. "
+                "Can only contain letters, numbers, hyphens, underscores."
+            )
+        return v
+
     @field_validator("registered_at", "last_heartbeat")
     @classmethod
     def validate_timestamps(cls, v: str) -> str:
@@ -363,6 +389,19 @@ class ServiceInstance(BaseModel):
 
         if not SubjectPatterns.is_valid_service_name(v):
             raise ValueError(f"Invalid service name format: {v}")
+        return v
+
+    @field_validator("instance_id")
+    @classmethod
+    def validate_instance_id(cls, v: str) -> str:
+        """Validate instance ID format - no dots or special chars allowed."""
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9-_]*$", v):
+            raise ValueError(
+                f"Invalid instance ID format: {v}. "
+                "Instance IDs can only contain letters, numbers, hyphens, and underscores."
+            )
         return v
 
     @field_validator("last_heartbeat", mode="before")

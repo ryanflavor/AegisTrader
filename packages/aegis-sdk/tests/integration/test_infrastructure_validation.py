@@ -474,10 +474,10 @@ class TestServiceLifecycle:
         assert isinstance(service._info, ServiceInfo)
 
         # Check initial state
-        assert service._rpc_handlers == {}
-        assert service._event_handlers == {}
-        assert service._command_handlers == {}
-        assert service._heartbeat_task is None
+        assert service._handler_registry._rpc_handlers == {}
+        assert service._handler_registry._event_handlers == {}
+        assert service._handler_registry._command_handlers == {}
+        assert service._health_manager._heartbeat_task is None
         assert service._start_time is None
 
     async def test_service_start_lifecycle(self):
@@ -515,7 +515,7 @@ class TestServiceLifecycle:
 
         # Verify handler registrations
         mock_bus.register_rpc_handler.assert_called_once_with(
-            "test_service", "get_status", service._rpc_handlers["get_status"]
+            "test_service", "get_status", service._handler_registry._rpc_handlers["get_status"]
         )
 
         mock_bus.subscribe_event.assert_called_once()
@@ -523,12 +523,14 @@ class TestServiceLifecycle:
         assert event_call[0][0] == "test.events.*"
 
         mock_bus.register_command_handler.assert_called_once_with(
-            "test_service", "process_data", service._command_handlers["process_data"]
+            "test_service",
+            "process_data",
+            service._handler_registry._command_handlers["process_data"],
         )
 
         # Verify heartbeat task started
-        assert service._heartbeat_task is not None
-        assert not service._heartbeat_task.done()
+        assert service._health_manager._heartbeat_task is not None
+        assert not service._health_manager._heartbeat_task.done()
 
         # Clean up
         await service.stop()
@@ -546,13 +548,13 @@ class TestServiceLifecycle:
         await service.start()
 
         # Get heartbeat task reference
-        heartbeat_task = service._heartbeat_task
+        heartbeat_task = service._health_manager._heartbeat_task
 
         # Stop service
         await service.stop()
 
         # Verify shutdown event is set
-        assert service._shutdown_event.is_set()
+        assert service._health_manager._shutdown_event.is_set()
 
         # Verify heartbeat task is cancelled
         assert heartbeat_task.cancelled()
@@ -568,7 +570,7 @@ class TestServiceLifecycle:
         service = Service("test_service", mock_bus)
 
         # Manually start heartbeat loop
-        heartbeat_task = asyncio.create_task(service._heartbeat_loop())
+        heartbeat_task = asyncio.create_task(service._health_manager._heartbeat_loop(None))
 
         # Let it run for a short time
         await asyncio.sleep(0.1)
@@ -577,7 +579,7 @@ class TestServiceLifecycle:
         assert mock_bus.send_heartbeat.called
 
         # Stop the loop
-        service._shutdown_event.set()
+        service._health_manager._shutdown_event.set()
 
         # Cancel the task and wait for it to complete
         heartbeat_task.cancel()
@@ -606,12 +608,13 @@ class TestServiceLifecycle:
         assert service.info.status == "SHUTDOWN"
 
         # Invalid status
-        with pytest.raises(ValueError, match="Invalid status"):
+        with pytest.raises(ValueError, match="is not a valid ServiceStatus"):
             service.set_status("INVALID")
 
     async def test_service_invalid_name_validation(self):
         """Test that service validates name format."""
         mock_bus = Mock(spec=MessageBusPort)
+        from pydantic_core import ValidationError
 
         # Invalid service names
         with pytest.raises(ValueError, match="Invalid service name"):
@@ -620,7 +623,7 @@ class TestServiceLifecycle:
         with pytest.raises(ValueError, match="Invalid service name"):
             Service("123invalid", mock_bus)
 
-        with pytest.raises(ValueError, match="Invalid service name"):
+        with pytest.raises(ValidationError, match="String should have at least 1 character"):
             Service("", mock_bus)
 
     async def test_service_on_start_hook(self):
@@ -652,7 +655,7 @@ class TestServiceLifecycle:
         assert service.on_start_called
 
         # Verify dynamic registration worked
-        assert "dynamic_method" in service._rpc_handlers
+        assert "dynamic_method" in service._handler_registry._rpc_handlers
 
         # Clean up
         await service.stop()

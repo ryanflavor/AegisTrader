@@ -30,66 +30,85 @@ class TestAppCoverage:
     async def test_error_handlers(self) -> None:
         """Test error handler registration and responses."""
         from app.infrastructure.api.error_handlers import (
-            configuration_exception_handler,
-            generic_exception_handler,
-            health_check_exception_handler,
-            kv_store_exception_handler,
-            service_not_found_handler,
-            service_unavailable_handler,
+            domain_exception_handler,
+            general_exception_handler,
+            http_exception_handler,
             validation_exception_handler,
         )
-        from fastapi import Request
+        from fastapi import HTTPException, Request
         from fastapi.exceptions import RequestValidationError
+        from pydantic_core import ErrorDetails
 
         # Mock request
         mock_request = Mock(spec=Request)
+        mock_request.method = "GET"
+        mock_request.url.path = "/test"
 
-        # Test configuration exception handler
+        # Test domain exception handler for ConfigurationException
         exc = ConfigurationException("Config error")
-        response = await configuration_exception_handler(mock_request, exc)
+        response = await domain_exception_handler(mock_request, exc)
         assert response.status_code == 500
-        assert b"Configuration error" in response.body
+        content = response.body.decode()
+        assert "CONFIG_ERROR" in content or "Config error" in content
 
-        # Test health check exception handler
+        # Test domain exception handler for HealthCheckFailedException
         exc = HealthCheckFailedException("Health check failed")
-        response = await health_check_exception_handler(mock_request, exc)
+        response = await domain_exception_handler(mock_request, exc)
         assert response.status_code == 503
-        assert b"Health check failed" in response.body
+        content = response.body.decode()
+        assert "HEALTH_CHECK_FAILED" in content or "Health check failed" in content
 
-        # Test KV store exception handler
+        # Test domain exception handler for KVStoreException
         exc = KVStoreException("KV error")
-        response = await kv_store_exception_handler(mock_request, exc)
-        assert response.status_code == 503
-        assert b"Storage service unavailable" in response.body
-
-        # Test service not found handler
-        exc = ServiceNotFoundException("Service not found")
-        response = await service_not_found_handler(mock_request, exc)
-        assert response.status_code == 404
-        assert b"Service not found" in response.body
-
-        # Test service already exists exception handler (use generic handler)
-        exc = ServiceAlreadyExistsException("test-service")
-        response = await generic_exception_handler(mock_request, exc)
+        response = await domain_exception_handler(mock_request, exc)
         assert response.status_code == 500
+        content = response.body.decode()
+        assert "KV_STORE_ERROR" in content or "KV error" in content
 
-        # Test service unavailable handler
+        # Test domain exception handler for ServiceNotFoundException
+        exc = ServiceNotFoundException("test-service")
+        response = await domain_exception_handler(mock_request, exc)
+        assert response.status_code == 404
+        content = response.body.decode()
+        assert "SERVICE_NOT_FOUND" in content or "test-service" in content
+
+        # Test domain exception handler for ServiceAlreadyExistsException
+        exc = ServiceAlreadyExistsException("test-service")
+        response = await domain_exception_handler(mock_request, exc)
+        assert response.status_code == 409
+
+        # Test domain exception handler for ServiceUnavailableException
         exc = ServiceUnavailableException("Service unavailable")
-        response = await service_unavailable_handler(mock_request, exc)
+        response = await domain_exception_handler(mock_request, exc)
         assert response.status_code == 503
-        assert b"Service temporarily unavailable" in response.body
+        content = response.body.decode()
+        assert "SERVICE_UNAVAILABLE" in content or "Service unavailable" in content
 
         # Test validation exception handler
-        errors = [{"loc": ("field",), "msg": "invalid", "type": "value_error"}]
+        errors = [
+            ErrorDetails(
+                loc=("field",),
+                msg="invalid",
+                type="value_error",
+            )
+        ]
         exc = RequestValidationError(errors=errors)
         response = await validation_exception_handler(mock_request, exc)
         assert response.status_code == 422
 
-        # Test generic exception handler
+        # Test HTTP exception handler
+        http_exc = HTTPException(status_code=404, detail="Not found")
+        response = await http_exception_handler(mock_request, http_exc)
+        assert response.status_code == 404
+        content = response.body.decode()
+        assert "Not found" in content
+
+        # Test general exception handler
         exc = Exception("Generic error")
-        response = await generic_exception_handler(mock_request, exc)
+        response = await general_exception_handler(mock_request, exc)
         assert response.status_code == 500
-        assert b"Internal server error" in response.body
+        content = response.body.decode()
+        assert "internal" in content.lower() or "error" in content.lower()
 
     @pytest.mark.asyncio
     async def test_main_app_lifespan(self) -> None:

@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     Handles startup and shutdown tasks for the application.
     """
     logger.info("Starting AegisTrader Management Service")
+    cleanup_task = None
 
     try:
         # Load and validate configuration during startup
@@ -51,6 +52,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await connection_manager.startup()
         set_connection_manager(connection_manager)
 
+        # Start periodic cleanup task for stale entries
+        from .infrastructure.api.dependencies import get_kv_store
+        from .infrastructure.cleanup_task import StaleEntryCleanupTask
+
+        try:
+            kv_store = get_kv_store()
+            cleanup_task = StaleEntryCleanupTask(
+                kv_store=kv_store,
+                cleanup_interval=300,  # 5 minutes
+                stale_threshold=35,  # 30s TTL + 5s buffer
+            )
+            cleanup_task.start()
+            logger.info("Started periodic cleanup task for stale service entries")
+        except Exception as e:
+            logger.warning(f"Failed to start cleanup task: {e}")
+            # Don't fail startup if cleanup task fails
+
         logger.info("All connections initialized successfully")
         logger.info("All routes registered successfully")
         logger.info("Service startup complete")
@@ -63,6 +81,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         raise
     finally:
         logger.info("Shutting down AegisTrader Management Service")
+
+        # Stop cleanup task
+        if cleanup_task:
+            try:
+                await cleanup_task.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping cleanup task: {e}")
 
         # Clean up connections
         try:

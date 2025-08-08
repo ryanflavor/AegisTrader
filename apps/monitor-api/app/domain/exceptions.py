@@ -65,3 +65,17 @@ class KVStoreException(DomainException):
 
     def __init__(self, message: str):
         super().__init__(message, "KV_STORE_ERROR")
+
+
+class ServiceRegistryException(DomainException):
+    """Raised when a service registry operation fails."""
+
+    def __init__(self, message: str):
+        super().__init__(message, "SERVICE_REGISTRY_ERROR")
+
+
+class MonitoringException(DomainException):
+    """Raised when a monitoring operation fails."""
+
+    def __init__(self, message: str):
+        super().__init__(message, "MONITORING_ERROR")

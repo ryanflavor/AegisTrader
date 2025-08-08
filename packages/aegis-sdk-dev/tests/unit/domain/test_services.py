@@ -2,10 +2,10 @@
 
 from aegis_sdk_dev.domain.models import (
     BootstrapConfig,
+    ExecutionType,
     ProjectTemplate,
+    RunConfiguration,
     ServiceConfiguration,
-    TestConfiguration,
-    TestType,
     ValidationLevel,
 )
 from aegis_sdk_dev.domain.services import (
@@ -15,7 +15,7 @@ from aegis_sdk_dev.domain.services import (
 )
 
 
-class TestConfigurationValidator:
+class RunConfigurationValidator:
     """Test ConfigurationValidator domain service."""
 
     def setup_method(self):
@@ -258,8 +258,8 @@ class TestTestOrchestrator:
 
     def test_prepare_test_environment_basic(self):
         """Test preparing basic test environment."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             verbose=False,
             coverage=False,
         )
@@ -274,8 +274,8 @@ class TestTestOrchestrator:
 
     def test_prepare_test_environment_verbose(self):
         """Test preparing test environment with verbose output."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             verbose=True,
             coverage=False,
         )
@@ -287,8 +287,8 @@ class TestTestOrchestrator:
 
     def test_prepare_test_environment_coverage(self):
         """Test preparing test environment with coverage."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             verbose=False,
             coverage=True,
         )
@@ -301,8 +301,8 @@ class TestTestOrchestrator:
 
     def test_prepare_test_environment_with_markers(self):
         """Test preparing test environment with markers."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             markers=["slow", "network"],
         )
 
@@ -315,7 +315,7 @@ class TestTestOrchestrator:
 
     def test_analyze_test_results_success(self):
         """Test analyzing successful test results."""
-        config = TestConfiguration(test_type=TestType.UNIT)
+        config = RunConfiguration(test_type=ExecutionType.UNIT)
         output = "10 passed in 2.50s"
 
         result = self.orchestrator.analyze_test_results(
@@ -325,7 +325,7 @@ class TestTestOrchestrator:
             config=config,
         )
 
-        assert result.test_type == TestType.UNIT
+        assert result.test_type == ExecutionType.UNIT
         assert result.passed == 10
         assert result.failed == 0
         assert result.duration_seconds == 2.5
@@ -333,7 +333,7 @@ class TestTestOrchestrator:
 
     def test_analyze_test_results_with_failures(self):
         """Test analyzing test results with failures."""
-        config = TestConfiguration(test_type=TestType.INTEGRATION)
+        config = RunConfiguration(test_type=ExecutionType.INTEGRATION)
         output = "8 passed, 2 failed in 5.00s"
 
         result = self.orchestrator.analyze_test_results(
@@ -343,7 +343,7 @@ class TestTestOrchestrator:
             config=config,
         )
 
-        assert result.test_type == TestType.INTEGRATION
+        assert result.test_type == ExecutionType.INTEGRATION
         assert result.passed == 8
         assert result.failed == 2
         assert result.duration_seconds == 5.0
@@ -351,7 +351,7 @@ class TestTestOrchestrator:
 
     def test_analyze_test_results_with_coverage(self):
         """Test analyzing test results with coverage."""
-        config = TestConfiguration(test_type=TestType.ALL, coverage=True)
+        config = RunConfiguration(test_type=ExecutionType.ALL, coverage=True)
         output = """
         10 passed in 3.00s
         TOTAL     100      10      90%
@@ -368,13 +368,13 @@ class TestTestOrchestrator:
 
     def test_validate_test_results_success(self):
         """Test validating successful test results."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             coverage=True,
             min_coverage=80.0,
         )
-        result = TestResult(
-            test_type=TestType.UNIT,
+        result = ExecutionResult(
+            test_type=ExecutionType.UNIT,
             passed=10,
             failed=0,
             coverage_percentage=85.0,
@@ -387,9 +387,9 @@ class TestTestOrchestrator:
 
     def test_validate_test_results_with_failures(self):
         """Test validating test results with failures."""
-        config = TestConfiguration(test_type=TestType.UNIT)
-        result = TestResult(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(test_type=ExecutionType.UNIT)
+        result = ExecutionResult(
+            test_type=ExecutionType.UNIT,
             passed=8,
             failed=2,
             duration_seconds=2.0,
@@ -403,13 +403,13 @@ class TestTestOrchestrator:
 
     def test_validate_test_results_low_coverage(self):
         """Test validating test results with low coverage."""
-        config = TestConfiguration(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(
+            test_type=ExecutionType.UNIT,
             coverage=True,
             min_coverage=90.0,
         )
-        result = TestResult(
-            test_type=TestType.UNIT,
+        result = ExecutionResult(
+            test_type=ExecutionType.UNIT,
             passed=10,
             failed=0,
             coverage_percentage=75.0,
@@ -424,9 +424,9 @@ class TestTestOrchestrator:
 
     def test_validate_test_results_with_errors(self):
         """Test validating test results with errors."""
-        config = TestConfiguration(test_type=TestType.UNIT)
-        result = TestResult(
-            test_type=TestType.UNIT,
+        config = RunConfiguration(test_type=ExecutionType.UNIT)
+        result = ExecutionResult(
+            test_type=ExecutionType.UNIT,
             passed=0,
             failed=0,
             duration_seconds=0.1,

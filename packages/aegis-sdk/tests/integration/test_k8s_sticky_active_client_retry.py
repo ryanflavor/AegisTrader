@@ -48,7 +48,7 @@ async def nats_adapter():
 async def service_registry(nats_adapter):
     """Create service registry using NATS KV."""
     kv_store = NATSKVStore(nats_adapter)
-    await kv_store.connect("service_registry", enable_ttl=True)
+    await kv_store.connect("service_registry")
     registry = KVServiceRegistry(kv_store)
     yield registry
 
@@ -83,7 +83,7 @@ class TestK8sStickyActiveClientRetry:
         # Clean up any stale leader keys from previous tests
         kv_store = NATSKVStore(nats_adapter)
         election_bucket = f"election_{service_name.replace('-', '_')}"
-        await kv_store.connect(election_bucket, enable_ttl=True)
+        await kv_store.connect(election_bucket)
         leader_key = f"leader.{group_id}"
         try:
             await kv_store.delete(leader_key)
@@ -296,7 +296,7 @@ class TestK8sStickyActiveClientRetry:
         # Clean up any stale leader keys
         kv_store = NATSKVStore(nats_adapter)
         election_bucket = f"election_{service_name.replace('-', '_')}"
-        await kv_store.connect(election_bucket, enable_ttl=True)
+        await kv_store.connect(election_bucket)
         leader_key = f"leader.{group_id}"
         try:
             await kv_store.delete(leader_key)

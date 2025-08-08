@@ -6,8 +6,8 @@ authors = [{name = "AegisIPC Team"}]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "aegis-sdk>=1.0.1",
-    "aegis-sdk-dev>=1.0.0",
+    "aegis-sdk>=0.1.0",
+    "aegis-sdk-dev>=0.1.0",
     "pydantic>=2.0.0",
     "click>=8.0.0",
     "rich>=13.0.0",

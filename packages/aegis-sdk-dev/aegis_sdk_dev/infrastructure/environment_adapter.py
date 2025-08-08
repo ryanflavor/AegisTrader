@@ -24,8 +24,11 @@ class EnvironmentAdapter:
             return True
 
         # Check for common K8s environment variables
-        k8s_vars = ["KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT"]
-        return all(os.getenv(var) for var in k8s_vars)
+        # Either KUBERNETES_SERVICE_HOST or both host and port indicate K8s
+        if os.getenv("KUBERNETES_SERVICE_HOST"):
+            return True
+
+        return False
 
     def is_docker_environment(self) -> bool:
         """Check if running in Docker container."""
@@ -34,14 +37,22 @@ class EnvironmentAdapter:
             return True
 
         # Check cgroup for docker
-        try:
-            with open("/proc/1/cgroup") as f:
-                return "docker" in f.read()
-        except FileNotFoundError:
-            return False
+        cgroup_path = Path("/proc/self/cgroup")
+        if cgroup_path.exists():
+            try:
+                content = cgroup_path.read_text()
+                return "docker" in content
+            except OSError:
+                pass
+
+        return False
 
     def detect_environment(self) -> str:
-        """Detect the current runtime environment."""
+        """Detect the current runtime environment.
+
+        Returns:
+            String identifying the environment: 'kubernetes', 'docker', or 'local'
+        """
         if self.is_kubernetes_environment():
             return "kubernetes"
         elif self.is_docker_environment():
@@ -58,11 +69,23 @@ class EnvironmentAdapter:
 
     def get_namespace(self) -> str | None:
         """Get Kubernetes namespace if available."""
-        namespace_file = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-        if Path(namespace_file).exists():
+        namespace_file = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+        if namespace_file.exists():
             try:
-                with open(namespace_file) as f:
-                    return f.read().strip()
+                return namespace_file.read_text().strip()
             except OSError:
                 pass
         return None
+
+    def _check_port_forward(self) -> bool:
+        """Check if kubectl port-forward is active for NATS."""
+        try:
+            import subprocess
+
+            result = subprocess.run(["lsof", "-i:4222"], capture_output=True, text=True, timeout=1)
+            if result.returncode == 0:
+                output = result.stdout.lower()
+                return "kubectl" in output and "listen" in output
+        except:
+            pass
+        return False

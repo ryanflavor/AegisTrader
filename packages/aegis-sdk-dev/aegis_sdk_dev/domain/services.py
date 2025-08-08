@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from aegis_sdk_dev.domain.models import (
     BootstrapConfig,
+    ExecutionResult,
+    RunConfiguration,
     ServiceConfiguration,
-    TestConfiguration,
-    TestResult,
     ValidationIssue,
     ValidationLevel,
     ValidationResult,
@@ -317,7 +319,7 @@ data:
 class TestOrchestrator:
     """Domain service for orchestrating test execution."""
 
-    def prepare_test_environment(self, config: TestConfiguration) -> dict[str, Any]:
+    def prepare_test_environment(self, config: RunConfiguration) -> dict[str, Any]:
         """Prepare the test environment based on configuration."""
         env = {
             "test_type": config.test_type.value,
@@ -349,8 +351,8 @@ class TestOrchestrator:
         exit_code: int,
         output: str,
         duration: float,
-        config: TestConfiguration,
-    ) -> TestResult:
+        config: RunConfiguration,
+    ) -> ExecutionResult:
         """Analyze test execution output and create result object."""
         import re
 
@@ -382,7 +384,7 @@ class TestOrchestrator:
             error_lines = [line for line in output.split("\n") if "ERROR" in line]
             errors = error_lines[:5]  # Limit to first 5 errors
 
-        return TestResult(
+        return ExecutionResult(
             test_type=config.test_type,
             passed=passed,
             failed=failed,
@@ -393,7 +395,7 @@ class TestOrchestrator:
         )
 
     def validate_test_results(
-        self, result: TestResult, config: TestConfiguration
+        self, result: ExecutionResult, config: RunConfiguration
     ) -> list[ValidationIssue]:
         """Validate test results against configured criteria."""
         issues = []

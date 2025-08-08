@@ -37,6 +37,9 @@ class ProcessExecutorAdapter:
                 stderr.decode("utf-8") if stderr else "",
             )
 
+        except TimeoutError:
+            # Re-raise TimeoutError without wrapping
+            raise
         except FileNotFoundError as e:
             raise OSError(f"Command not found: {command[0]}") from e
         except Exception as e:

@@ -1,0 +1,114 @@
+{{- if .Values.nats.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "aegis-trader.fullname" . }}-create-kv-bucket
+  labels:
+    {{- include "aegis-trader.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "aegis-trader.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kv-setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: create-kv-bucket
+        image: natsio/nats-box:latest
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "Waiting for NATS to be ready..."
+          sleep 10
+
+          # Check if the KV bucket already exists
+          if nats stream info KV_service_registry > /dev/null 2>&1; then
+            echo "KV bucket 'service_registry' already exists"
+
+            # Check current max_age setting
+            MAX_AGE=$(nats stream info KV_service_registry --json | jq -r '.config.max_age')
+            echo "Current max_age: $MAX_AGE"
+
+            # Check if TTL is enabled
+            TTL_ENABLED=$(nats stream info KV_service_registry --json | jq -r '.config.allow_msg_ttl')
+            echo "Current allow_msg_ttl: $TTL_ENABLED"
+
+            # If max_age is 0 (unlimited), we need to recreate with TTL
+            if [ "$MAX_AGE" = "0" ]; then
+              echo "Recreating KV bucket with TTL enabled..."
+
+              # Delete the old bucket
+              nats stream rm KV_service_registry -f
+
+              # Create new bucket with max_age TTL ({{ .Values.nats.kvStore.ttlSeconds }} seconds for entries)
+              # Convert seconds to nanoseconds for NATS ({{ .Values.nats.kvStore.ttlSeconds }} * 1000000000)
+              MAX_AGE_NS=$(({{ .Values.nats.kvStore.ttlSeconds }} * 1000000000))
+              cat <<EOF | nats req '$JS.API.STREAM.CREATE' -
+          {
+            "name": "KV_service_registry",
+            "subjects": ["$KV.service_registry.>"],
+            "retention": "limits",
+            "max_msgs_per_subject": 10,
+            "max_bytes": -1,
+            "max_age": $MAX_AGE_NS,
+            "max_msg_size": 1048576,
+            "storage": "file",
+            "allow_direct": true,
+            "allow_rollup_hdrs": true,
+            "deny_delete": false,
+            "deny_purge": false,
+            "discard": "old",
+            "allow_msg_ttl": true,
+            "replicas": 1
+          }
+          EOF
+
+              echo "KV bucket recreated with {{ .Values.nats.kvStore.ttlSeconds }}-second TTL"
+            else
+              echo "KV bucket already has TTL configured (max_age: $MAX_AGE)"
+            fi
+          else
+            echo "Creating KV bucket 'service_registry' with TTL..."
+
+            # Create the stream directly with proper TTL configuration
+            # Convert seconds to nanoseconds for NATS ({{ .Values.nats.kvStore.ttlSeconds }} * 1000000000)
+            MAX_AGE_NS=$(({{ .Values.nats.kvStore.ttlSeconds }} * 1000000000))
+            cat <<EOF | nats req '$JS.API.STREAM.CREATE' -
+          {
+            "name": "KV_service_registry",
+            "subjects": ["$KV.service_registry.>"],
+            "retention": "limits",
+            "max_msgs_per_subject": 10,
+            "max_bytes": -1,
+            "max_age": $MAX_AGE_NS,
+            "max_msg_size": 1048576,
+            "storage": "file",
+            "allow_direct": true,
+            "allow_rollup_hdrs": true,
+            "deny_delete": false,
+            "deny_purge": false,
+            "discard": "old",
+            "allow_msg_ttl": true,
+            "replicas": 1
+          }
+          EOF
+
+            echo "KV bucket created with {{ .Values.nats.kvStore.ttlSeconds }}-second TTL"
+          fi
+
+          # Verify the configuration
+          echo "Final configuration:"
+          nats stream info KV_service_registry --json | jq '{name: .config.name, max_age: .config.max_age, allow_msg_ttl: .config.allow_msg_ttl}'
+
+          echo "KV bucket setup complete!"
+        env:
+        - name: NATS_URL
+          value: "nats://{{ include "aegis-trader.fullname" . }}-nats:4222"
+{{- end }}

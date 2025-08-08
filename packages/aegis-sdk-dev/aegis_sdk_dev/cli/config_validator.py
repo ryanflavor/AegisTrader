@@ -78,7 +78,11 @@ class ConfigValidator:
 
             nats = NATSAdapter()
             await asyncio.wait_for(nats.connect(nats_url), timeout=timeout)
-            await nats.close()
+            # NATSAdapter uses 'disconnect' method, not 'close'
+            if hasattr(nats, "disconnect"):
+                await nats.disconnect()
+            elif hasattr(nats, "close"):
+                await nats.close()
             return True, None
 
         except asyncio.TimeoutError:

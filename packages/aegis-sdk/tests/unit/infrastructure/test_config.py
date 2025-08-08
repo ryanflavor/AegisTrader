@@ -150,8 +150,6 @@ class TestKVStoreConfig:
         """Test default configuration values."""
         config = KVStoreConfig(bucket="test_bucket")
         assert config.bucket == "test_bucket"
-        assert config.enable_ttl is True
-        assert config.sanitize_keys is True
         assert config.max_value_size == 1024 * 1024  # 1MB
         assert config.history_size == 10
 
@@ -159,14 +157,10 @@ class TestKVStoreConfig:
         """Test configuration with custom values."""
         config = KVStoreConfig(
             bucket="custom_bucket",
-            enable_ttl=False,
-            sanitize_keys=False,
             max_value_size=2048 * 1024,  # 2MB
             history_size=50,
         )
         assert config.bucket == "custom_bucket"
-        assert config.enable_ttl is False
-        assert config.sanitize_keys is False
         assert config.max_value_size == 2048 * 1024
         assert config.history_size == 50
 

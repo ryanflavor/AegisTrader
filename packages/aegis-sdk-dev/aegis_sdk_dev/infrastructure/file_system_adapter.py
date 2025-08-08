@@ -21,7 +21,10 @@ class FileSystemAdapter:
     def write_file(self, path: str, content: str) -> None:
         """Write content to a file."""
         try:
-            Path(path).write_text(content)
+            file_path = Path(path)
+            # Ensure parent directories exist
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content)
         except Exception as e:
             raise OSError(f"Unable to write file {path}: {e}") from e
 

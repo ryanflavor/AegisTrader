@@ -84,7 +84,8 @@ class TestFinalCoverage:
             log_level="INFO",
             environment="development",
         )
-        adapter.validate_configuration(valid_config)  # Should not raise
+        result = adapter.validate_configuration(valid_config)
+        assert result.is_valid
 
         # Invalid production config
         invalid_config = ServiceConfiguration(
@@ -93,11 +94,16 @@ class TestFinalCoverage:
             log_level="INFO",
             environment="production",
         )
-        from app.domain.exceptions import ConfigurationException
 
-        with pytest.raises(ConfigurationException) as exc_info:
-            adapter.validate_configuration(invalid_config)
-        assert "Production environment should not use localhost" in str(exc_info.value)
+        result = adapter.validate_configuration(invalid_config)
+        assert not result.is_valid
+        assert result.has_errors()
+
+        # Check that the error message contains expected text
+        error_messages = [issue.message for issue in result.issues]
+        assert any(
+            "Production environment should not use localhost" in msg for msg in error_messages
+        )
 
     @pytest.mark.asyncio
     async def test_service_instance_repository_parse_key(self) -> None:

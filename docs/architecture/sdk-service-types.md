@@ -576,7 +576,7 @@ command_handlers = registry.command_handlers
 ### When to Use SingleActiveService
 
 - **Financial transactions** requiring strict ordering
-- **State machines** with complex state management  
+- **State machines** with complex state management
 - **Batch processing** jobs that must not run concurrently
 - **Resource coordination** (file processing, external API rate limiting)
 - **Singleton services** by design requirement
