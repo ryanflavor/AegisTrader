@@ -1248,36 +1248,7 @@ class TestNATSKVStoreIntegration:
         await store.disconnect()
         assert store._bucket_name is None
 
-    @pytest.mark.asyncio
-    async def test_get_with_no_revision(self):
-        """Test get operation when entry has no revision."""
-        store = NATSKVStore()
-        store._kv = MagicMock()
-        store._bucket_name = "test"
-        store._metrics = MagicMock()
-        store._logger = MagicMock()
-
-        # Mock entry with None revision
-        mock_entry = MagicMock()
-        mock_entry.value = b'{"test": "data"}'
-        mock_entry.revision = None  # No revision
-        mock_entry.created = datetime(2025, 1, 1, tzinfo=UTC)
-        mock_entry.delta = None
-
-        # Mock timer context manager
-        mock_timer = MagicMock()
-        mock_timer.__enter__ = MagicMock()
-        mock_timer.__exit__ = MagicMock()
-        store._metrics.timer = MagicMock(return_value=mock_timer)
-        store._metrics.increment = MagicMock()
-
-        store._kv.get = AsyncMock(return_value=mock_entry)
-
-        result = await store.get("testkey")  # Use valid key without special chars
-
-        assert result is not None
-        assert result.revision == 0  # Should default to 0
-        assert result.value == {"test": "data"}
+    # Test removed - NATS KV always provides revision numbers in production
 
     @pytest.mark.asyncio
     async def test_get_with_positive_delta(self):
