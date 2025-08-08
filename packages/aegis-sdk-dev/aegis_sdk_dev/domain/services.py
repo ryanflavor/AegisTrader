@@ -7,6 +7,7 @@ from typing import Any
 from aegis_sdk_dev.domain.models import (
     BootstrapConfig,
     ExecutionResult,
+    ProjectTemplate,
     RunConfiguration,
     ServiceConfiguration,
     ValidationIssue,
@@ -149,24 +150,67 @@ class ProjectGenerator:
         """Generate core application structure."""
         files = {}
 
-        # Domain layer
-        files[f"{base_dir}/domain/__init__.py"] = self._generate_domain_init(config)
-        files[f"{base_dir}/domain/models.py"] = self._generate_domain_models(config)
-        files[f"{base_dir}/domain/services.py"] = self._generate_domain_services(config)
+        if config.template == ProjectTemplate.ENTERPRISE_DDD:
+            # 企业级DDD架构
+            # Domain layer - 核心业务逻辑
+            files[f"{base_dir}/domain/__init__.py"] = self._generate_domain_init(config)
+            files[f"{base_dir}/domain/entities.py"] = self._generate_domain_entities(config)
+            files[f"{base_dir}/domain/value_objects.py"] = self._generate_domain_value_objects(
+                config
+            )
+            files[f"{base_dir}/domain/repositories.py"] = self._generate_domain_repositories(config)
+            files[f"{base_dir}/domain/services.py"] = self._generate_domain_services(config)
 
-        # Application layer
-        files[f"{base_dir}/application/__init__.py"] = self._generate_application_init(config)
-        files[f"{base_dir}/application/use_cases.py"] = self._generate_use_cases(config)
+            # Application layer - 用例编排
+            files[f"{base_dir}/application/__init__.py"] = self._generate_application_init(config)
+            files[f"{base_dir}/application/commands.py"] = self._generate_commands(config)
+            files[f"{base_dir}/application/queries.py"] = self._generate_queries(config)
+            files[f"{base_dir}/application/handlers.py"] = self._generate_handlers(config)
 
-        # Ports layer
-        files[f"{base_dir}/ports/__init__.py"] = self._generate_ports_init(config)
-        files[f"{base_dir}/ports/inbound.py"] = self._generate_inbound_ports(config)
-        files[f"{base_dir}/ports/outbound.py"] = self._generate_outbound_ports(config)
+            # Infrastructure layer - 基础设施实现
+            files[f"{base_dir}/infra/__init__.py"] = self._generate_infra_init(config)
+            files[f"{base_dir}/infra/persistence.py"] = self._generate_persistence(config)
+            files[f"{base_dir}/infra/messaging.py"] = self._generate_messaging(config)
+            files[f"{base_dir}/infra/adapters.py"] = self._generate_adapters(config)
 
-        # Infrastructure layer
-        files[f"{base_dir}/infrastructure/__init__.py"] = self._generate_infrastructure_init(config)
-        files[f"{base_dir}/infrastructure/adapters.py"] = self._generate_adapters(config)
-        files[f"{base_dir}/infrastructure/factory.py"] = self._generate_factory(config)
+            # Crossdomain layer - 防腐层
+            files[f"{base_dir}/crossdomain/__init__.py"] = self._generate_crossdomain_init(config)
+            files[f"{base_dir}/crossdomain/translators.py"] = self._generate_translators(config)
+            files[f"{base_dir}/crossdomain/anti_corruption.py"] = self._generate_anti_corruption(
+                config
+            )
+
+            # Package layer - 纯工具函数
+            files[f"{base_dir}/pkg/__init__.py"] = self._generate_pkg_init(config)
+            files[f"{base_dir}/pkg/utils.py"] = self._generate_utils(config)
+            files[f"{base_dir}/pkg/validators.py"] = self._generate_validators(config)
+
+            # Types layer - 类型定义
+            files[f"{base_dir}/types/__init__.py"] = self._generate_types_init(config)
+            files[f"{base_dir}/types/dto.py"] = self._generate_dto(config)
+            files[f"{base_dir}/types/interfaces.py"] = self._generate_interfaces(config)
+        else:
+            # 标准架构
+            # Domain layer
+            files[f"{base_dir}/domain/__init__.py"] = self._generate_domain_init(config)
+            files[f"{base_dir}/domain/models.py"] = self._generate_domain_models(config)
+            files[f"{base_dir}/domain/services.py"] = self._generate_domain_services(config)
+
+            # Application layer
+            files[f"{base_dir}/application/__init__.py"] = self._generate_application_init(config)
+            files[f"{base_dir}/application/use_cases.py"] = self._generate_use_cases(config)
+
+            # Ports layer
+            files[f"{base_dir}/ports/__init__.py"] = self._generate_ports_init(config)
+            files[f"{base_dir}/ports/inbound.py"] = self._generate_inbound_ports(config)
+            files[f"{base_dir}/ports/outbound.py"] = self._generate_outbound_ports(config)
+
+            # Infrastructure layer
+            files[f"{base_dir}/infrastructure/__init__.py"] = self._generate_infrastructure_init(
+                config
+            )
+            files[f"{base_dir}/infrastructure/adapters.py"] = self._generate_adapters(config)
+            files[f"{base_dir}/infrastructure/factory.py"] = self._generate_factory(config)
 
         # Main entry point
         files[f"{base_dir}/main.py"] = self._generate_main(config)
@@ -423,20 +467,23 @@ class TestOrchestrator:
             )
 
         # Check coverage threshold
-        if config.coverage and result.coverage_percentage is not None:
-            if result.coverage_percentage < config.min_coverage:
-                issues.append(
-                    ValidationIssue(
-                        level=ValidationLevel.WARNING,
-                        category="COVERAGE",
-                        message=f"Coverage {result.coverage_percentage}% is below threshold {config.min_coverage}%",
-                        resolution="Add more tests to improve coverage",
-                        details={
-                            "current_coverage": result.coverage_percentage,
-                            "required_coverage": config.min_coverage,
-                        },
-                    )
+        if (
+            config.coverage
+            and result.coverage_percentage is not None
+            and result.coverage_percentage < config.min_coverage
+        ):
+            issues.append(
+                ValidationIssue(
+                    level=ValidationLevel.WARNING,
+                    category="COVERAGE",
+                    message=f"Coverage {result.coverage_percentage}% is below threshold {config.min_coverage}%",
+                    resolution="Add more tests to improve coverage",
+                    details={
+                        "current_coverage": result.coverage_percentage,
+                        "required_coverage": config.min_coverage,
+                    },
                 )
+            )
 
         # Check for test errors
         if result.errors:

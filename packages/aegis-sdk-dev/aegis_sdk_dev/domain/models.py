@@ -23,6 +23,7 @@ class ProjectTemplate(str, Enum):
     SINGLE_ACTIVE = "single_active"
     EVENT_DRIVEN = "event_driven"
     FULL_FEATURED = "full_featured"
+    ENTERPRISE_DDD = "enterprise_ddd"
 
 
 class ExecutionType(str, Enum):

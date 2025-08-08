@@ -1,0 +1,46 @@
+#!/bin/bash
+# Aegis SDK CLI - 便捷命令别名
+
+# 检查是否提供了命令
+if [ $# -eq 0 ]; then
+    echo "Aegis SDK Development Tools"
+    echo ""
+    echo "Usage: ./aegis <command> [options]"
+    echo ""
+    echo "Available commands:"
+    echo "  bootstrap        Create a new AegisSDK service project"
+    echo "  validate         Validate service configuration"
+    echo "  quickstart       Launch quickstart wizard"
+    echo "  test             Run tests"
+    echo ""
+    echo "Examples:"
+    echo "  ./aegis bootstrap -p my-service -t basic"
+    echo "  ./aegis validate -s my-service -n nats://localhost:4222"
+    echo ""
+    echo "For detailed help on each command:"
+    echo "  ./aegis <command> --help"
+    exit 0
+fi
+
+COMMAND=$1
+shift
+
+case $COMMAND in
+    bootstrap|create|new)
+        uv run python -m aegis_sdk_dev.cli.bootstrap "$@"
+        ;;
+    validate|check|config)
+        uv run python -m aegis_sdk_dev.cli.config_validator "$@"
+        ;;
+    quickstart|quick|start)
+        uv run python -m aegis_sdk_dev.cli.quickstart "$@"
+        ;;
+    test|run-tests)
+        uv run python -m aegis_sdk_dev.cli.test_runner "$@"
+        ;;
+    *)
+        echo "Unknown command: $COMMAND"
+        echo "Run './aegis' to see available commands"
+        exit 1
+        ;;
+esac

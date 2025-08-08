@@ -5,6 +5,7 @@ description = "AegisTrader - Automated Trading System"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aegis-sdk-dev",
     "openctp-ctp>=6.7.7.0",
     "vnpy>=4.1.0",
     "vnpy-ctp>=6.7.7.2",
@@ -22,6 +23,14 @@ dev-dependencies = [
     "pre-commit>=4.2.0",
     "testcontainers>=4.12.0",
 ]
+
+[tool.uv.workspace]
+members = [
+    "packages/aegis-sdk-dev",
+]
+
+[tool.uv.sources]
+aegis-sdk-dev = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

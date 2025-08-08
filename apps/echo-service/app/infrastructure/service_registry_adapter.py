@@ -246,8 +246,8 @@ class ServiceRegistryAdapter(ServiceRegistryPort):
             except Exception as e:
                 logger.error(f"Heartbeat error: {e}")
 
-    async def deregister_instance(self) -> bool:
-        """Deregister the current service instance.
+    async def _deregister_instance_internal(self) -> bool:
+        """Internal method to deregister the current service instance.
 
         Returns:
             True if deregistration successful
@@ -433,7 +433,18 @@ class ServiceRegistryAdapter(ServiceRegistryPort):
         if not svc_name or not inst_id:
             return  # Nothing to deregister
 
-        success = await self.deregister()
+        # Store original values and set them for the deregister operation
+        orig_service_name = self._service_name
+        orig_instance_id = self._instance_id
+        self._service_name = svc_name
+        self._instance_id = inst_id
+
+        success = await self._deregister_instance_internal()
+
+        # Restore original values
+        self._service_name = orig_service_name
+        self._instance_id = orig_instance_id
+
         if not success:
             raise RegistrationError(f"Failed to deregister instance {inst_id}", svc_name)
 

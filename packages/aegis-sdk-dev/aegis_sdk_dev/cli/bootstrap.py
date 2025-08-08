@@ -14,7 +14,9 @@ from aegis_sdk_dev.infrastructure.factory import InfrastructureFactory
 @click.option(
     "--template",
     "-t",
-    type=click.Choice(["basic", "single_active", "event_driven", "full_featured"]),
+    type=click.Choice(
+        ["basic", "single_active", "event_driven", "full_featured", "enterprise_ddd"]
+    ),
     default="basic",
     help="Project template to use",
 )
@@ -54,6 +56,7 @@ def main(
         "single_active": ProjectTemplate.SINGLE_ACTIVE,
         "event_driven": ProjectTemplate.EVENT_DRIVEN,
         "full_featured": ProjectTemplate.FULL_FEATURED,
+        "enterprise_ddd": ProjectTemplate.ENTERPRISE_DDD,
     }
 
     # Create configuration
