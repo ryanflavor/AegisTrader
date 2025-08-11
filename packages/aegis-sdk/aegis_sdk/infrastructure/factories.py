@@ -100,19 +100,11 @@ class KVOptionsFactory:
     Provides convenient methods for creating KVOptions with
     common configurations, reducing boilerplate and ensuring
     consistency in KV operations.
+
+    Note: Per-message TTL is not supported by NATS KV store.
+    Methods that previously created TTL options now return
+    standard options without TTL.
     """
-
-    @staticmethod
-    def create_with_ttl(ttl_seconds: int) -> KVOptions:
-        """Create options with TTL only.
-
-        Args:
-            ttl_seconds: Time-to-live in seconds
-
-        Returns:
-            KVOptions configured with TTL
-        """
-        return KVOptions(ttl=ttl_seconds)
 
     @staticmethod
     def create_exclusive() -> KVOptions:
@@ -145,15 +137,18 @@ class KVOptionsFactory:
 
     @staticmethod
     def create_ephemeral(ttl_seconds: int = 30) -> KVOptions:
-        """Create options for ephemeral entries with short TTL.
+        """Create options for ephemeral entries.
+
+        Note: TTL parameter is ignored. Use stream-level TTL configuration
+        for automatic expiration.
 
         Args:
-            ttl_seconds: Time-to-live in seconds (default: 30)
+            ttl_seconds: Ignored, kept for compatibility
 
         Returns:
-            KVOptions configured for ephemeral storage
+            Standard KVOptions
         """
-        return KVOptions(ttl=ttl_seconds)
+        return KVOptions()
 
     @staticmethod
     def create_persistent() -> KVOptions:
@@ -162,27 +157,33 @@ class KVOptionsFactory:
 
     @staticmethod
     def create_session(session_ttl: int = 3600) -> KVOptions:
-        """Create options for session storage with appropriate TTL.
+        """Create options for session storage.
+
+        Note: TTL parameter is ignored. Use stream-level TTL configuration
+        for automatic expiration.
 
         Args:
-            session_ttl: Session TTL in seconds (default: 1 hour)
+            session_ttl: Ignored, kept for compatibility
 
         Returns:
-            KVOptions configured for session storage
+            Standard KVOptions
         """
-        return KVOptions(ttl=session_ttl)
+        return KVOptions()
 
     @staticmethod
     def create_cache(cache_ttl: int = 300) -> KVOptions:
-        """Create options for cache entries with moderate TTL.
+        """Create options for cache entries.
+
+        Note: TTL parameter is ignored. Use stream-level TTL configuration
+        for automatic expiration.
 
         Args:
-            cache_ttl: Cache TTL in seconds (default: 5 minutes)
+            cache_ttl: Ignored, kept for compatibility
 
         Returns:
-            KVOptions configured for caching
+            Standard KVOptions
         """
-        return KVOptions(ttl=cache_ttl)
+        return KVOptions()
 
 
 class DiscoveryRequestFactory:
@@ -339,8 +340,14 @@ def create_service_dependencies(
 
     # Create service registry if enabled
     if enable_registry:
-        # Registry needs a KV store
-        kv_store = NATSKVStore(nats_adapter=message_bus)
+        # Registry needs a KV store with proper TTL configuration
+        from .config import KVStoreConfig
+
+        kv_config = KVStoreConfig(
+            bucket="service_registry",
+            stream_max_age_seconds=60,  # 1 minute stream TTL for history cleanup
+        )
+        kv_store = NATSKVStore(nats_adapter=message_bus, config=kv_config)
         deps["kv_store"] = kv_store
         deps["service_registry"] = KVServiceRegistry(kv_store, logger=logger)
 

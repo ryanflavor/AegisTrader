@@ -50,12 +50,19 @@ class DefaultElectionRepositoryFactory(ElectionRepositoryFactory):
         Returns:
             NATS KV-based election repository instance
         """
+        from .config import KVStoreConfig
         from .nats_kv_election_repository import NatsKvElectionRepository
         from .nats_kv_store import NATSKVStore
 
-        kv_store = NATSKVStore(nats_adapter=message_bus)
         # Replace hyphens with underscores for valid bucket name
         bucket_name = f"election_{service_name}".replace("-", "_")
+
+        # Create KV store with proper TTL configuration
+        kv_config = KVStoreConfig(
+            bucket=bucket_name,
+            stream_max_age_seconds=60,  # 1 minute stream TTL for history cleanup
+        )
+        kv_store = NATSKVStore(nats_adapter=message_bus, config=kv_config)
         await kv_store.connect(bucket_name)
 
         return NatsKvElectionRepository(
@@ -75,21 +82,30 @@ class DefaultKVStoreFactory(KVStoreFactory):
         self,
         bucket_name: str,
         message_bus: MessageBusPort,
+        enable_ttl: bool = False,
     ) -> KVStorePort:
         """Create a NATS-based KV store.
 
         Args:
             bucket_name: Name of the KV bucket
             message_bus: Message bus for KV operations
+            enable_ttl: Whether to enable TTL for the KV store
 
         Returns:
             Connected NATS KV store instance
         """
+        from .config import KVStoreConfig
         from .nats_kv_store import NATSKVStore
 
-        kv_store = NATSKVStore(nats_adapter=message_bus)
         # Ensure bucket name is valid (replace hyphens with underscores)
         safe_bucket_name = bucket_name.replace("-", "_")
+
+        # Create KV store with proper TTL configuration
+        kv_config = KVStoreConfig(
+            bucket=safe_bucket_name,
+            stream_max_age_seconds=60,  # 1 minute stream TTL for history cleanup
+        )
+        kv_store = NATSKVStore(nats_adapter=message_bus, config=kv_config)
         await kv_store.connect(safe_bucket_name)
         return kv_store
 

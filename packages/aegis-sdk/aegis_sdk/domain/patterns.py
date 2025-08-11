@@ -131,7 +131,4 @@ class SubjectPatterns:
                 return False
 
         # Check that '>' only appears at the end if present
-        if ">" in pattern and not pattern.endswith(">"):
-            return False
-
-        return True
+        return not (">" in pattern and not pattern.endswith(">"))

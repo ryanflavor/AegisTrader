@@ -21,7 +21,7 @@ def serialize_to_msgpack(obj: BaseModel) -> bytes:
         raise SerializationError(f"Failed to serialize to msgpack: {e}") from e
 
 
-def deserialize_from_msgpack(data: bytes, model_class: type[T]) -> T:
+def deserialize_from_msgpack[T: BaseModel](data: bytes, model_class: type[T]) -> T:
     """Deserialize MessagePack bytes to a Pydantic model."""
     try:
         unpacked = msgpack.unpackb(data, raw=False)
@@ -40,7 +40,7 @@ def serialize_to_json(obj: BaseModel) -> bytes:
         raise SerializationError(f"Failed to serialize to JSON: {e}") from e
 
 
-def deserialize_from_json(data: bytes, model_class: type[T]) -> T:
+def deserialize_from_json[T: BaseModel](data: bytes, model_class: type[T]) -> T:
     """Deserialize JSON bytes to a Pydantic model."""
     try:
         json_str = data.decode() if isinstance(data, bytes) else data
@@ -73,7 +73,7 @@ def is_msgpack(data: bytes) -> bool:
     )  # map16/map32
 
 
-def detect_and_deserialize(data: bytes, model_class: type[T]) -> T:
+def detect_and_deserialize[T: BaseModel](data: bytes, model_class: type[T]) -> T:
     """Automatically detect format and deserialize."""
     if not data:
         raise SerializationError("Empty data received")

@@ -575,7 +575,7 @@ class NATSAdapter(MessageBusPort):
         if isinstance(metrics_data, MetricsSnapshot):
             metrics_snapshot = metrics_data
         else:
-            # Legacy dict format
+            # Fallback for dict format (backward compatibility)
             metrics_snapshot = MetricsSnapshot(
                 uptime_seconds=metrics_data.get("uptime", 0.0),
                 counters=metrics_data.get("counters", {}),

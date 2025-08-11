@@ -40,7 +40,7 @@ class CommandPriority(str, Enum):
     HIGH = "high"
     CRITICAL = "critical"
 
-    def __lt__(self, other: "CommandPriority") -> bool:
+    def __lt__(self, other: object) -> bool:
         """Enable priority comparison."""
         if not isinstance(other, CommandPriority):
             return NotImplemented

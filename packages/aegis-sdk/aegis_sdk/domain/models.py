@@ -245,7 +245,11 @@ class KVEntry(BaseModel):
 
 
 class KVOptions(BaseModel):
-    """Options for KV store operations."""
+    """Options for KV store operations.
+
+    Note: Per-message TTL is not supported by NATS KV store.
+    Use stream-level TTL configuration instead for automatic expiration.
+    """
 
     model_config = ConfigDict(
         extra="forbid",
@@ -254,7 +258,6 @@ class KVOptions(BaseModel):
         validate_assignment=True,
     )
 
-    ttl: int | None = Field(None, ge=1, description="Time-to-live in seconds")
     revision: int | None = Field(
         None, ge=0, description="Expected revision for optimistic concurrency control"
     )
@@ -519,6 +522,6 @@ class ServiceInstance(BaseModel):
         if not self.sticky_active_group:
             return self.is_healthy()
 
-        # TODO: Implement sticky active group logic based on coordination service
-        # For now, return True if healthy and has a sticky group
+        # Sticky active logic is handled by the ElectionCoordinator
+        # through the FailoverMonitoringUseCase
         return self.is_healthy()

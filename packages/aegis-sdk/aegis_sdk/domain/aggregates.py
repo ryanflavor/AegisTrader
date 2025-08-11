@@ -318,12 +318,15 @@ class StickyActiveElection(BaseModel):
         if self.status == StickyActiveElectionState.ACTIVE:
             raise ValueError("Cannot start election when already active")
 
-        if self.status == StickyActiveElectionState.ELECTING:
+        if self.status == StickyActiveElectionState.ELECTING:  # noqa: SIM102
             # Check if election timeout has passed
-            if self.last_election_attempt:
-                elapsed = (datetime.now(UTC) - self.last_election_attempt).total_seconds()
-                if elapsed < self.election_timeout_seconds:
-                    raise ValueError("Election already in progress")
+            # Note: Can't easily combine with outer if due to complex condition
+            if (
+                self.last_election_attempt
+                and (datetime.now(UTC) - self.last_election_attempt).total_seconds()
+                < self.election_timeout_seconds
+            ):
+                raise ValueError("Election already in progress")
 
         previous_status = self.status
         self.status = StickyActiveElectionState.ELECTING

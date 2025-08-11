@@ -35,18 +35,18 @@ from .patterns import SubjectPatterns
 from .types import CommandHandler, EventHandler, ProgressCallback, RPCHandler
 
 __all__ = [
-    # Enums
-    "CommandPriority",
-    "ServiceStatus",
-    "StickyActiveStatus",
-    "SubscriptionMode",
     # Exceptions
     "AegisError",
     "Command",
     "CommandError",
+    # Types
+    "CommandHandler",
+    # Enums
+    "CommandPriority",
     "ConnectionError",
     "Event",
     "EventError",
+    "EventHandler",
     "KVEntry",
     "KVKeyAlreadyExistsError",
     "KVKeyNotFoundError",
@@ -59,20 +59,20 @@ __all__ = [
     # Models
     "Message",
     "MessageBusError",
+    "ProgressCallback",
     "RPCError",
+    "RPCHandler",
     "RPCRequest",
     "RPCResponse",
     "SerializationError",
     "ServiceError",
     "ServiceInfo",
     "ServiceInstance",
+    "ServiceStatus",
+    "StickyActiveStatus",
     # Patterns
     "SubjectPatterns",
+    "SubscriptionMode",
     "TimeoutError",
     "ValidationError",
-    # Types
-    "CommandHandler",
-    "EventHandler",
-    "ProgressCallback",
-    "RPCHandler",
 ]

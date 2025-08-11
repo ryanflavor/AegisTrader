@@ -146,6 +146,11 @@ class KVStoreConfig(BaseModel):
         le=100,
         description="Number of historical revisions to keep",
     )
+    stream_max_age_seconds: int | None = Field(
+        default=None,
+        ge=1,
+        description="Stream-level TTL in seconds (applies to all keys in bucket)",
+    )
 
     @field_validator("bucket")
     @classmethod

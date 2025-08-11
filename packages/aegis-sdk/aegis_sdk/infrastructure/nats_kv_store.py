@@ -72,7 +72,7 @@ class NATSKVStore(KVStorePort):
                 )
 
     async def _create_kv_stream_with_ttl(self, bucket: str) -> bool:
-        """Create a KV stream with per-message TTL enabled.
+        """Create a KV stream with optional stream-level TTL and per-message TTL support.
 
         Args:
             bucket: The bucket name
@@ -85,6 +85,12 @@ class NATSKVStore(KVStorePort):
         stream_name = f"KV_{bucket}"
 
         try:
+            # Determine max_age based on config
+            # NATS Python expects max_age in seconds as a float, not nanoseconds!
+            max_age_seconds = 0.0
+            if self._config and self._config.stream_max_age_seconds:
+                max_age_seconds = float(self._config.stream_max_age_seconds)
+
             # Create stream with standard NATS JS API
             stream_config = api.StreamConfig(
                 name=stream_name,
@@ -92,7 +98,7 @@ class NATSKVStore(KVStorePort):
                 retention=api.RetentionPolicy.LIMITS,
                 max_msgs_per_subject=self._config.history_size if self._config else 10,
                 max_bytes=-1,
-                max_age=0,
+                max_age=max_age_seconds,  # Stream-level TTL in seconds
                 max_msg_size=self._config.max_value_size if self._config else 1024 * 1024,
                 storage=api.StorageType.FILE,
                 allow_direct=True,
@@ -198,13 +204,19 @@ class NATSKVStore(KVStorePort):
                         # Fallback to standard API if TTL creation fails
                         from nats.js import api
 
+                        # Determine max_age based on config
+                        # NATS Python expects max_age in seconds as a float, not nanoseconds!
+                        max_age_seconds = 0.0
+                        if self._config and self._config.stream_max_age_seconds:
+                            max_age_seconds = float(self._config.stream_max_age_seconds)
+
                         stream_config = api.StreamConfig(
                             name=stream_name,
                             subjects=[f"$KV.{bucket}.>"],
                             retention=api.RetentionPolicy.LIMITS,
                             max_msgs_per_subject=self._config.history_size if self._config else 10,
                             max_bytes=-1,
-                            max_age=0,
+                            max_age=max_age_seconds,  # Stream-level TTL in seconds
                             max_msg_size=(
                                 self._config.max_value_size if self._config else 1024 * 1024
                             ),
@@ -358,19 +370,8 @@ class NATSKVStore(KVStorePort):
                                     "Revision check failed", key=key, operation="put"
                                 ) from err
 
-                        # Put with TTL if specified
-                        if options.ttl:
-                            # IMPORTANT: Per-message TTL doesn't work reliably with KV stores
-                            # Stream-level TTL (max_age) handles expiration automatically
-                            # See docs/NATS_KV_TTL_SOLUTION.md for details
-                            self._logger.debug(
-                                f"TTL requested ({options.ttl}s) but using stream-level TTL instead for key={key}"
-                            )
-                            # Use normal put - stream max_age will handle TTL
-                            revision = await self._kv.put(key, serialized)
-                            self._metrics.increment("kv.put.stream_ttl")
-                        else:
-                            revision = await self._kv.put(key, serialized)
+                        # Normal put (stream-level TTL handles expiration)
+                        revision = await self._kv.put(key, serialized)
                 else:
                     # Normal put without options
                     revision = await self._kv.put(key, serialized)
@@ -508,7 +509,7 @@ class NATSKVStore(KVStorePort):
                         # This is the initial "no pending updates" marker
                         continue
                     yield update
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # No updates for 5 seconds
                     # No updates for timeout period
                     continue

@@ -7,6 +7,7 @@ and ElectionCoordinator for automatic failover with sub-2-second recovery time.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -19,12 +20,12 @@ from ..domain.value_objects import (
     InstanceId,
     ServiceName,
 )
-from ..infrastructure.election_coordinator import ElectionCoordinator
-from ..infrastructure.heartbeat_monitor import HeartbeatMonitor
+from ..ports.factory_ports import MonitoringComponentFactory
 from ..ports.kv_store import KVStorePort
 from ..ports.logger import LoggerPort
 from ..ports.message_bus import MessageBusPort
 from ..ports.metrics import MetricsPort
+from ..ports.monitoring import ElectionCoordinatorPort, HeartbeatMonitorPort
 from ..ports.service_registry import ServiceRegistryPort
 
 
@@ -45,6 +46,7 @@ class FailoverMonitoringUseCase:
         message_bus: MessageBusPort,
         metrics: MetricsPort,
         logger: LoggerPort,
+        monitoring_factory: MonitoringComponentFactory,
         failover_policy: FailoverPolicy | None = None,
         status_callback: Callable[[bool], None] | None = None,
     ):
@@ -56,6 +58,7 @@ class FailoverMonitoringUseCase:
             message_bus: Message bus for publishing events
             metrics: Metrics port
             logger: Logger port
+            monitoring_factory: Factory for creating monitoring components
             failover_policy: Failover behavior configuration
             status_callback: Optional callback for status changes (True=active, False=standby)
         """
@@ -64,12 +67,13 @@ class FailoverMonitoringUseCase:
         self._message_bus = message_bus
         self._metrics = metrics
         self._logger = logger
+        self._monitoring_factory = monitoring_factory
         self._failover_policy = failover_policy or FailoverPolicy.balanced()
         self._status_callback = status_callback
 
         # Component instances (created per service)
-        self._monitors: dict[str, HeartbeatMonitor] = {}
-        self._coordinators: dict[str, ElectionCoordinator] = {}
+        self._monitors: dict[str, HeartbeatMonitorPort] = {}
+        self._coordinators: dict[str, ElectionCoordinatorPort] = {}
         self._monitoring_tasks: dict[str, asyncio.Task] = {}
 
     async def start_monitoring(
@@ -95,8 +99,8 @@ class FailoverMonitoringUseCase:
         service_name_vo = ServiceName(value=service_name)
         instance_id_vo = InstanceId(value=instance_id)
 
-        # Create HeartbeatMonitor
-        heartbeat_monitor = HeartbeatMonitor(
+        # Create HeartbeatMonitor using factory
+        heartbeat_monitor = self._monitoring_factory.create_heartbeat_monitor(
             kv_store=self._kv_store,
             service_name=service_name_vo,
             instance_id=instance_id_vo,
@@ -105,8 +109,8 @@ class FailoverMonitoringUseCase:
             logger=self._logger,
         )
 
-        # Create ElectionCoordinator
-        election_coordinator = ElectionCoordinator(
+        # Create ElectionCoordinator using factory
+        election_coordinator = self._monitoring_factory.create_election_coordinator(
             kv_store=self._kv_store,
             service_registry=self._service_registry,
             service_name=service_name_vo,
@@ -137,7 +141,7 @@ class FailoverMonitoringUseCase:
             election_coordinator, service_name, instance_id, group_id
         )
 
-        await self._logger.info(
+        self._logger.info(
             "Started failover monitoring",
             service=service_name,
             instance=instance_id,
@@ -180,13 +184,11 @@ class FailoverMonitoringUseCase:
         if key in self._monitoring_tasks:
             task = self._monitoring_tasks[key]
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
             del self._monitoring_tasks[key]
 
-        await self._logger.info(
+        self._logger.info(
             "Stopped failover monitoring",
             service=service_name,
             instance=instance_id,
@@ -213,7 +215,7 @@ class FailoverMonitoringUseCase:
                 service_name, instance_id, group_id = parts
                 await self.stop_monitoring(service_name, instance_id, group_id)
 
-        await self._logger.info("Stopped all monitoring tasks")
+        self._logger.info("Stopped all monitoring tasks")
 
     async def get_status(
         self,
@@ -248,7 +250,7 @@ class FailoverMonitoringUseCase:
 
     async def _check_initial_election(
         self,
-        coordinator: ElectionCoordinator,
+        coordinator: ElectionCoordinatorPort,
         service_name: str,
         instance_id: str,
         group_id: str,
@@ -266,7 +268,7 @@ class FailoverMonitoringUseCase:
 
         if not is_leader_present:
             # No leader exists - participate in election
-            await self._logger.info(
+            self._logger.info(
                 "No leader detected, initiating election",
                 service=service_name,
                 instance=instance_id,
@@ -277,14 +279,14 @@ class FailoverMonitoringUseCase:
             elected = await coordinator.start_election()
 
             if elected:
-                await self._logger.info(
+                self._logger.info(
                     "Won initial election",
                     service=service_name,
                     instance=instance_id,
                     group=group_id,
                 )
             else:
-                await self._logger.info(
+                self._logger.info(
                     "Lost initial election",
                     service=service_name,
                     instance=instance_id,
@@ -339,7 +341,7 @@ class FailoverMonitoringUseCase:
         self._metrics.increment("failover.election.won")
         self._metrics.gauge("failover.active_instances", 1)
 
-        await self._logger.info(
+        self._logger.info(
             "Became active leader",
             service=service_name,
             instance=instance_id,
@@ -395,7 +397,7 @@ class FailoverMonitoringUseCase:
         self._metrics.increment("failover.leadership.lost")
         self._metrics.gauge("failover.active_instances", 0)
 
-        await self._logger.info(
+        self._logger.info(
             "Lost leadership",
             service=service_name,
             instance=instance_id,
@@ -421,21 +423,22 @@ class FailoverMonitoringUseCase:
             if instance:
                 instance.sticky_active_status = sticky_status
                 instance.last_heartbeat = datetime.now(UTC)
-                await self._service_registry.update_instance(instance)
+                # Use update_heartbeat to update the instance in registry
+                await self._service_registry.update_heartbeat(instance, ttl_seconds=60)
 
-                await self._logger.debug(
+                self._logger.debug(
                     f"Updated instance status to {sticky_status}",
                     service=service_name,
                     instance=instance_id,
                 )
             else:
-                await self._logger.warning(
+                self._logger.warning(
                     "Instance not found in registry",
                     service=service_name,
                     instance=instance_id,
                 )
         except Exception as e:
-            await self._logger.error(
+            self._logger.error(
                 f"Failed to update instance status: {e}",
                 service=service_name,
                 instance=instance_id,
@@ -490,7 +493,7 @@ class FailoverMonitoringUseCase:
 
         coordinator = self._coordinators.get(key)
         if not coordinator:
-            await self._logger.warning(
+            self._logger.warning(
                 "No coordinator found for manual election",
                 service=service_name,
                 instance=instance_id,
@@ -498,7 +501,7 @@ class FailoverMonitoringUseCase:
             )
             return False
 
-        await self._logger.info(
+        self._logger.info(
             "Manually triggering election",
             service=service_name,
             instance=instance_id,

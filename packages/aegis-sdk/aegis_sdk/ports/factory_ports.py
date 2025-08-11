@@ -17,11 +17,13 @@ if TYPE_CHECKING:
         StickyActiveMonitoringUseCase,
         StickyActiveRegistrationUseCase,
     )
+    from ..domain.value_objects import FailoverPolicy, InstanceId, ServiceName
     from .election_repository import ElectionRepository
     from .kv_store import KVStorePort
     from .logger import LoggerPort
     from .message_bus import MessageBusPort
     from .metrics import MetricsPort
+    from .monitoring import ElectionCoordinatorPort, HeartbeatMonitorPort
     from .service_registry import ServiceRegistryPort
 
 
@@ -77,6 +79,68 @@ class KVStoreFactory(ABC):
 
         Returns:
             Connected KV store instance
+        """
+        ...
+
+
+class MonitoringComponentFactory(ABC):
+    """Factory interface for creating monitoring components.
+
+    This factory abstracts the creation of monitoring components like
+    HeartbeatMonitor and ElectionCoordinator, allowing the application
+    layer to work with these components through interfaces rather than
+    concrete implementations.
+    """
+
+    @abstractmethod
+    def create_heartbeat_monitor(
+        self,
+        kv_store: KVStorePort,
+        service_name: ServiceName,
+        instance_id: InstanceId,
+        group_id: str,
+        failover_policy: FailoverPolicy,
+        logger: LoggerPort,
+    ) -> HeartbeatMonitorPort:
+        """Create a heartbeat monitor instance.
+
+        Args:
+            kv_store: KV Store for heartbeat storage
+            service_name: Name of the service
+            instance_id: Instance identifier
+            group_id: Service group identifier
+            failover_policy: Failover behavior configuration
+            logger: Logger port
+
+        Returns:
+            Heartbeat monitor instance
+        """
+        ...
+
+    @abstractmethod
+    def create_election_coordinator(
+        self,
+        kv_store: KVStorePort,
+        service_registry: ServiceRegistryPort,
+        service_name: ServiceName,
+        instance_id: InstanceId,
+        group_id: str,
+        failover_policy: FailoverPolicy,
+        logger: LoggerPort,
+    ) -> ElectionCoordinatorPort:
+        """Create an election coordinator instance.
+
+        Args:
+            kv_store: KV Store for election state
+            service_registry: Service registry port
+            service_name: Name of the service
+            instance_id: Instance identifier
+            group_id: Service group identifier
+            failover_policy: Failover behavior configuration
+            logger: Logger port
+
+        Returns:
+            Election coordinator instance
         """
         ...
 

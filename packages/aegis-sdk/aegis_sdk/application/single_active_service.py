@@ -108,9 +108,6 @@ class SingleActiveService(Service):
         # Election state
         self._monitoring_task: asyncio.Task | None = None
 
-        # RPC handlers registry (for exclusive RPC)
-        self._rpc_handlers: dict[str, Callable] = {}
-
     def _update_active_status(self, is_active: bool) -> None:
         """Callback for status updates from monitoring use case.
 
@@ -149,27 +146,28 @@ class SingleActiveService(Service):
             self._use_case_factory = DependencyProvider.get_default_use_case_factory()
 
         # Create use cases using factory
+        # Note: The factory methods should handle None values for optional dependencies
         self._registration_use_case = self._use_case_factory.create_registration_use_case(
             election_repository=self._election_repository,
-            service_registry=self._registry,
+            service_registry=self._registry,  # type: ignore[arg-type]
             message_bus=self._bus,
             metrics=self._metrics,
-            logger=self._logger,
+            logger=self._logger,  # type: ignore[arg-type]
         )
 
         self._heartbeat_use_case = self._use_case_factory.create_heartbeat_use_case(
             election_repository=self._election_repository,
-            service_registry=self._registry,
+            service_registry=self._registry,  # type: ignore[arg-type]
             metrics=self._metrics,
-            logger=self._logger,
+            logger=self._logger,  # type: ignore[arg-type]
         )
 
         self._monitoring_use_case = self._use_case_factory.create_monitoring_use_case(
             election_repository=self._election_repository,
-            service_registry=self._registry,
+            service_registry=self._registry,  # type: ignore[arg-type]
             message_bus=self._bus,
             metrics=self._metrics,
-            logger=self._logger,
+            logger=self._logger,  # type: ignore[arg-type]
             status_callback=self._update_active_status,
         )
 
@@ -258,7 +256,7 @@ class SingleActiveService(Service):
         """Override parent heartbeat to include sticky active heartbeat."""
         # First update the regular service heartbeat
         if hasattr(super(), "_update_registry_heartbeat"):
-            await super()._update_registry_heartbeat()
+            await super()._update_registry_heartbeat()  # type: ignore[misc]
 
         # Then update sticky active heartbeat if we have the use case
         if self._heartbeat_use_case and self._config.enable_registration:
@@ -305,7 +303,7 @@ class SingleActiveService(Service):
                             f"is in STANDBY mode for group {self._config.group_id}."
                         ),
                     )
-                    return response.model_dump()
+                    return response.model_dump()  # type: ignore[no-any-return]
 
                 if self._metrics:
                     self._metrics.increment("sticky_active.rpc.processed")
@@ -316,7 +314,7 @@ class SingleActiveService(Service):
                         success=True,
                         result=result if isinstance(result, dict) else {"data": result},
                     )
-                    return response.model_dump()
+                    return response.model_dump()  # type: ignore[no-any-return]
                 except Exception as e:
                     if self._logger:
                         self._logger.exception(f"Error in exclusive RPC {method}: {e}")
@@ -325,10 +323,11 @@ class SingleActiveService(Service):
                         error="EXECUTION_ERROR",
                         message=str(e),
                     )
-                    return response.model_dump()
+                    return response.model_dump()  # type: ignore[no-any-return]
 
-            # Register with parent class
-            self._rpc_handlers[method] = wrapper
+            # Register with parent class's handler registry
+            # This ensures the handler is properly registered with the message bus
+            self._handler_registry._rpc_handlers[method] = wrapper
             return wrapper
 
         return decorator
@@ -396,7 +395,7 @@ def exclusive_rpc(method: str | Callable[..., Any] | None = None) -> Callable[..
                         f"Instance {self.instance_id} is in STANDBY mode."
                     ),
                 )
-                return response.model_dump()
+                return response.model_dump()  # type: ignore[no-any-return]
 
             try:
                 result = await func(self, params)
@@ -406,7 +405,7 @@ def exclusive_rpc(method: str | Callable[..., Any] | None = None) -> Callable[..
                         success=True,
                         result=result if isinstance(result, dict) else {"data": result},
                     )
-                    return response.model_dump()
+                    return response.model_dump()  # type: ignore[no-any-return]
                 return result
             except Exception as e:
                 if hasattr(self, "_logger") and self._logger:
@@ -416,7 +415,7 @@ def exclusive_rpc(method: str | Callable[..., Any] | None = None) -> Callable[..
                     error="EXECUTION_ERROR",
                     message=str(e),
                 )
-                return response.model_dump()
+                return response.model_dump()  # type: ignore[no-any-return]
 
         # Mark as exclusive for registration
         wrapper_with_attr = cast(Any, wrapper)

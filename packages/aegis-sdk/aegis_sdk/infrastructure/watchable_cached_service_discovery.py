@@ -123,7 +123,7 @@ class WatchableCachedServiceDiscovery(CachedServiceDiscovery):
 
     async def _watch_kv_store(self) -> None:
         """Watch KV Store for service instance changes."""
-        prefix = f"{self._watch_config.prefix_pattern}."
+        prefix = f"{self._watch_config.prefix_pattern}__"
 
         if self._logger:
             self._logger.debug("Starting KV Store watch", prefix=prefix)
@@ -149,9 +149,9 @@ class WatchableCachedServiceDiscovery(CachedServiceDiscovery):
             event: KVWatchEvent from the KV Store
         """
         # Extract service name from key
-        # Key format: service-instances.{service_name}.{instance_id}
+        # Key format: service-instances__{service_name}__{instance_id}
         if event.entry and event.entry.key:
-            parts = event.entry.key.split(".")
+            parts = event.entry.key.split("__")
             if len(parts) >= 3:
                 service_name = parts[1]
 
@@ -199,7 +199,7 @@ class WatchableCachedServiceDiscovery(CachedServiceDiscovery):
         # Wait for task to complete with timeout
         try:
             await asyncio.wait_for(self._watch_task, timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if self._logger:
                 self._logger.warning("Watch task did not stop gracefully, cancelling")
             self._watch_task.cancel()

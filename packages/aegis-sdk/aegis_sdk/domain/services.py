@@ -270,7 +270,8 @@ class StickyActiveElectionService:
         Returns:
             The leader key for KV Store
         """
-        return f"sticky-active.{service_name}.{group_id}.leader"
+        # Use underscores instead of dots to comply with NATS KV key requirements
+        return f"sticky-active__{service_name}__{group_id}__leader"
 
     def create_leader_value(
         self, instance_id: str, metadata: dict[str, Any] | None = None
@@ -372,8 +373,8 @@ class StickyActiveElectionService:
 
         # Exponential backoff with jitter
         base_delay = min(self.failover_delay * (2**attempt_count), 30.0)
-        jitter = random.uniform(0, base_delay * 0.1)  # 10% jitter
-        return base_delay + jitter
+        jitter = random.uniform(0, base_delay * 0.1)  # 10% jitter # nosec B311
+        return float(base_delay + jitter)
 
     def validate_election_transition(
         self,

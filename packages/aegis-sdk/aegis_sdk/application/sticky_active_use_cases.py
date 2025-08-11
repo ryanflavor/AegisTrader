@@ -516,7 +516,7 @@ class StickyActiveMonitoringUseCase:
         max_consecutive_errors = 3
 
         try:
-            async for event in self._election_repo.watch_leadership(service_name, group_id):
+            async for event in self._election_repo.watch_leadership(service_name, group_id):  # type: ignore[attr-defined]
                 if self._logger:
                     self._logger.info(
                         f"Leadership event: {event['type']} for {service_name}/{group_id}"

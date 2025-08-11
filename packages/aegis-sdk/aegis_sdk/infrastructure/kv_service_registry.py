@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..domain.exceptions import KVStoreError
-from ..domain.models import KVOptions, ServiceInstance
+from ..domain.models import ServiceInstance
 from ..ports.kv_store import KVStorePort
 from ..ports.logger import LoggerPort
 from ..ports.service_registry import ServiceRegistryPort
@@ -41,23 +41,22 @@ class KVServiceRegistry(ServiceRegistryPort):
         return f"{self._key_prefix}__{service_name}__{instance_id}"
 
     async def register(self, instance: ServiceInstance, ttl_seconds: int) -> None:
-        """Register a service instance with TTL.
+        """Register a service instance.
 
         The instance's heartbeat timestamp should already be updated by the caller.
         This method focuses on the infrastructure concern of storing in KV.
+
+        Note: The ttl_seconds parameter is kept for interface compatibility but
+        is not used. Service expiration is handled by client-side filtering
+        based on heartbeat timestamps.
         """
         key = self._make_key(instance.service_name, instance.instance_id)
 
-        # Validate TTL
-        if ttl_seconds <= 0:
-            raise ValueError(f"TTL must be positive, got {ttl_seconds}")
-
-        # Store instance data with TTL
+        # Store instance data (without per-message TTL)
         try:
             await self._kv_store.put(
                 key,
                 instance.model_dump(by_alias=True),  # Use camelCase for compatibility
-                options=KVOptions(ttl=int(ttl_seconds)),  # Convert to int for KVOptions
             )
 
             if self._logger:
@@ -104,11 +103,11 @@ class KVServiceRegistry(ServiceRegistryPort):
                 await self.register(instance, ttl_seconds)
                 return
 
-            # Update with TTL (heartbeat timestamp already updated by caller)
+            # Update (heartbeat timestamp already updated by caller)
+            # Note: TTL is handled by stream-level configuration
             await self._kv_store.put(
                 key,
                 instance.model_dump(by_alias=True),
-                options=KVOptions(ttl=ttl_seconds),
             )
 
             if self._logger:
@@ -116,7 +115,6 @@ class KVServiceRegistry(ServiceRegistryPort):
                     "Heartbeat updated",
                     service=instance.service_name,
                     instance=instance.instance_id,
-                    ttl=ttl_seconds,
                 )
 
         except KVStoreError:

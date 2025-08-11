@@ -77,9 +77,10 @@ class NatsKvElectionRepository(ElectionRepository):
         )
 
         try:
-            # Try to create the leader key with TTL
+            # Try to create the leader key
             # This will only succeed if the key doesn't exist
-            options = KVOptions(create_only=True, ttl=ttl_seconds)
+            # Note: TTL is handled by stream-level configuration, not per-message
+            options = KVOptions(create_only=True)
             await self._kv_store.put(leader_key, leader_value, options)
 
             self._metrics.increment("election.leadership.acquired")
@@ -161,7 +162,6 @@ class NatsKvElectionRepository(ElectionRepository):
             # Update with revision check to ensure atomicity
             options = KVOptions(
                 revision=current_entry.revision,
-                ttl=ttl_seconds,
             )
             await self._kv_store.put(leader_key, updated_value, options)
 
@@ -265,7 +265,7 @@ class NatsKvElectionRepository(ElectionRepository):
             )
             return False
 
-    async def watch_leadership(
+    async def watch_leadership(  # type: ignore[override]
         self,
         service_name: ServiceName,
         group_id: str,
@@ -286,7 +286,8 @@ class NatsKvElectionRepository(ElectionRepository):
         )
 
         try:
-            async for event in self._kv_store.watch(leader_key):
+            watch_iter = await self._kv_store.watch(leader_key)
+            async for event in watch_iter:
                 self._logger.debug(
                     f"Leadership event: {event.operation} for {leader_key}",
                     extra=log_ctx.to_dict(),
@@ -325,8 +326,8 @@ class NatsKvElectionRepository(ElectionRepository):
         election: StickyActiveElection,
     ) -> None:
         """Save the election aggregate state."""
-        # Create state key for this instance
-        state_key = f"election-state.{election.service_name.value}.{election.instance_id.value}.{election.group_id}"
+        # Create state key for this instance using underscores to comply with NATS KV
+        state_key = f"election-state__{election.service_name.value}__{election.instance_id.value}__{election.group_id}"
 
         # Serialize the election state
         state_data = {
@@ -366,7 +367,7 @@ class NatsKvElectionRepository(ElectionRepository):
         group_id: str,
     ) -> StickyActiveElection | None:
         """Retrieve the election aggregate state."""
-        state_key = f"election-state.{service_name.value}.{instance_id.value}.{group_id}"
+        state_key = f"election-state__{service_name.value}__{instance_id.value}__{group_id}"
 
         try:
             entry = await self._kv_store.get(state_key)
@@ -422,7 +423,7 @@ class NatsKvElectionRepository(ElectionRepository):
         group_id: str,
     ) -> None:
         """Delete the election aggregate state."""
-        state_key = f"election-state.{service_name.value}.{instance_id.value}.{group_id}"
+        state_key = f"election-state__{service_name.value}__{instance_id.value}__{group_id}"
 
         try:
             await self._kv_store.delete(state_key)

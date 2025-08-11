@@ -183,7 +183,7 @@ class HealthManager:
         message_bus: MessageBusPort,
         registry: ServiceRegistryPort | None = None,
         logger: LoggerPort | None = None,
-        on_unhealthy_callback: callable | None = None,
+        on_unhealthy_callback: Callable[[], None] | None = None,
     ) -> None:
         """Initialize health manager."""
         self.service_name = service_name
@@ -581,26 +581,30 @@ class Service:
             request.source = self.instance_id
 
         target = request.target
-        if discovery_enabled and self._discovery and target:
-            if await self._resolver.is_service_name(target):
-                from aegis_sdk.ports.service_discovery import SelectionStrategy
+        if (
+            discovery_enabled
+            and self._discovery
+            and target
+            and await self._resolver.is_service_name(target)
+        ):
+            from aegis_sdk.ports.service_discovery import SelectionStrategy
 
-                strategy = selection_strategy or SelectionStrategy.ROUND_ROBIN
-                instance = await self._discovery.select_instance(
-                    target,
-                    strategy=strategy,
-                    preferred_instance_id=preferred_instance_id,
+            strategy = selection_strategy or SelectionStrategy.ROUND_ROBIN
+            instance = await self._discovery.select_instance(
+                target,
+                strategy=strategy,
+                preferred_instance_id=preferred_instance_id,
+            )
+            if not instance:
+                raise ServiceUnavailableError(target)
+
+            if self._logger:
+                self._logger.debug(
+                    "Selected instance for RPC",
+                    service=target,
+                    instance=instance.instance_id,
+                    method=request.method,
                 )
-                if not instance:
-                    raise ServiceUnavailableError(target)
-
-                if self._logger:
-                    self._logger.debug(
-                        "Selected instance for RPC",
-                        service=target,
-                        instance=instance.instance_id,
-                        method=request.method,
-                    )
 
         try:
             response = await self._bus.call_rpc(request)
@@ -608,9 +612,13 @@ class Service:
                 raise Exception(f"RPC failed: {response.error}")
             return response.result
         except Exception:
-            if discovery_enabled and self._discovery and target:
-                if await self._resolver.is_service_name(target):
-                    await self._discovery.invalidate_cache(target)
+            if (
+                discovery_enabled
+                and self._discovery
+                and target
+                and await self._resolver.is_service_name(target)
+            ):
+                await self._discovery.invalidate_cache(target)
             raise
 
     def create_rpc_request(

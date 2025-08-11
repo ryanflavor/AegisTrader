@@ -7,6 +7,7 @@ heartbeat keys in NATS KV Store and detecting TTL expiration.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -19,6 +20,7 @@ from ..domain.value_objects import (
 )
 from ..ports.kv_store import KVStorePort as KVStore
 from ..ports.logger import LoggerPort
+from ..ports.monitoring import HeartbeatMonitorPort
 
 
 class ElectionTrigger(Protocol):
@@ -34,7 +36,7 @@ class ElectionTrigger(Protocol):
         ...
 
 
-class HeartbeatMonitor:
+class HeartbeatMonitor(HeartbeatMonitorPort):
     """Monitors heartbeats of active service instances.
 
     Watches the KV Store for heartbeat key expiration and triggers
@@ -80,7 +82,7 @@ class HeartbeatMonitor:
 
         return SimpleLogger()
 
-    def set_election_trigger(self, trigger: ElectionTrigger) -> None:
+    def set_election_trigger(self, trigger: ElectionTrigger) -> None:  # type: ignore[override]
         """Set the election trigger callback.
 
         Args:
@@ -107,7 +109,7 @@ class HeartbeatMonitor:
         election if the heartbeat expires or key is deleted.
         """
         if self._monitor_task and not self._monitor_task.done():
-            await self._logger.warning(
+            self._logger.warning(
                 "Heartbeat monitor already running",
                 instance_id=str(self._instance_id),
             )
@@ -116,7 +118,7 @@ class HeartbeatMonitor:
         self._stop_event.clear()
         self._monitor_task = asyncio.create_task(self._monitor_loop())
 
-        await self._logger.info(
+        self._logger.info(
             "Started heartbeat monitoring",
             service=str(self._service_name),
             instance=str(self._instance_id),
@@ -134,14 +136,12 @@ class HeartbeatMonitor:
         if self._monitor_task and not self._monitor_task.done():
             try:
                 await asyncio.wait_for(self._monitor_task, timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._monitor_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._monitor_task
-                except asyncio.CancelledError:
-                    pass
 
-        await self._logger.info(
+        self._logger.info(
             "Stopped heartbeat monitoring",
             service=str(self._service_name),
             instance=str(self._instance_id),
@@ -187,7 +187,7 @@ class HeartbeatMonitor:
                 break
             except Exception as e:
                 consecutive_failures += 1
-                await self._logger.error(
+                self._logger.error(
                     f"Error in heartbeat monitor loop: {e}",
                     service=str(self._service_name),
                     instance=str(self._instance_id),
@@ -195,7 +195,7 @@ class HeartbeatMonitor:
                 )
 
                 if consecutive_failures >= max_consecutive_failures:
-                    await self._logger.error(
+                    self._logger.error(
                         "Too many consecutive monitoring failures, stopping monitor",
                         service=str(self._service_name),
                         instance=str(self._instance_id),
@@ -257,7 +257,7 @@ class HeartbeatMonitor:
             )
 
         except Exception as e:
-            await self._logger.error(
+            self._logger.error(
                 f"Failed to check heartbeat: {e}",
                 service=str(self._service_name),
                 leader_id=leader_id,
@@ -270,7 +270,7 @@ class HeartbeatMonitor:
         Args:
             heartbeat_status: Status of the expired heartbeat
         """
-        await self._logger.warning(
+        self._logger.warning(
             "Heartbeat expired for active instance",
             service=str(self._service_name),
             expired_instance=heartbeat_status.instance_id,
@@ -284,7 +284,7 @@ class HeartbeatMonitor:
         # Re-check to avoid false positive
         recheck = await self._check_heartbeat(heartbeat_status.instance_id)
         if recheck and recheck.is_healthy():
-            await self._logger.info(
+            self._logger.info(
                 "Heartbeat recovered during detection threshold",
                 service=str(self._service_name),
                 instance=heartbeat_status.instance_id,
@@ -303,7 +303,7 @@ class HeartbeatMonitor:
         Args:
             previous_leader: ID of the previous leader
         """
-        await self._logger.warning(
+        self._logger.warning(
             "Leader key lost",
             service=str(self._service_name),
             previous_leader=previous_leader,
@@ -319,7 +319,7 @@ class HeartbeatMonitor:
     async def _trigger_election_if_configured(self) -> None:
         """Trigger election if an election trigger is configured."""
         if self._election_trigger:
-            await self._logger.info(
+            self._logger.info(
                 "Triggering leader election",
                 service=str(self._service_name),
                 instance=str(self._instance_id),
@@ -330,13 +330,13 @@ class HeartbeatMonitor:
                     str(self._service_name), self._group_id
                 )
             except Exception as e:
-                await self._logger.error(
+                self._logger.error(
                     f"Failed to trigger election: {e}",
                     service=str(self._service_name),
                     instance=str(self._instance_id),
                 )
         else:
-            await self._logger.warning(
+            self._logger.warning(
                 "No election trigger configured, cannot initiate failover",
                 service=str(self._service_name),
                 instance=str(self._instance_id),
