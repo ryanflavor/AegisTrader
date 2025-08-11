@@ -86,6 +86,7 @@ class GetMetricsUseCase:
         """
         return ServiceMetrics(
             instance_id=self.instance_id,
+            version=self.version,
             total_requests=self.metrics.total_requests,
             successful_requests=self.metrics.successful_requests,
             failed_requests=self.metrics.failed_requests,

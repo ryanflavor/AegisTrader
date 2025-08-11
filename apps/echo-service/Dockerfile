@@ -42,8 +42,9 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     pydantic==2.10.0 \
     python-dateutil==2.8.2
 
-# Copy and install the aegis-sdk package first (SDK 变化时才会重新构建)
+# Copy and install the SDK packages (SDK 变化时才会重新构建)
 COPY packages/aegis-sdk /packages/aegis-sdk
+COPY packages/aegis-sdk-dev /packages/aegis-sdk-dev
 RUN if [ -n "$HTTP_PROXY" ]; then \
       export http_proxy=$HTTP_PROXY && \
       export https_proxy=$HTTPS_PROXY && \
@@ -52,7 +53,8 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
       export UV_HTTP_PROXY=$HTTP_PROXY && \
       export UV_HTTPS_PROXY=$HTTPS_PROXY; \
     fi && \
-    uv pip install --system --no-cache -e /packages/aegis-sdk
+    uv pip install --system --no-cache -e /packages/aegis-sdk && \
+    uv pip install --system --no-cache -e /packages/aegis-sdk-dev
 
 # Copy requirements file if it exists (requirements.txt 变化时才会重新构建)
 COPY apps/echo-service/requirements.txt* /app/

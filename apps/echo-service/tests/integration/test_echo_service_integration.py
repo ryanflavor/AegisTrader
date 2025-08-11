@@ -65,7 +65,7 @@ class TestEchoServiceIntegration:
         return EnvironmentConfigurationAdapter(
             defaults={
                 "service_name": "echo-service-integration",
-                "version": "integration-1.0.0",
+                "version": "1.0.0",
                 "service_type": "service",
                 "debug": True,
             }

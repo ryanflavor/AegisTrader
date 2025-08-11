@@ -1,88 +1,71 @@
 #!/usr/bin/env python3
-"""Echo Service - World-class DDD showcase with hexagonal architecture.
+"""Echo Service - Demonstrates clean SDK integration without reinventing wheels.
 
-This service demonstrates:
+This service showcases:
+- Full integration with aegis-sdk and aegis-sdk-dev
+- No legacy code or custom adapters
+- SDK's built-in service lifecycle management
+- Automatic heartbeat and registration
 - Domain-Driven Design with hexagonal architecture
-- Dependency injection and inversion of control
-- Port and adapter pattern for infrastructure
-- Multiple RPC endpoints with different modes
-- Comprehensive metrics and health checks
-- Auto-detection of K8s vs local environment
-- Clean separation of concerns across layers
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 import sys
-from pathlib import Path
-
-# Add parent directory to path for local development
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.infrastructure.factory import EchoServiceFactory
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
 
-class ServiceRunner:
-    """Runner for the echo service application."""
+async def main() -> None:
+    """Main entry point for the echo service."""
+    service = None
+    shutdown_event = asyncio.Event()
 
-    def __init__(self):
-        """Initialize the service runner."""
-        self.application_service = None
-        self.shutdown_event = asyncio.Event()
-
-    async def run(self) -> None:
-        """Run the service until shutdown signal."""
-        try:
-            # Create service using factory pattern
-            logger.info("Creating Echo Service using factory pattern...")
-            self.application_service = await EchoServiceFactory.create_production_service()
-
-            # Start the application service
-            await self.application_service.start()
-
-            # Wait for shutdown signal
-            await self.shutdown_event.wait()
-
-        except Exception as e:
-            logger.error(f"Failed to run service: {e}", exc_info=True)
-            raise
-        finally:
-            # Ensure cleanup happens
-            if self.application_service:
-                await self.application_service.stop()
-
-    def signal_handler(self, sig, _frame) -> None:
+    def signal_handler(sig, frame):
         """Handle shutdown signals."""
         logger.info(f"Received signal {sig}, initiating graceful shutdown...")
-        self.shutdown_event.set()
+        shutdown_event.set()
 
-
-async def main():
-    """Main entry point with clean architecture."""
-    runner = ServiceRunner()
-
-    # Setup signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, runner.signal_handler)
-    signal.signal(signal.SIGTERM, runner.signal_handler)
+    # Setup signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        await runner.run()
+        # Create service using factory with SDK-dev bootstrap
+        logger.info("Creating Echo Service with SDK-dev bootstrap...")
+        service = await EchoServiceFactory.create_production_service()
+
+        # Start the service (SDK handles everything)
+        logger.info("Starting Echo Service...")
+        await service.start()
+
+        logger.info("Echo Service is running. Press Ctrl+C to stop.")
+
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt")
     except Exception as e:
         logger.error(f"Service error: {e}", exc_info=True)
         sys.exit(1)
+    finally:
+        if service:
+            logger.info("Shutting down Echo Service...")
+            await EchoServiceFactory.cleanup_service(service)
+        logger.info("Echo Service shutdown complete")
 
 
 if __name__ == "__main__":

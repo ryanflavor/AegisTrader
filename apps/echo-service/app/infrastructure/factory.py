@@ -1,42 +1,32 @@
-"""Factory for creating the echo service application with proper dependency injection.
+"""Factory for creating the echo service using aegis-sdk-dev bootstrap utilities.
 
-This factory follows the Factory Pattern to decouple the application core from
-concrete infrastructure implementations, enabling easy swapping for testing.
-Uses aegis-sdk components for clean hexagonal architecture.
+This factory uses aegis-sdk-dev's bootstrap_sdk function to initialize
+all infrastructure components properly, avoiding any wheel reinvention.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import uuid
 from typing import Any
 
-from aegis_sdk.domain.value_objects import InstanceId, ServiceName
-from aegis_sdk.infrastructure import (
-    KVServiceRegistry,
-    NATSAdapter,
-    NATSConnectionConfig,
-    NATSKVStore,
+from aegis_sdk_dev.quickstart.bootstrap import (
+    SDKBootstrapConfig,
+    bootstrap_sdk,
+    cleanup_service_context,
 )
 
 from ..application.echo_service import EchoApplicationService
-from ..ports.configuration import ConfigurationPort
-from ..ports.service_bus import ServiceBusPort
-from ..ports.service_registry import ServiceRegistryPort
-from .aegis_service_bus_adapter import AegisServiceBusAdapter
-from .environment_configuration_adapter import EnvironmentConfigurationAdapter
-from .kv_registry_adapter import KVRegistryAdapter
 
 logger = logging.getLogger(__name__)
 
 
 class EchoServiceFactory:
-    """Factory for creating echo service instances with dependencies."""
+    """Factory for creating echo service instances using SDK-dev bootstrap."""
 
     @staticmethod
     async def create_production_service() -> EchoApplicationService:
-        """Create a production echo service with real infrastructure.
+        """Create a production echo service using SDK-dev bootstrap.
 
         Returns:
             Configured echo application service
@@ -45,159 +35,105 @@ class EchoServiceFactory:
             RuntimeError: If unable to create service
         """
         try:
-            # Create configuration adapter
-            configuration = EnvironmentConfigurationAdapter()
+            # Get configuration from environment
+            nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
+            service_name = os.getenv("SERVICE_NAME", "echo-service")
+            instance_id = os.getenv("SERVICE_INSTANCE_ID")
+            version = os.getenv("SERVICE_VERSION", "1.0.0")
 
-            # Log environment detection
-            in_k8s = configuration.is_kubernetes_environment()
-            instance_id = configuration.get_instance_id()
-            service_name = configuration.get_service_name()
-            version = configuration.get_service_version()
-
+            # Log configuration
             logger.info(
-                f"Environment Detection:\n"
-                f"  Running in Kubernetes: {in_k8s}\n"
-                f"  Instance ID: {instance_id}\n"
+                f"Bootstrapping Echo Service:\n"
                 f"  Service Name: {service_name}\n"
+                f"  Instance ID: {instance_id or 'auto-generated'}\n"
                 f"  Version: {version}\n"
-                f"  NATS URL: {configuration.get_nats_url() or 'auto-detect'}"
+                f"  NATS URL: {nats_url}"
             )
 
-            # Create NATS connection configuration using SDK
-            nats_config = NATSConnectionConfig(
-                servers=[configuration.get_nats_url()] if configuration.get_nats_url() else None,
-                name=f"{service_name}-{instance_id}",
-                service_name=ServiceName(service_name),
-                instance_id=InstanceId(instance_id),
-                connect_timeout=5.0,
-                reconnect_time_wait=2.0,
-                max_reconnect_attempts=60,
-                enable_jetstream=True,
-            )
-
-            # Create SDK's NATS adapter and connect
-            nats_adapter = NATSAdapter(config=nats_config)
-            await nats_adapter.connect()
-            logger.info("NATS connection established using SDK")
-
-            # Create KV store for service registry
-            kv_store = NATSKVStore(
-                nats_adapter=nats_adapter,
-                bucket_name="service_registry",
-                ttl_seconds=30,  # 30 second TTL for heartbeats
-            )
-            await kv_store.initialize()
-
-            # Create SDK's KV-based service registry with auto re-registration
-            kv_service_registry = KVServiceRegistry(kv_store=kv_store)
-
-            # Create our adapter that wraps the SDK registry
-            service_registry = KVRegistryAdapter(
-                kv_registry=kv_service_registry,
+            # Bootstrap SDK using aegis-sdk-dev
+            bootstrap_config = SDKBootstrapConfig(
+                nats_url=nats_url,
                 service_name=service_name,
-                instance_id=instance_id,
+                kv_bucket="service_registry",
+                enable_watchable=True,
             )
 
-            # Register service instance with metadata
-            await service_registry.register_instance(
+            context = await bootstrap_sdk(bootstrap_config)
+
+            # Create echo service with bootstrapped components
+            service = EchoApplicationService(
                 service_name=service_name,
+                message_bus=context.message_bus,
                 instance_id=instance_id,
-                instance_data={
-                    "version": version,
-                    "status": "ACTIVE",
-                    "metadata": {
-                        "environment": "kubernetes" if in_k8s else "local",
-                        "nats_url": configuration.get_nats_url() or "auto",
-                    },
-                },
-                ttl_seconds=30,  # 30 second TTL for auto-expiry
-            )
-            logger.info("Service registered with auto re-registration support")
-
-            # Create service bus adapter wrapping SDK's NATS adapter
-            service_bus = AegisServiceBusAdapter(
-                nats_adapter=nats_adapter,
-                service_name=service_name,
-                instance_id=instance_id,
+                version=version,
+                service_registry=context.service_registry,
+                service_discovery=context.service_discovery,
+                registry_ttl=30.0,
+                heartbeat_interval=15.0,
+                enable_registration=True,
             )
 
-            # Create and return application service
-            return EchoApplicationService(
-                service_bus=service_bus,
-                configuration=configuration,
-                service_registry=service_registry,
-            )
+            # Store context for cleanup
+            service._bootstrap_context = context
+
+            return service
 
         except Exception as e:
             logger.error(f"Failed to create production service: {e}")
             raise RuntimeError(f"Unable to create echo service: {e}") from e
 
     @staticmethod
-    def create_test_service(
-        service_bus: ServiceBusPort,
-        configuration: ConfigurationPort | None = None,
-        service_registry: ServiceRegistryPort | None = None,
-        config_defaults: dict[str, Any] | None = None,
-    ) -> EchoApplicationService:
-        """Create a test echo service with injected dependencies.
+    async def cleanup_service(service: EchoApplicationService) -> None:
+        """Clean up service and its bootstrap context.
 
         Args:
-            service_bus: Mock or test service bus implementation
-            configuration: Optional mock configuration
-            service_registry: Optional mock service registry
-            config_defaults: Optional default configuration values
+            service: Service to clean up
+        """
+        try:
+            # Stop the service
+            await service.stop()
+
+            # Clean up bootstrap context if present
+            if hasattr(service, "_bootstrap_context"):
+                await cleanup_service_context(service._bootstrap_context)
+
+        except Exception as e:
+            logger.error(f"Error during service cleanup: {e}")
+
+    @staticmethod
+    def create_test_service(**kwargs: Any) -> EchoApplicationService:
+        """Create a test echo service with mock dependencies.
+
+        Args:
+            **kwargs: Configuration overrides for testing
 
         Returns:
             Configured echo application service for testing
         """
-        # Use provided configuration or create test configuration
-        if configuration is None:
-            test_defaults = {
-                "service_name": "echo-service-test",
-                "version": "1.0.0",
-                "service_type": "service",
-                "debug": True,
-                "instance_id": f"test-{uuid.uuid4().hex[:8]}",
-                "nats_url": "nats://localhost:4222",
-            }
-            if config_defaults:
-                test_defaults.update(config_defaults)
+        from unittest.mock import AsyncMock
 
-            # Set environment variables for test configuration
-            for key, value in test_defaults.items():
-                os.environ[key.upper()] = str(value)
+        from aegis_sdk.ports.message_bus import MessageBusPort
+        from aegis_sdk.ports.service_discovery import ServiceDiscoveryPort
+        from aegis_sdk.ports.service_registry import ServiceRegistryPort
 
-            configuration = EnvironmentConfigurationAdapter()
-
-        # Create and return application service with test dependencies
-        return EchoApplicationService(
-            service_bus=service_bus,
-            configuration=configuration,
-            service_registry=service_registry,
+        # Create mock dependencies
+        mock_message_bus = AsyncMock(spec=MessageBusPort)
+        mock_registry = AsyncMock(spec=ServiceRegistryPort) if kwargs.get("with_registry") else None
+        mock_discovery = (
+            AsyncMock(spec=ServiceDiscoveryPort) if kwargs.get("with_discovery") else None
         )
 
-    @staticmethod
-    async def create_with_custom_adapters(
-        service_bus: ServiceBusPort,
-        configuration: ConfigurationPort,
-        service_registry: ServiceRegistryPort | None = None,
-    ) -> EchoApplicationService:
-        """Create echo service with custom adapter implementations.
-
-        This method allows for complete flexibility in providing
-        infrastructure implementations, useful for testing or
-        alternative deployment scenarios.
-
-        Args:
-            service_bus: Custom service bus implementation
-            configuration: Custom configuration implementation
-            service_registry: Optional custom service registry
-
-        Returns:
-            Configured echo application service
-        """
-        return EchoApplicationService(
-            service_bus=service_bus,
-            configuration=configuration,
-            service_registry=service_registry,
+        # Create service with mocks
+        service = EchoApplicationService(
+            service_name=kwargs.get("service_name", "echo-service-test"),
+            message_bus=mock_message_bus,
+            instance_id=kwargs.get("instance_id", "test-instance"),
+            version=kwargs.get("version", "1.0.0"),
+            service_registry=mock_registry,
+            service_discovery=mock_discovery,
+            heartbeat_interval=kwargs.get("heartbeat_interval", 15.0),
+            registry_ttl=kwargs.get("registry_ttl", 30.0),
+            enable_registration=False,  # Disable for tests
         )
+
+        return service
