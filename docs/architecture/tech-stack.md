@@ -1,18 +1,14 @@
-# **2.0 Tech Stack**
+# **Tech Stack Alignment**
 
-| Category | Technology | Version | Rationale & Purpose |
-| :---- | :---- | :---- | :---- |
-| **Backend Language** | Python | 3.13+ | Core SDK and management service development language. |
-| **Backend Framework** | FastAPI | latest | High-performance for building the management API, with native Pydantic integration. |
-| **Frontend Language** | TypeScript | latest | Provides strong type safety, crucial for large, maintainable frontend applications. |
-| **Frontend Framework** | Next.js | latest | A production-grade React framework supporting SSR/SSG and API routes, ideal for fast web apps. |
-| **UI Components** | Shadcn/ui | latest | A highly customizable and composable UI component set based on Tailwind CSS, offering great flexibility. |
-| **CSS Utility** | Tailwind CSS | latest | A utility-first CSS framework that serves as the foundation for Shadcn/ui. |
-| **Frontend State** | Zustand | latest | A lightweight and simple state management library, avoiding the complexity of traditional alternatives. |
-| **Core Messaging** | NATS & JetStream | 2.9+ | The core system platform, providing RPC, events, commands, and persistence. |
-| **Service Registry** | NATS KV Store | N/A | Implements a high-availability service registry without external database dependencies. |
-| **Backend Testing** | Pytest | \>=7.0.0 | The standard testing framework for Python, with support for async testing. |
-| **Containerization** | Docker | latest | Packages all applications into standardized container images for environmental consistency. |
-| **Orchestration** | Kubernetes | latest | Automates deployment, scaling, and management of containerized applications for high availability. |
-| **IaC Tool** | Helm Charts | latest | Defines and manages all application deployments on Kubernetes. |
-| **CI/CD Pipeline** | GitHub Actions | latest | Automates code integration, testing, building, and deployment pipelines. |
+The enhancement will adopt the established technology stack of the Aegis platform.
+
+| Category | Current Technology | Version | Usage in Enhancement | Notes |
+| :---- | :---- | :---- | :---- | :---- |
+| **Language** | Python | 3.13+ | Core implementation language | Adheres to platform standard |
+| **Framework** | AegisSDK | 4.1.0 (assumed) | Service lifecycle, messaging, HA | Core runtime for all services |
+| **Messaging** | NATS JetStream | 2.9+ | Events, Commands, KV Store | Central nervous system for all communication |
+| **Database** | ClickHouse | Cluster | Historical data persistence | Chosen for time-series performance |
+| **Cache** | NATS KV Store | \- | Real-time data, K-line cache | Unified tech stack, leverages NATS |
+| **API Style** | RPC over NATS | \- | Internal service communication | AegisSDK's native communication pattern |
+| **Testing** | pytest | \- | Unit and Integration Testing | Standard from aegis-sdk-dev template |
+| **Deployment** | Docker / K8s / Helm | \- | Containerization and Orchestration | Standard platform deployment method |
