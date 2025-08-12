@@ -1,0 +1,7 @@
+# Helm chart metadata
+apiVersion: v2
+name: test-example
+description: A Helm chart for test-example
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

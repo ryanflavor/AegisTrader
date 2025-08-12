@@ -49,7 +49,7 @@ class TestServiceDiscoveryK8sIntegration:
     async def kv_store(self, nats_adapter):
         """Create KV Store for testing."""
         store = NATSKVStore(nats_adapter)
-        await store.connect("test-service-discovery-k8s")
+        await store.connect("test_service_discovery_k8s")
 
         # Clear any existing data
         await store.clear()

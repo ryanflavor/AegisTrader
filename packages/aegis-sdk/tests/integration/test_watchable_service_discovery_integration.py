@@ -31,6 +31,11 @@ class TestWatchableServiceDiscoveryIntegration:
     @pytest_asyncio.fixture
     async def nats_adapter(self, nats_container):
         """Create NATS adapter connected to test container."""
+        # Register default dependencies
+        from aegis_sdk.infrastructure.bootstrap import bootstrap_defaults
+
+        bootstrap_defaults()
+
         config = NATSConnectionConfig()
 
         adapter = NATSAdapter(config=config)
@@ -42,7 +47,7 @@ class TestWatchableServiceDiscoveryIntegration:
     async def kv_store(self, nats_adapter):
         """Create KV Store for testing."""
         store = NATSKVStore(nats_adapter)
-        await store.connect("test-service-discovery-watch")
+        await store.connect("test_service_discovery_watch")
 
         # Clear any existing data
         await store.clear()
@@ -100,7 +105,7 @@ class TestWatchableServiceDiscoveryIntegration:
                 instance_id="instance-1",
                 version="1.0.0",
                 status="ACTIVE",
-                last_heartbeat=datetime.now(UTC),
+                last_heartbeat=datetime.now(UTC).isoformat(),
             )
             await registry.register(instance, ttl_seconds=60)
 
@@ -132,14 +137,14 @@ class TestWatchableServiceDiscoveryIntegration:
             instance_id="instance-1",
             version="1.0.0",
             status="ACTIVE",
-            last_heartbeat=datetime.now(UTC),
+            last_heartbeat=datetime.now(UTC).isoformat(),
         )
         instance2 = ServiceInstance(
             service_name="removal-test",
             instance_id="instance-2",
             version="1.0.0",
             status="ACTIVE",
-            last_heartbeat=datetime.now(UTC),
+            last_heartbeat=datetime.now(UTC).isoformat(),
         )
 
         await registry.register(instance1, ttl_seconds=60)
@@ -265,7 +270,7 @@ class TestWatchableServiceDiscoveryIntegration:
                 instance_id=f"{service_name}-1",
                 version="1.0.0",
                 status="ACTIVE",
-                last_heartbeat=datetime.now(UTC),
+                last_heartbeat=datetime.now(UTC).isoformat(),
             )
             await registry.register(instance, ttl_seconds=60)
 
@@ -293,7 +298,7 @@ class TestWatchableServiceDiscoveryIntegration:
                 instance_id="service-b-2",
                 version="1.0.0",
                 status="ACTIVE",
-                last_heartbeat=datetime.now(UTC),
+                last_heartbeat=datetime.now(UTC).isoformat(),
             )
             await registry.register(new_instance, ttl_seconds=60)
 
@@ -331,7 +336,7 @@ class TestWatchableServiceDiscoveryIntegration:
                     instance_id=f"instance-{i}",
                     version="1.0.0",
                     status="ACTIVE",
-                    last_heartbeat=datetime.now(UTC),
+                    last_heartbeat=datetime.now(UTC).isoformat(),
                 )
                 await registry.register(instance, ttl_seconds=60)
 
@@ -367,7 +372,7 @@ class TestWatchableServiceDiscoveryIntegration:
                 instance_id="instance-1",
                 version="1.0.0",
                 status="ACTIVE",
-                last_heartbeat=datetime.now(UTC),
+                last_heartbeat=datetime.now(UTC).isoformat(),
             )
             await registry.register(instance, ttl_seconds=60)
 

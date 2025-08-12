@@ -29,6 +29,11 @@ class TestWatchableCacheBoundaries:
     @pytest_asyncio.fixture
     async def nats_adapter(self, nats_container):
         """Create NATS adapter connected to test container."""
+        # Register default dependencies
+        from aegis_sdk.infrastructure.bootstrap import bootstrap_defaults
+
+        bootstrap_defaults()
+
         config = NATSConnectionConfig()
 
         adapter = NATSAdapter(config=config)
@@ -40,7 +45,7 @@ class TestWatchableCacheBoundaries:
     async def kv_store(self, nats_adapter):
         """Create KV Store for testing."""
         store = NATSKVStore(nats_adapter)
-        await store.connect("test-cache-boundaries")
+        await store.connect("test_cache_boundaries")
         await store.clear()
         yield store
         await store.clear()

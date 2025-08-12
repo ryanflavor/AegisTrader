@@ -1,6 +1,5 @@
 """Unit tests for NATSKVStore."""
 
-import asyncio
 import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -503,11 +502,13 @@ class TestNATSKVStoreAdvancedOperations:
         store = connected_store
 
         # Mock keys and delete_many
-        with patch.object(store, "keys", return_value=["key1", "key2"]):
-            with patch.object(store, "delete_many", return_value={"key1": True, "key2": True}):
-                result = await store.clear()
+        with (
+            patch.object(store, "keys", return_value=["key1", "key2"]),
+            patch.object(store, "delete_many", return_value={"key1": True, "key2": True}),
+        ):
+            result = await store.clear()
 
-                assert result == 2
+            assert result == 2
 
     @pytest.mark.asyncio
     async def test_status_connected(self, connected_store):
@@ -561,7 +562,7 @@ class TestNATSKVStoreErrorHandling:
         store = connected_store
         store._kv.put = AsyncMock(side_effect=Exception("Put failed"))
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Put failed"):
             await store.put("test-key", {"data": "value"})
 
         store._metrics.increment.assert_called_with("kv.put.error")
@@ -611,7 +612,7 @@ class TestNATSKVStoreWatchOperations:
             elif updates_called == 2:
                 return mock_update
             else:
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
 
         mock_watcher.updates = mock_updates
 
@@ -674,7 +675,7 @@ class TestNATSKVStoreWatchOperations:
                 result = updates[update_index]
                 update_index += 1
                 return result
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         mock_watcher.updates = mock_updates
 
@@ -718,7 +719,7 @@ class TestNATSKVStoreWatchOperations:
                 result = updates[update_index]
                 update_index += 1
                 return result
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         mock_watcher.updates = mock_updates
 
@@ -759,7 +760,7 @@ class TestNATSKVStoreWatchOperations:
                 result = updates[update_index]
                 update_index += 1
                 return result
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         mock_watcher.updates = mock_updates
 
@@ -810,7 +811,7 @@ class TestNATSKVStoreWatchOperations:
                 result = updates[update_index]
                 update_index += 1
                 return result
-            raise asyncio.TimeoutError()
+            raise TimeoutError()
 
         mock_watcher.updates = mock_updates
 
@@ -1162,13 +1163,13 @@ class TestNATSKVStoreBatchOperationsExtended:
         store = connected_store
 
         # Mock keys and delete_many
-        with patch.object(store, "keys", return_value=["prefix:1", "prefix:2"]):
-            with patch.object(
-                store, "delete_many", return_value={"prefix:1": True, "prefix:2": False}
-            ):
-                result = await store.clear("prefix:")
+        with (
+            patch.object(store, "keys", return_value=["prefix:1", "prefix:2"]),
+            patch.object(store, "delete_many", return_value={"prefix:1": True, "prefix:2": False}),
+        ):
+            result = await store.clear("prefix:")
 
-                assert result == 1  # Only one successful deletion
+            assert result == 1  # Only one successful deletion
 
     @pytest.mark.asyncio
     async def test_history_with_limit(self, connected_store):

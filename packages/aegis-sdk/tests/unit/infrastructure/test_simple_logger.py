@@ -39,34 +39,38 @@ class TestSimpleLogger:
 
     def test_handler_added_when_none_exist(self):
         """Test that handler is added when none exist."""
-        with patch("logging.getLogger") as mock_get_logger:
+        with (
+            patch("logging.getLogger") as mock_get_logger,
+            patch("logging.StreamHandler") as mock_handler_class,
+        ):
             mock_logger = Mock()
             mock_logger.handlers = []  # No handlers
             mock_get_logger.return_value = mock_logger
 
-            with patch("logging.StreamHandler") as mock_handler_class:
-                mock_handler = Mock()
-                mock_handler_class.return_value = mock_handler
+            mock_handler = Mock()
+            mock_handler_class.return_value = mock_handler
 
-                SimpleLogger()
+            SimpleLogger()
 
-                mock_handler_class.assert_called_once()
-                mock_logger.addHandler.assert_called_once_with(mock_handler)
-                mock_handler.setFormatter.assert_called_once()
+            mock_handler_class.assert_called_once()
+            mock_logger.addHandler.assert_called_once_with(mock_handler)
+            mock_handler.setFormatter.assert_called_once()
 
     def test_handler_not_added_when_exists(self):
         """Test that handler is not added when one already exists."""
-        with patch("logging.getLogger") as mock_get_logger:
+        with (
+            patch("logging.getLogger") as mock_get_logger,
+            patch("logging.StreamHandler") as mock_handler_class,
+        ):
             mock_logger = Mock()
             mock_logger.handlers = [Mock()]  # Existing handler
             mock_get_logger.return_value = mock_logger
 
-            with patch("logging.StreamHandler") as mock_handler_class:
-                SimpleLogger()
+            SimpleLogger()
 
-                # Handler should not be created
-                mock_handler_class.assert_not_called()
-                mock_logger.addHandler.assert_not_called()
+            # Handler should not be created
+            mock_handler_class.assert_not_called()
+            mock_logger.addHandler.assert_not_called()
 
     def test_debug_method(self):
         """Test debug method without kwargs."""
@@ -154,26 +158,28 @@ class TestSimpleLogger:
 
     def test_formatter_configuration(self):
         """Test that formatter is properly configured."""
-        with patch("logging.getLogger") as mock_get_logger:
+        with (
+            patch("logging.getLogger") as mock_get_logger,
+            patch("logging.StreamHandler") as mock_handler_class,
+            patch("logging.Formatter") as mock_formatter_class,
+        ):
             mock_logger = Mock()
             mock_logger.handlers = []
             mock_get_logger.return_value = mock_logger
 
-            with patch("logging.StreamHandler") as mock_handler_class:
-                mock_handler = Mock()
-                mock_handler_class.return_value = mock_handler
+            mock_handler = Mock()
+            mock_handler_class.return_value = mock_handler
 
-                with patch("logging.Formatter") as mock_formatter_class:
-                    mock_formatter = Mock()
-                    mock_formatter_class.return_value = mock_formatter
+            mock_formatter = Mock()
+            mock_formatter_class.return_value = mock_formatter
 
-                    SimpleLogger()
+            SimpleLogger()
 
-                    # Check formatter format string
-                    mock_formatter_class.assert_called_once_with(
-                        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-                    )
-                    mock_handler.setFormatter.assert_called_once_with(mock_formatter)
+            # Check formatter format string
+            mock_formatter_class.assert_called_once_with(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            mock_handler.setFormatter.assert_called_once_with(mock_formatter)
 
     def test_different_log_levels(self):
         """Test initialization with different log levels."""

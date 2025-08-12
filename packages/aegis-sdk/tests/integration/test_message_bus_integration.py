@@ -119,7 +119,7 @@ class TestMessageBusIntegration:
         # Wait for event to be received
         try:
             await asyncio.wait_for(event_received.wait(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail("Event was not received within timeout")
 
         # Verify event was received

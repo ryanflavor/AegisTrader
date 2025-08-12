@@ -7,6 +7,7 @@ using the Story 3.3 automatic failover implementation.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -85,10 +86,8 @@ class TestK8sStickyActiveClientRetry:
         election_bucket = f"election_{service_name.replace('-', '_')}"
         await kv_store.connect(election_bucket)
         leader_key = f"leader.{group_id}"
-        try:
-            await kv_store.delete(leader_key)
-        except:
-            pass  # Key might not exist
+        with contextlib.suppress(Exception):
+            await kv_store.delete(leader_key)  # Key might not exist
 
         # Create three service instances
         instances = []
@@ -270,11 +269,11 @@ class TestK8sStickyActiveClientRetry:
             print(f"📊 Metrics: {counters}")
 
             # We should see retry attempts in the metrics
-            retry_metrics = [k for k in counters.keys() if "retry" in k.lower()]
+            retry_metrics = [k for k in counters if "retry" in k.lower()]
             if retry_metrics:
                 print(f"   Retry metrics found: {retry_metrics}")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail("RPC call timed out during failover")
         finally:
             # Clean up remaining instances
@@ -298,10 +297,8 @@ class TestK8sStickyActiveClientRetry:
         election_bucket = f"election_{service_name.replace('-', '_')}"
         await kv_store.connect(election_bucket)
         leader_key = f"leader.{group_id}"
-        try:
+        with contextlib.suppress(Exception):
             await kv_store.delete(leader_key)
-        except:
-            pass
 
         # Create two service instances for faster failover
         instances = []
@@ -443,7 +440,7 @@ class TestK8sStickyActiveClientRetry:
 
         start_time = time.time()
         try:
-            result = await rpc_use_case.execute(request)
+            _result = await rpc_use_case.execute(request)
             elapsed = time.time() - start_time
             print(f"✅ Call succeeded after {elapsed:.2f}s")
 
@@ -465,10 +462,8 @@ class TestK8sStickyActiveClientRetry:
         finally:
             # Clean up
             for service in custom_instances:
-                try:
+                with contextlib.suppress(Exception):
                     await service.stop()
-                except:
-                    pass
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(10)

@@ -163,10 +163,10 @@ class TestMessagePackSerializer:
 class TestKVOptionsFactory:
     """Tests for KV options factory."""
 
-    def test_create_with_ttl(self):
-        """Test creating options with TTL."""
-        options = KVOptionsFactory.create_with_ttl(300)
-        assert options.ttl == 300
+    def test_create_persistent(self):
+        """Test creating persistent options (no TTL)."""
+        options = KVOptionsFactory.create_persistent()
+        # TTL field has been removed - use stream-level TTL instead
         assert options.revision is None
         assert options.create_only is False
         assert options.update_only is False
@@ -176,7 +176,7 @@ class TestKVOptionsFactory:
         options = KVOptionsFactory.create_exclusive()
         assert options.create_only is True
         assert options.update_only is False
-        assert options.ttl is None
+        # TTL field has been removed
         assert options.revision is None
 
     def test_create_update_only(self):
@@ -201,46 +201,49 @@ class TestKVOptionsFactory:
 
     def test_create_ephemeral(self):
         """Test creating ephemeral options."""
-        # Default TTL
+        # TTL parameter is ignored - use stream-level TTL configuration
         options = KVOptionsFactory.create_ephemeral()
-        assert options.ttl == 30
-
-        # Custom TTL
-        options = KVOptionsFactory.create_ephemeral(ttl_seconds=60)
-        assert options.ttl == 60
-
-    def test_create_persistent(self):
-        """Test creating persistent options."""
-        options = KVOptionsFactory.create_persistent()
-        assert options.ttl is None
+        # TTL field has been removed from KVOptions
         assert options.revision is None
         assert options.create_only is False
         assert options.update_only is False
 
+        # Custom TTL parameter is ignored but method still works
+        options = KVOptionsFactory.create_ephemeral(ttl_seconds=60)
+        # TTL field has been removed from KVOptions
+        assert options.revision is None
+
     def test_create_session(self):
         """Test creating session options."""
-        # Default TTL
+        # TTL parameter is ignored - use stream-level TTL configuration
         options = KVOptionsFactory.create_session()
-        assert options.ttl == 3600  # 1 hour
+        # TTL field has been removed from KVOptions
+        assert options.revision is None
+        assert options.create_only is False
+        assert options.update_only is False
 
-        # Custom TTL
+        # Custom TTL parameter is ignored but method still works
         options = KVOptionsFactory.create_session(session_ttl=7200)
-        assert options.ttl == 7200
+        # TTL field has been removed from KVOptions
+        assert options.revision is None
 
     def test_create_cache(self):
         """Test creating cache options."""
-        # Default TTL
+        # TTL parameter is ignored - use stream-level TTL configuration
         options = KVOptionsFactory.create_cache()
-        assert options.ttl == 300  # 5 minutes
+        # TTL field has been removed from KVOptions
+        assert options.revision is None
+        assert options.create_only is False
+        assert options.update_only is False
 
-        # Custom TTL
+        # Custom TTL parameter is ignored but method still works
         options = KVOptionsFactory.create_cache(cache_ttl=600)
-        assert options.ttl == 600
+        # TTL field has been removed from KVOptions
+        assert options.revision is None
 
     def test_factory_methods_return_kvoptions(self):
         """Test all factory methods return KVOptions instances."""
         methods = [
-            lambda: KVOptionsFactory.create_with_ttl(60),
             KVOptionsFactory.create_exclusive,
             KVOptionsFactory.create_update_only,
             lambda: KVOptionsFactory.create_with_revision(1),

@@ -1,0 +1,80 @@
+# Production environment values for echo-service-ddd
+# Override default values for production deployment
+
+replicaCount: 3
+
+image:
+  repository: registry.example.com/echo-service-ddd
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+# NATS Configuration for production
+nats:
+  url: "nats://nats.nats-system.svc.cluster.local:4222"
+  # Use secret for production authentication (reference to K8s secret name)
+  secretName: nats-auth-secret  # pragma: allowlist secret
+
+# Monitor API Configuration for production
+monitorApi:
+  url: "http://monitor-api.monitoring.svc.cluster.local:8000"
+
+# Production logging
+logLevel: INFO
+
+# Production resources
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Ingress enabled for production
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: echo.production.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: echo-service-tls  # pragma: allowlist secret
+      hosts:
+        - echo.production.example.com
+
+# Production affinity rules for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - echo-service-ddd
+          topologyKey: kubernetes.io/hostname
+
+# Production node selector
+nodeSelector:
+  node-role.kubernetes.io/worker: "true"
+
+# Production-specific environment variables
+extraEnv:
+  ENVIRONMENT: "production"
+  ENABLE_METRICS: "true"
+  ENABLE_TRACING: "true"
+
+# Production config
+config:
+  SERVICE_VERSION: "1.0.0"
+  METRICS_ENABLED: "true"
+  HEALTH_CHECK_INTERVAL: "30"
+  MAX_BATCH_SIZE: "1000"
+  MAX_DELAY_MS: "10000"

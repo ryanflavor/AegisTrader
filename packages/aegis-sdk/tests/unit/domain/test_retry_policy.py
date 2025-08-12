@@ -166,7 +166,7 @@ class TestRetryPolicy:
         policy = RetryPolicy()
 
         # Should not be able to modify attributes
-        with pytest.raises(Exception):  # Pydantic will raise validation error
+        with pytest.raises(Exception, match="frozen"):  # Pydantic will raise validation error
             policy.max_retries = 10
 
     def test_retry_policy_equality(self):
@@ -192,8 +192,8 @@ class TestRetryPolicy:
 
         # Cannot be used in sets
         with pytest.raises(TypeError):
-            {policy1}
+            _ = {policy1}
 
         # Cannot be used as dict key
         with pytest.raises(TypeError):
-            {policy1: "value"}
+            _ = {policy1: "value"}

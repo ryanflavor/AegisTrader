@@ -1,5 +1,6 @@
 """Unit tests for NatsKvElectionRepository."""
 
+import contextlib
 import time
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -59,21 +60,25 @@ class TestNatsKvElectionRepositoryLeadershipAttempt:
         instance_id = InstanceId(value="instance-123")
 
         # Mock election service
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                result = await repo.attempt_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                    metadata={"version": "1.0"},
-                )
+            ),
+        ):
+            result = await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+                metadata={"version": "1.0"},
+            )
 
         assert result is True
 
@@ -98,20 +103,24 @@ class TestNatsKvElectionRepositoryLeadershipAttempt:
         # Mock KV store to raise key already exists error
         repo._kv_store.put.side_effect = KVKeyAlreadyExistsError("leader.test-service.group1")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                result = await repo.attempt_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                )
+            ),
+        ):
+            result = await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         assert result is False
         repo._metrics.increment.assert_called_with("election.leadership.exists")
@@ -125,21 +134,25 @@ class TestNatsKvElectionRepositoryLeadershipAttempt:
         # Mock KV store to raise general error
         repo._kv_store.put.side_effect = Exception("Connection error")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                with pytest.raises(Exception, match="Connection error"):
-                    await repo.attempt_leadership(
-                        service_name=service_name,
-                        instance_id=instance_id,
-                        group_id="group1",
-                        ttl_seconds=30,
-                    )
+            ),
+            pytest.raises(Exception, match="Connection error"),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         repo._metrics.increment.assert_called_with("election.leadership.error")
 
@@ -172,26 +185,30 @@ class TestNatsKvElectionRepositoryUpdateLeadership:
         repo._kv_store.put.return_value = 6
 
         # Mock election service methods
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", time.time(), {}),
-            ):
-                with patch.object(
-                    repo._election_service,
-                    "create_leader_value",
-                    return_value={"leader_id": "instance-123", "updated": True},
-                ):
-                    result = await repo.update_leadership(
-                        service_name=service_name,
-                        instance_id=instance_id,
-                        group_id="group1",
-                        ttl_seconds=30,
-                        metadata={"version": "1.1"},
-                    )
+            ),
+            patch.object(
+                repo._election_service,
+                "create_leader_value",
+                return_value={"leader_id": "instance-123", "updated": True},
+            ),
+        ):
+            result = await repo.update_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+                metadata={"version": "1.1"},
+            )
 
         assert result is True
 
@@ -246,20 +263,24 @@ class TestNatsKvElectionRepositoryUpdateLeadership:
         )
         repo._kv_store.get.return_value = leader_entry
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("different-instance", time.time(), {}),
-            ):
-                result = await repo.update_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                )
+            ),
+        ):
+            result = await repo.update_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         assert result is False
 
@@ -312,18 +333,22 @@ class TestNatsKvElectionRepositoryGetCurrentLeader:
         repo._kv_store.get.return_value = leader_entry
 
         current_time = time.time()
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", current_time, {"version": "1.0"}),
-            ):
-                with patch.object(repo._election_service, "is_leader_expired", return_value=False):
-                    leader_id, metadata = await repo.get_current_leader(
-                        service_name=service_name, group_id="group1"
-                    )
+            ),
+            patch.object(repo._election_service, "is_leader_expired", return_value=False),
+        ):
+            leader_id, metadata = await repo.get_current_leader(
+                service_name=service_name, group_id="group1"
+            )
 
         assert leader_id == InstanceId(value="instance-123")
         assert metadata == {"version": "1.0"}
@@ -362,18 +387,22 @@ class TestNatsKvElectionRepositoryGetCurrentLeader:
         repo._kv_store.get.return_value = leader_entry
 
         old_time = time.time() - 3600  # 1 hour ago
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", old_time, {}),
-            ):
-                with patch.object(repo._election_service, "is_leader_expired", return_value=True):
-                    leader_id, metadata = await repo.get_current_leader(
-                        service_name=service_name, group_id="group1"
-                    )
+            ),
+            patch.object(repo._election_service, "is_leader_expired", return_value=True),
+        ):
+            leader_id, metadata = await repo.get_current_leader(
+                service_name=service_name, group_id="group1"
+            )
 
         assert leader_id is None
         assert metadata == {}
@@ -424,17 +453,21 @@ class TestNatsKvElectionRepositoryReleaseLeadership:
         repo._kv_store.get.return_value = leader_entry
         repo._kv_store.delete.return_value = True
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", time.time(), {}),
-            ):
-                result = await repo.release_leadership(
-                    service_name=service_name, instance_id=instance_id, group_id="group1"
-                )
+            ),
+        ):
+            result = await repo.release_leadership(
+                service_name=service_name, instance_id=instance_id, group_id="group1"
+            )
 
         assert result is True
 
@@ -476,17 +509,21 @@ class TestNatsKvElectionRepositoryReleaseLeadership:
         )
         repo._kv_store.get.return_value = leader_entry
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("different-instance", time.time(), {}),
-            ):
-                result = await repo.release_leadership(
-                    service_name=service_name, instance_id=instance_id, group_id="group1"
-                )
+            ),
+        ):
+            result = await repo.release_leadership(
+                service_name=service_name, instance_id=instance_id, group_id="group1"
+            )
 
         assert result is False
 
@@ -507,17 +544,21 @@ class TestNatsKvElectionRepositoryReleaseLeadership:
         repo._kv_store.get.return_value = leader_entry
         repo._kv_store.delete.return_value = False
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", time.time(), {}),
-            ):
-                result = await repo.release_leadership(
-                    service_name=service_name, instance_id=instance_id, group_id="group1"
-                )
+            ),
+        ):
+            result = await repo.release_leadership(
+                service_name=service_name, instance_id=instance_id, group_id="group1"
+            )
 
         assert result is False
 
@@ -578,7 +619,7 @@ class TestNatsKvElectionRepositoryWatchLeadership:
                 try:
                     return next(self.events)
                 except StopIteration:
-                    raise StopAsyncIteration
+                    raise StopAsyncIteration from None
 
         # Mock the watch method to return the async iterator directly
         mock_async_iter = AsyncIterMock([watch_event])
@@ -589,16 +630,20 @@ class TestNatsKvElectionRepositoryWatchLeadership:
 
         repo._kv_store.watch = watch_method
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "parse_leader_value",
                 return_value=("instance-123", time.time(), {"version": "1.0"}),
-            ):
-                watch_iter = repo.watch_leadership(service_name, "group1")
-                event = await watch_iter.__anext__()
+            ),
+        ):
+            watch_iter = repo.watch_leadership(service_name, "group1")
+            event = await watch_iter.__anext__()
 
         assert event["type"] == "elected"
         assert event["leader_id"] == "instance-123"
@@ -624,7 +669,7 @@ class TestNatsKvElectionRepositoryWatchLeadership:
                 try:
                     return next(self.events)
                 except StopIteration:
-                    raise StopAsyncIteration
+                    raise StopAsyncIteration from None
 
         # Mock the watch method to return the async iterator directly
         mock_async_iter = AsyncIterMock([watch_event])
@@ -667,12 +712,16 @@ class TestNatsKvElectionRepositoryWatchLeadership:
 
         repo._kv_store.watch = watch_method
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            pytest.raises(Exception, match="Watch error"),
         ):
-            with pytest.raises(Exception, match="Watch error"):
-                watch_iter = repo.watch_leadership(service_name, "group1")
-                await watch_iter.__anext__()
+            watch_iter = repo.watch_leadership(service_name, "group1")
+            await watch_iter.__anext__()
 
 
 class TestNatsKvElectionRepositoryElectionState:
@@ -713,7 +762,7 @@ class TestNatsKvElectionRepositoryElectionState:
 
         # Verify key format
         call_args = repo._kv_store.put.call_args
-        expected_key = "election-state.test-service.instance-123.group1"
+        expected_key = "election-state__test-service__instance-123__group1"
         assert call_args[0][0] == expected_key
 
         # Verify data structure
@@ -799,7 +848,7 @@ class TestNatsKvElectionRepositoryElectionState:
         await repo.delete_election_state(service_name, instance_id, "group1")
 
         # Verify delete called with correct key
-        expected_key = "election-state.test-service.instance-123.group1"
+        expected_key = "election-state__test-service__instance-123__group1"
         repo._kv_store.delete.assert_called_once_with(expected_key)
 
     @pytest.mark.asyncio
@@ -861,24 +910,28 @@ class TestNatsKvElectionRepositoryIntegration:
         service_name = ServiceName(value="test-service")
         instance_id = InstanceId(value="instance-123")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(repo._election_service, "create_leader_value") as mock_create_value,
         ):
-            with patch.object(repo._election_service, "create_leader_value") as mock_create_value:
-                mock_create_value.return_value = {
-                    "leader_id": "instance-123",
-                    "metadata": {"test": "data"},
-                }
+            mock_create_value.return_value = {
+                "leader_id": "instance-123",
+                "metadata": {"test": "data"},
+            }
 
-                await repo.attempt_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                    metadata={"test": "data"},
-                )
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+                metadata={"test": "data"},
+            )
 
-                mock_create_value.assert_called_once_with("instance-123", {"test": "data"})
+            mock_create_value.assert_called_once_with("instance-123", {"test": "data"})
 
     @pytest.mark.asyncio
     async def test_leader_value_parsing(self, repo):
@@ -895,22 +948,26 @@ class TestNatsKvElectionRepositoryIntegration:
         )
         repo._kv_store.get.return_value = leader_entry
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(repo._election_service, "parse_leader_value") as mock_parse,
+            patch.object(repo._election_service, "is_leader_expired", return_value=False),
         ):
-            with patch.object(repo._election_service, "parse_leader_value") as mock_parse:
-                mock_parse.return_value = ("instance-123", time.time(), {"version": "1.0"})
+            mock_parse.return_value = ("instance-123", time.time(), {"version": "1.0"})
 
-                with patch.object(repo._election_service, "is_leader_expired", return_value=False):
-                    leader_id, metadata = await repo.get_current_leader(
-                        service_name=service_name, group_id="group1"
-                    )
+            leader_id, metadata = await repo.get_current_leader(
+                service_name=service_name, group_id="group1"
+            )
 
-                # Verify parse_leader_value was called with JSON string
-                mock_parse.assert_called_once()
-                call_args = mock_parse.call_args[0][0]
-                # Should be JSON string representation of the leader value
-                assert '"leader_id": "instance-123"' in call_args
+            # Verify parse_leader_value was called with JSON string
+            mock_parse.assert_called_once()
+            call_args = mock_parse.call_args[0][0]
+            # Should be JSON string representation of the leader value
+            assert '"leader_id": "instance-123"' in call_args
 
 
 class TestNatsKvElectionRepositoryErrorHandling:
@@ -932,21 +989,25 @@ class TestNatsKvElectionRepositoryErrorHandling:
         # Mock KV store connection error
         repo._kv_store.put.side_effect = Exception("Connection lost")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                with pytest.raises(Exception, match="Connection lost"):
-                    await repo.attempt_leadership(
-                        service_name=service_name,
-                        instance_id=instance_id,
-                        group_id="group1",
-                        ttl_seconds=30,
-                    )
+            ),
+            pytest.raises(Exception, match="Connection lost"),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
     def test_invalid_service_name(self, repo):
         """Test handling of invalid service name."""
@@ -998,20 +1059,24 @@ class TestNatsKvElectionRepositoryMetrics:
         instance_id = InstanceId(value="instance-123")
 
         # Test successful leadership acquisition
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                await repo.attempt_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                )
+            ),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         repo._metrics.increment.assert_called_with("election.leadership.acquired")
 
@@ -1024,21 +1089,25 @@ class TestNatsKvElectionRepositoryMetrics:
         # Mock error
         repo._kv_store.put.side_effect = Exception("Test error")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                with pytest.raises(Exception):
-                    await repo.attempt_leadership(
-                        service_name=service_name,
-                        instance_id=instance_id,
-                        group_id="group1",
-                        ttl_seconds=30,
-                    )
+            ),
+            pytest.raises(Exception, match="Test error"),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         repo._metrics.increment.assert_called_with("election.leadership.error")
 
@@ -1059,20 +1128,24 @@ class TestNatsKvElectionRepositoryLogging:
         service_name = ServiceName(value="test-service")
         instance_id = InstanceId(value="instance-123")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                await repo.attempt_leadership(
-                    service_name=service_name,
-                    instance_id=instance_id,
-                    group_id="group1",
-                    ttl_seconds=30,
-                )
+            ),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         # Verify info logging for successful acquisition
         repo._logger.info.assert_called()
@@ -1088,21 +1161,25 @@ class TestNatsKvElectionRepositoryLogging:
         # Mock error
         repo._kv_store.put.side_effect = Exception("Test error")
 
-        with patch.object(
-            repo._election_service, "create_leader_key", return_value="leader.test-service.group1"
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                repo._election_service,
+                "create_leader_key",
+                return_value="leader.test-service.group1",
+            ),
+            patch.object(
                 repo._election_service,
                 "create_leader_value",
                 return_value={"leader_id": "instance-123"},
-            ):
-                with pytest.raises(Exception):
-                    await repo.attempt_leadership(
-                        service_name=service_name,
-                        instance_id=instance_id,
-                        group_id="group1",
-                        ttl_seconds=30,
-                    )
+            ),
+            pytest.raises(Exception, match="Test error"),
+        ):
+            await repo.attempt_leadership(
+                service_name=service_name,
+                instance_id=instance_id,
+                group_id="group1",
+                ttl_seconds=30,
+            )
 
         # Verify exception logging
         repo._logger.exception.assert_called()
@@ -1134,10 +1211,8 @@ class TestNatsKvElectionRepositoryLogging:
         ):
             # Create and try to iterate once to trigger the logging
             watch_iter = repo.watch_leadership(service_name, "group1")
-            try:
+            with contextlib.suppress(StopAsyncIteration):
                 await watch_iter.__anext__()
-            except StopAsyncIteration:
-                pass  # Expected when mock_watch returns immediately
 
         # Verify info logging for watch start
         repo._logger.info.assert_called()

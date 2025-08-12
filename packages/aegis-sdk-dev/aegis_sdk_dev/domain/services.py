@@ -356,7 +356,7 @@ class ProjectGenerator:
         return '"""Factory for creating application instances."""\n'
 
     def _generate_main(self, config: BootstrapConfig) -> str:
-        return f'"""Main entry point for {config.project_name}."""\n\nif __name__ == "__main__":\n    print("Starting {config.project_name}...")\n'
+        return f'"""Main entry point for {config.project_name}."""\n\nif __name__ == "__main__":\n    print("Starting {config.project_name}...")'
 
     def _generate_requirements(self, config: BootstrapConfig) -> str:
         return "aegis-sdk>=1.0.0\npydantic>=2.0.0\nclick>=8.0.0\n"

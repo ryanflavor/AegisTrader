@@ -7,6 +7,7 @@ Uses the InfrastructureFactory pattern for consistent adapter creation.
 
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 
 from ...application.monitoring_service import MonitoringService
@@ -48,15 +49,17 @@ def get_monitoring_port() -> MonitoringPort:
     """
     config = get_service_configuration()
     # Try to get instance repository if available
-    try:
+    instance_repository = None
+    start_time = None
+    with contextlib.suppress(Exception):
         from ..connection_manager import get_connection_manager
 
         manager = get_connection_manager()
         start_time = getattr(manager, "_start_time", None)
-    except Exception:
-        start_time = None
+        # Get instance repository from manager using property
+        instance_repository = manager.instance_repository
 
-    return InfrastructureFactory.create_monitoring_port(config, start_time)
+    return InfrastructureFactory.create_monitoring_port(config, start_time, instance_repository)
 
 
 @lru_cache
@@ -95,7 +98,7 @@ def get_service_registry() -> ServiceRegistryService:
     return ServiceRegistryService(kv_store)
 
 
-def get_sdk_monitoring_service() -> SDKMonitoringService:
+def get_sdk_monitoring_service():
     """Get the SDK monitoring service instance using factory.
 
     Returns:

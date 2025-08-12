@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aegis-sdk-dev",
+    "msgpack>=1.1.1",
     "openctp-ctp>=6.7.7.0",
     "vnpy>=4.1.0",
     "vnpy-ctp>=6.7.7.2",
+    "vnpy-sopt>=3.7.1.0",
 ]
 
 [tool.uv]

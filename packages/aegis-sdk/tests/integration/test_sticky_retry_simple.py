@@ -177,11 +177,8 @@ class TestStickyRetrySimple:
         )
 
         # Execute request - should fail after retries
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="2 retries") as exc_info:
             await rpc_use_case.execute(request)
-
-        # Verify error message
-        assert "2 retries" in str(exc_info.value)
         assert "NOT_ACTIVE" in str(exc_info.value)
 
         # Verify exact number of calls
@@ -234,7 +231,7 @@ class TestStickyRetrySimple:
         )
 
         # Execute request - should fail immediately
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="INTERNAL_ERROR|RPC call failed") as exc_info:
             await rpc_use_case.execute(request)
 
         # Debug output
@@ -245,6 +242,5 @@ class TestStickyRetrySimple:
         # Since we're returning INTERNAL_ERROR, it should give up after the first attempt
         # However, the implementation might be retrying anyway
         # Let's just verify it fails with the expected error
-        assert "INTERNAL_ERROR" in str(exc_info.value) or "RPC call failed" in str(exc_info.value)
 
         logger.info("Test correctly failed without retries")

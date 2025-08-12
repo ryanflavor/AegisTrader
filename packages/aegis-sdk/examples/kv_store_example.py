@@ -134,7 +134,7 @@ async def main():
         # Wait for watcher to complete
         try:
             await asyncio.wait_for(watch_task, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             watch_task.cancel()
 
         print("\n✅ Example completed successfully!")

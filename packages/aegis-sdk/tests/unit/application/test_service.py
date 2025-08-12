@@ -238,10 +238,8 @@ class TestRPCMethods:
 
         # Make RPC call with discovery disabled
         request = service.create_rpc_request("user-service", "unknown_method")
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="RPC failed: Method not found"):
             await service.call_rpc(request, discovery_enabled=False)
-
-        assert "RPC failed: Method not found" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_call_rpc_with_discovery(self, mock_message_bus):
@@ -349,10 +347,8 @@ class TestRPCMethods:
 
         # Make RPC call
         request = service.create_rpc_request("user-service", "get_user")
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="RPC failed: Service unavailable"):
             await service.call_rpc(request)
-
-        assert "RPC failed: Service unavailable" in str(exc_info.value)
 
         # Verify cache was invalidated
         mock_discovery.invalidate_cache.assert_called_once_with("user-service")
@@ -650,10 +646,8 @@ class TestServiceRegistration:
         )
 
         # Registration failure should propagate
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Registry error"):
             await service.start()
-
-        assert "Registry error" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_service_deregistration_on_stop(self, mock_message_bus, mock_service_registry):
@@ -827,10 +821,8 @@ class TestServiceRegistration:
         await service.start()
 
         # Manually trigger heartbeat - it will raise but that's expected
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Transient error") as exc_info:
             await service._health_manager._send_heartbeat(service._service_instance)
-
-        assert "Transient error" in str(exc_info.value)
 
         # In the actual heartbeat loop, this error would be handled by _handle_heartbeat_failure
         # Let's manually simulate that
@@ -1014,7 +1006,7 @@ class TestServiceRegistration:
             # Wait for unhealthy status (should happen quickly with mocked backoff)
             try:
                 await asyncio.wait_for(unhealthy_event.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pytest.fail("Service did not become unhealthy within timeout")
 
             # Should mark service as unhealthy after 3 consecutive failures
@@ -1098,10 +1090,8 @@ class TestServiceRegistration:
         )
 
         # Should raise exception during start
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Registry unavailable"):
             await service.start()
-
-        assert "Registry unavailable" in str(exc_info.value)
 
         # Logger should have logged the error twice (once in _register_instance, once in start)
         assert mock_logger.error.call_count == 2

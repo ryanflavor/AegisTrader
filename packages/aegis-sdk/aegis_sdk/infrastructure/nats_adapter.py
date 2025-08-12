@@ -203,7 +203,8 @@ class NATSAdapter(MessageBusPort):
         subject = SubjectPatterns.rpc(service, method)
         queue_group = f"rpc.{service}"
         # Only subscribe on first connection with queue group
-        await self._connections[0].subscribe(subject, queue=queue_group, cb=wrapper)
+        sub = await self._connections[0].subscribe(subject, queue=queue_group, cb=wrapper)
+        print(f"DEBUG: Subscribed to {subject} with queue {queue_group}, subscription: {sub}")
 
     async def call_rpc(self, request: RPCRequest) -> RPCResponse:
         """Make an RPC call."""

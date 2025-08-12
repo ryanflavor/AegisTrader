@@ -2,6 +2,7 @@
 
 from aegis_sdk_dev.domain.models import (
     BootstrapConfig,
+    ExecutionResult,
     ExecutionType,
     ProjectTemplate,
     RunConfiguration,
@@ -157,15 +158,15 @@ class TestProjectGenerator:
         files = self.generator.generate_project_structure(config)
 
         # Check core files are generated
-        assert "test-project/domain/__init__.py" in files
-        assert "test-project/application/__init__.py" in files
-        assert "test-project/ports/__init__.py" in files
-        assert "test-project/infrastructure/__init__.py" in files
-        assert "test-project/main.py" in files
-        assert "test-project/requirements.txt" in files
+        assert "./test-project/domain/__init__.py" in files
+        assert "./test-project/application/__init__.py" in files
+        assert "./test-project/ports/__init__.py" in files
+        assert "./test-project/infrastructure/__init__.py" in files
+        assert "./test-project/main.py" in files
+        assert "./test-project/requirements.txt" in files
 
         # Check tests are not included
-        assert not any("tests" in path for path in files.keys())
+        assert not any("tests" in path for path in files)
 
     def test_generate_project_structure_with_tests(self):
         """Test generating project structure with tests."""
@@ -185,11 +186,11 @@ class TestProjectGenerator:
         files = self.generator.generate_project_structure(config)
 
         # Check test files are generated
-        assert "test-project/tests/__init__.py" in files
-        assert "test-project/tests/conftest.py" in files
-        assert "test-project/tests/unit/test_domain.py" in files
-        assert "test-project/tests/unit/test_application.py" in files
-        assert "test-project/tests/integration/test_service.py" in files
+        assert "./test-project/tests/__init__.py" in files
+        assert "./test-project/tests/conftest.py" in files
+        assert "./test-project/tests/unit/test_domain.py" in files
+        assert "./test-project/tests/unit/test_application.py" in files
+        assert "./test-project/tests/integration/test_service.py" in files
 
     def test_generate_project_structure_with_docker(self):
         """Test generating project structure with Docker support."""
@@ -209,8 +210,8 @@ class TestProjectGenerator:
         files = self.generator.generate_project_structure(config)
 
         # Check Docker files are generated
-        assert "test-project/Dockerfile" in files
-        assert "test-project/.dockerignore" in files
+        assert "./test-project/Dockerfile" in files
+        assert "./test-project/.dockerignore" in files
 
     def test_generate_project_structure_with_k8s(self):
         """Test generating project structure with Kubernetes manifests."""
@@ -230,9 +231,9 @@ class TestProjectGenerator:
         files = self.generator.generate_project_structure(config)
 
         # Check Kubernetes manifests are generated
-        assert "test-project/k8s/deployment.yaml" in files
-        assert "test-project/k8s/service.yaml" in files
-        assert "test-project/k8s/configmap.yaml" in files
+        assert "./test-project/k8s/deployment.yaml" in files
+        assert "./test-project/k8s/service.yaml" in files
+        assert "./test-project/k8s/configmap.yaml" in files
 
     def test_generate_project_custom_output_dir(self):
         """Test generating project with custom output directory."""
@@ -253,7 +254,7 @@ class TestProjectGenerator:
         files = self.generator.generate_project_structure(config)
 
         # Check files use custom output directory
-        assert all(path.startswith("/custom/path/test-project/") for path in files.keys())
+        assert all(path.startswith("/custom/path/test-project/") for path in files)
 
 
 class TestTestOrchestrator:

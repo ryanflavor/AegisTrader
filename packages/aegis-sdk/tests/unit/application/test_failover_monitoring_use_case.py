@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -14,6 +15,7 @@ from aegis_sdk.domain.value_objects import (
 )
 from aegis_sdk.infrastructure.election_coordinator import ElectionCoordinator
 from aegis_sdk.infrastructure.heartbeat_monitor import HeartbeatMonitor
+from aegis_sdk.infrastructure.monitoring_factory import ConcreteMonitoringFactory
 
 
 @pytest.fixture
@@ -69,6 +71,34 @@ def mock_logger():
 
 
 @pytest.fixture
+def mock_monitoring_factory():
+    """Create a mock monitoring factory."""
+    factory = Mock(spec=ConcreteMonitoringFactory)
+
+    # Create mock heartbeat monitor
+    mock_heartbeat = Mock(spec=HeartbeatMonitor)
+    mock_heartbeat.start_monitoring = AsyncMock()
+    mock_heartbeat.stop_monitoring = AsyncMock()
+    mock_heartbeat.set_election_trigger = Mock()
+    mock_heartbeat.get_status = Mock(return_value={"status": "running"})
+
+    # Create mock election coordinator
+    mock_coordinator = Mock(spec=ElectionCoordinator)
+    mock_coordinator.start_election = AsyncMock(return_value=False)
+    mock_coordinator.check_leadership = AsyncMock(return_value=False)
+    mock_coordinator.release_leadership = AsyncMock()
+    mock_coordinator.is_elected = Mock(return_value=False)
+    mock_coordinator.set_on_elected_callback = Mock()
+    mock_coordinator.set_on_lost_callback = Mock()
+    mock_coordinator.get_election_state = Mock()
+
+    factory.create_heartbeat_monitor = Mock(return_value=mock_heartbeat)
+    factory.create_election_coordinator = Mock(return_value=mock_coordinator)
+
+    return factory
+
+
+@pytest.fixture
 def aggressive_failover_policy():
     """Create an aggressive failover policy for testing."""
     return FailoverPolicy.aggressive()
@@ -87,6 +117,7 @@ def failover_monitoring_use_case(
     mock_message_bus,
     mock_metrics,
     mock_logger,
+    mock_monitoring_factory,
 ):
     """Create a FailoverMonitoringUseCase instance with mocks."""
     return FailoverMonitoringUseCase(
@@ -95,6 +126,7 @@ def failover_monitoring_use_case(
         message_bus=mock_message_bus,
         metrics=mock_metrics,
         logger=mock_logger,
+        monitoring_factory=mock_monitoring_factory,
     )
 
 
@@ -109,6 +141,7 @@ class TestFailoverMonitoringUseCase:
         mock_message_bus,
         mock_metrics,
         mock_logger,
+        mock_monitoring_factory,
     ):
         """Test initialization with default failover policy."""
         # Arrange & Act
@@ -118,6 +151,7 @@ class TestFailoverMonitoringUseCase:
             message_bus=mock_message_bus,
             metrics=mock_metrics,
             logger=mock_logger,
+            monitoring_factory=mock_monitoring_factory,
         )
 
         # Assert
@@ -148,6 +182,7 @@ class TestFailoverMonitoringUseCase:
             message_bus=mock_message_bus,
             metrics=mock_metrics,
             logger=mock_logger,
+            monitoring_factory=mock_monitoring_factory,
             failover_policy=aggressive_failover_policy,
             status_callback=status_callback,
         )
@@ -225,10 +260,8 @@ class TestFailoverMonitoringUseCase:
 
         # Cleanup
         existing_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await existing_task
-        except asyncio.CancelledError:
-            pass
 
     @pytest.mark.asyncio
     async def test_stop_monitoring_cancels_task(
@@ -420,6 +453,7 @@ class TestFailoverMonitoringUseCase:
         mock_message_bus,
         mock_metrics,
         mock_logger,
+        mock_monitoring_factory,
         aggressive_failover_policy,
     ):
         """Test that aggressive failover policy enables faster recovery."""
@@ -430,6 +464,7 @@ class TestFailoverMonitoringUseCase:
             message_bus=mock_message_bus,
             metrics=mock_metrics,
             logger=mock_logger,
+            monitoring_factory=mock_monitoring_factory,
             failover_policy=aggressive_failover_policy,
         )
 
@@ -446,6 +481,7 @@ class TestFailoverMonitoringUseCase:
         mock_message_bus,
         mock_metrics,
         mock_logger,
+        mock_monitoring_factory,
         conservative_failover_policy,
     ):
         """Test that conservative failover policy avoids false positives."""
@@ -456,6 +492,7 @@ class TestFailoverMonitoringUseCase:
             message_bus=mock_message_bus,
             metrics=mock_metrics,
             logger=mock_logger,
+            monitoring_factory=mock_monitoring_factory,
             failover_policy=conservative_failover_policy,
         )
 

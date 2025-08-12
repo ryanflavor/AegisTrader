@@ -464,10 +464,10 @@ class TestStickyActiveElectionService:
         service = StickyActiveElectionService()
 
         key = service.create_leader_key("test-service")
-        assert key == "sticky-active.test-service.default.leader"
+        assert key == "sticky-active__test-service__default__leader"
 
         key = service.create_leader_key("test-service", "group1")
-        assert key == "sticky-active.test-service.group1.leader"
+        assert key == "sticky-active__test-service__group1__leader"
 
     def test_create_leader_value(self):
         """Test leader value creation."""

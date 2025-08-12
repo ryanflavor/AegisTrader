@@ -187,31 +187,31 @@ class TestNATSKVStoreIntegration:
     @pytest.mark.asyncio
     async def test_clear_with_prefix(self, kv_store):
         """Test clearing keys by prefix."""
-        # Create multiple keys
-        await kv_store.put("clear:key1", "value1")
-        await kv_store.put("clear:key2", "value2")
-        await kv_store.put("clear:key3", "value3")
-        await kv_store.put("keep:key4", "value4")
+        # Create multiple keys using underscore separator
+        await kv_store.put("clear_key1", "value1")
+        await kv_store.put("clear_key2", "value2")
+        await kv_store.put("clear_key3", "value3")
+        await kv_store.put("keep_key4", "value4")
 
         # Clear with prefix
-        cleared = await kv_store.clear("clear:")
+        cleared = await kv_store.clear("clear_")
         assert cleared == 3
 
         # Verify cleared keys
-        assert await kv_store.exists("clear:key1") is False
-        assert await kv_store.exists("clear:key2") is False
-        assert await kv_store.exists("clear:key3") is False
+        assert await kv_store.exists("clear_key1") is False
+        assert await kv_store.exists("clear_key2") is False
+        assert await kv_store.exists("clear_key3") is False
 
         # Other keys should remain
-        assert await kv_store.exists("keep:key4") is True
+        assert await kv_store.exists("keep_key4") is True
 
     @pytest.mark.asyncio
     async def test_status_information(self, kv_store):
         """Test status reporting."""
-        # Add some data
-        await kv_store.put("status:key1", {"data": "value1"})
-        await kv_store.put("status:key2", {"data": "value2"})
-        await kv_store.put("status:key3", {"data": "value3"})
+        # Add some data using underscore separator
+        await kv_store.put("status_key1", {"data": "value1"})
+        await kv_store.put("status_key2", {"data": "value2"})
+        await kv_store.put("status_key3", {"data": "value3"})
 
         # Get status
         status = await kv_store.status()
@@ -231,13 +231,13 @@ class TestNATSKVStoreIntegration:
 
         async def writer(id: int):
             for i in range(5):
-                await kv_store.put(f"c:{id}:{i}", {"id": id, "i": i})
+                await kv_store.put(f"c_{id}_{i}", {"id": id, "i": i})
 
         # Concurrent writes
         await asyncio.gather(*[writer(i) for i in range(3)])
 
         # Verify
-        keys = await kv_store.keys("c:")
+        keys = await kv_store.keys("c_")
         assert len(keys) == 15
 
     @pytest.mark.asyncio
@@ -295,21 +295,36 @@ class TestNATSKVStoreIntegration:
 
     @pytest.mark.asyncio
     async def test_special_characters_in_keys(self, kv_store):
-        """Test keys with special characters."""
-        special_keys = [
-            "user:123:profile",
-            "path/to/resource",
+        """Test keys with valid special characters for NATS KV."""
+        # Only use characters that are valid in NATS KV
+        # Invalid: . * > / \ : space tab
+        valid_keys = [
+            "user_123_profile",
+            "path-to-resource",
             "key-with-dashes",
             "key_with_underscores",
-            "key.with.dots",
+            "key__with__double__underscores",
         ]
 
-        # Store with special keys
-        for key in special_keys:
+        # Store with valid keys
+        for key in valid_keys:
             await kv_store.put(key, {"key": key})
 
         # Verify all can be retrieved
-        for key in special_keys:
+        for key in valid_keys:
             entry = await kv_store.get(key)
             assert entry is not None
             assert entry.value == {"key": key}
+
+        # Test that invalid characters are rejected
+        invalid_keys = [
+            "user:123:profile",  # colon
+            "path/to/resource",  # slash
+            "key.with.dots",  # dots
+            "key with space",  # space
+        ]
+
+        for key in invalid_keys:
+            with pytest.raises(ValueError) as exc_info:
+                await kv_store.put(key, {"key": key})
+            assert "invalid character" in str(exc_info.value).lower()

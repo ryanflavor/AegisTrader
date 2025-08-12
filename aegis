@@ -14,7 +14,7 @@ if [ $# -eq 0 ]; then
     echo "  test             Run tests"
     echo ""
     echo "Examples:"
-    echo "  ./aegis bootstrap -p my-service -t basic"
+    echo "  ./aegis bootstrap --project-name my-service --template enterprise_ddd --output-dir ./"
     echo "  ./aegis validate -s my-service -n nats://localhost:4222"
     echo ""
     echo "For detailed help on each command:"

@@ -79,9 +79,8 @@ class TestRealIntegrationEdgeCases:
 
         command = Command(target="test", command="test_cmd", payload={"test": True})
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="JetStream not initialized"):
             await adapter.send_command(command)
-        assert "JetStream not initialized" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_concurrent_rpc_calls(self, nats_adapter):

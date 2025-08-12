@@ -1,0 +1,74 @@
+# Project configuration
+[project]
+name = "echo-service-ddd"
+version = "0.1.0"
+description = "Generated with AegisTrader SDK"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "click>=8.0.0",
+    "python-dotenv>=1.0.0",
+    "aegis-sdk @ file:///home/ryan/workspace/github/AegisTrader/packages/aegis-sdk",
+    "aegis-sdk-dev",
+    "nats-py>=2.9.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "testcontainers>=4.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["echo-service-ddd"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --cov=echo-service-ddd --cov-report=term-missing"
+
+[tool.uv]
+dev-dependencies = [
+    "ipython>=8.0.0",
+    "ipdb>=0.13.0",
+    "testcontainers>=4.12.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
+]
+
+[tool.uv.sources]
+aegis-sdk-dev = { path = "../../aegis-sdk-dev", editable = true }

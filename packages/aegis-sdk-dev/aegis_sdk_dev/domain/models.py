@@ -19,11 +19,15 @@ class ValidationLevel(str, Enum):
 class ProjectTemplate(str, Enum):
     """Value object representing available project templates."""
 
+    ENTERPRISE_DDD = "enterprise_ddd"
+    STANDARD = "standard"
+    MINIMAL = "minimal"
+    MICROSERVICE = "microservice"
+    # Legacy templates (for backward compatibility)
     BASIC = "basic"
     SINGLE_ACTIVE = "single_active"
     EVENT_DRIVEN = "event_driven"
     FULL_FEATURED = "full_featured"
-    ENTERPRISE_DDD = "enterprise_ddd"
 
 
 class ExecutionType(str, Enum):

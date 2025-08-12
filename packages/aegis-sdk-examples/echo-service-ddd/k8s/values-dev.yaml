@@ -1,0 +1,49 @@
+# Development environment values for echo-service-ddd
+# Override default values for local development
+
+replicaCount: 1
+
+image:
+  repository: echo-service-ddd
+  pullPolicy: Never  # For local development with minikube/kind
+  tag: "dev"
+
+# NATS Configuration for local development
+nats:
+  url: "nats://nats.default.svc.cluster.local:4222"
+
+# Monitor API Configuration for local development
+monitorApi:
+  url: "http://monitor-api.default.svc.cluster.local:8000"
+
+# Development logging
+logLevel: DEBUG
+
+# Reduced resources for local development
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Faster probe intervals for development
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 3
+
+# Development-specific environment variables
+extraEnv:
+  DEBUG_MODE: "true"
+  ENABLE_PROFILING: "true"
+
+# Development config overrides
+config:
+  SERVICE_VERSION: "dev"
+  METRICS_ENABLED: "true"
+  HEALTH_CHECK_INTERVAL: "10"

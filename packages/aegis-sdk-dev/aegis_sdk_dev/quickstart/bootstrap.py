@@ -21,7 +21,7 @@ from aegis_sdk.ports.service_registry import ServiceRegistryPort as ServiceRegis
 from pydantic import BaseModel, Field, field_validator
 
 
-class BootstrapConfig(BaseModel):
+class SDKBootstrapConfig(BaseModel):
     """Configuration for SDK bootstrap with strict validation."""
 
     nats_url: str = Field(..., description="NATS connection URL")
@@ -48,12 +48,12 @@ class ServiceContext(BaseModel):
     service_discovery: ServiceDiscovery
     logger: Logger
     clock: ClockPort
-    config: BootstrapConfig
+    config: SDKBootstrapConfig
 
     model_config = {"arbitrary_types_allowed": True}
 
 
-async def bootstrap_sdk(config: BootstrapConfig) -> ServiceContext:
+async def bootstrap_sdk(config: SDKBootstrapConfig) -> ServiceContext:
     """Bootstrap SDK with all necessary components following hexagonal architecture.
 
     This function initializes all infrastructure adapters and returns a context
@@ -76,8 +76,14 @@ async def bootstrap_sdk(config: BootstrapConfig) -> ServiceContext:
     nats_adapter = NATSAdapter()
     await nats_adapter.connect(config.nats_url)
 
-    # Create KV store for service registry
-    kv_store = NATSKVStore(nats_adapter)
+    # Create KV store for service registry with proper TTL configuration
+    from aegis_sdk.infrastructure.config import KVStoreConfig
+
+    kv_config = KVStoreConfig(
+        bucket=config.kv_bucket,
+        stream_max_age_seconds=60,  # 1 minute stream TTL for history cleanup
+    )
+    kv_store = NATSKVStore(nats_adapter, config=kv_config)
     await kv_store.connect(config.kv_bucket)
 
     # Create supporting infrastructure
@@ -119,7 +125,7 @@ async def create_service_context(nats_url: str, service_name: str, **kwargs: Any
     Returns:
         ServiceContext with all bootstrapped components
     """
-    config = BootstrapConfig(nats_url=nats_url, service_name=service_name, **kwargs)
+    config = SDKBootstrapConfig(nats_url=nats_url, service_name=service_name, **kwargs)
     return await bootstrap_sdk(config)
 
 

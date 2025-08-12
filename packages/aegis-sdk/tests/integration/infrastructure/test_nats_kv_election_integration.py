@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
@@ -62,10 +63,8 @@ class TestNatsKvElectionRepository:
 
         # Clean up any existing leader
         leader_key = f"leader.{service_name.value}.default"
-        try:
-            await kv_store.delete(leader_key)
-        except Exception:
-            pass  # Key might not exist
+        with contextlib.suppress(Exception):
+            await kv_store.delete(leader_key)  # Key might not exist
 
         # First instance acquires leadership
         acquired1 = await repo.attempt_leadership(
@@ -288,7 +287,7 @@ class TestNatsKvElectionRepository:
         # Wait for events
         try:
             await asyncio.wait_for(watch_task, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             watch_task.cancel()
 
         # Verify events
@@ -365,10 +364,8 @@ class TestNatsKvElectionRepository:
 
         # Clean up any existing leader
         leader_key = f"leader.{service_name.value}.default"
-        try:
-            await kv_store.delete(leader_key)
-        except Exception:
-            pass  # Key might not exist
+        with contextlib.suppress(Exception):
+            await kv_store.delete(leader_key)  # Key might not exist
 
         # All instances attempt leadership concurrently
         tasks = []

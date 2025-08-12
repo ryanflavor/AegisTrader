@@ -1,0 +1,3 @@
+# Dependencies are managed in pyproject.toml
+# This file is kept for compatibility
+# Use: uv pip install -e .

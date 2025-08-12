@@ -240,7 +240,7 @@ class TestStickyActiveConfig:
         config = StickyActiveConfig()
 
         # Should not be able to modify attributes
-        with pytest.raises(Exception):  # Pydantic will raise validation error
+        with pytest.raises(Exception, match="frozen"):  # Pydantic will raise validation error
             config.max_retries = 10
 
     def test_extra_fields_forbidden(self):

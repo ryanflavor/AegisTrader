@@ -3,7 +3,7 @@
 import asyncio
 import builtins
 import contextlib
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -49,13 +49,11 @@ class TestRPCPatterns:
                 return {"result": result, "count": self.calculation_count}
 
             async def handle_status(self, params):
-                from datetime import timezone
-
                 return {
                     "service": self.service_name,
                     "version": self.version,
                     "calculations": self.calculation_count,
-                    "uptime": (datetime.now(timezone.utc) - self._start_time).total_seconds(),
+                    "uptime": (datetime.now(UTC) - self._start_time).total_seconds(),
                 }
 
         # Create and start service
@@ -213,7 +211,7 @@ class TestEventPatterns:
             # Wait for event to be received
             try:
                 await asyncio.wait_for(event_received.wait(), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pytest.fail("Event was not received within timeout")
 
             # Verify event was received (may have duplicates due to JetStream redelivery)
@@ -272,7 +270,7 @@ class TestEventPatterns:
         # Wait for events
         try:
             await asyncio.wait_for(events_received.wait(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pytest.fail("Events were not received within timeout")
 
         # Verify wildcard subscriptions worked
@@ -416,13 +414,23 @@ class TestSingleActiveServicePattern:
         await kv_store.connect("test_registry")
         service_registry = KVServiceRegistry(kv_store)
 
-        service = SingleActiveService(
+        from aegis_sdk.application.single_active_dtos import SingleActiveConfig
+        from aegis_sdk.infrastructure.bootstrap import bootstrap_defaults
+
+        # Register default dependencies BEFORE creating the service
+        bootstrap_defaults()
+
+        config = SingleActiveConfig(
             service_name="single_active_test",
-            version="1.0.0",
-            message_bus=nats_adapter,
             instance_id="instance_0",
-            service_registry=service_registry,
+            version="1.0.0",
             enable_registration=True,
+        )
+
+        service = SingleActiveService(
+            config=config,
+            message_bus=nats_adapter,
+            service_registry=service_registry,
         )
 
         try:
@@ -443,12 +451,21 @@ class TestSingleActiveServicePattern:
         # Due to the simple heartbeat implementation, true failover
         # testing would require more sophisticated coordination.
         # This test verifies basic behavior.
+        from aegis_sdk.application.single_active_dtos import SingleActiveConfig
+        from aegis_sdk.infrastructure.bootstrap import bootstrap_defaults
+
+        # Register default dependencies
+        bootstrap_defaults()
+
+        config_primary = SingleActiveConfig(
+            service_name="failover_test",
+            instance_id="primary",
+            version="1.0.0",
+        )
 
         primary = SingleActiveService(
-            service_name="failover_test",
-            version="1.0.0",
+            config=config_primary,
             message_bus=nats_adapter,
-            instance_id="primary",
         )
 
         try:

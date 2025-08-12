@@ -54,8 +54,16 @@ class AegisSDKKVAdapter(ServiceRegistryKVStorePort):
             self._nats_adapter = NATSAdapter()
             await self._nats_adapter.connect([nats_url])
 
-            # Initialize KV Store
-            self._kv_store = NATSKVStore(self._nats_adapter)
+            # Initialize KV Store with proper TTL configuration
+            from aegis_sdk.infrastructure.config import KVStoreConfig
+
+            kv_config = KVStoreConfig(
+                bucket="service_registry",
+                stream_max_age_seconds=60,  # 1 minute stream TTL for history cleanup
+                # Note: This is for history cleanup, not for service expiry
+                # Service expiry is handled by heartbeat + client filtering
+            )
+            self._kv_store = NATSKVStore(self._nats_adapter, config=kv_config)
             await self._kv_store.connect("service_registry")
 
             self._connected = True

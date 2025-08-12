@@ -73,8 +73,10 @@ class TestBootstrapConfig:
         # Arrange
         config = BootstrapConfig(nats_url="nats://localhost:4222", service_name="test-service")
 
-        # Act & Assert
-        with pytest.raises(AttributeError):
+        # Act & Assert - Pydantic v2 raises ValidationError for frozen models
+        from pydantic_core import ValidationError
+
+        with pytest.raises(ValidationError, match="frozen"):
             config.service_name = "new-name"
 
 
@@ -123,12 +125,12 @@ class TestBootstrapSDK:
     @patch("aegis_sdk_dev.quickstart.bootstrap.WatchableCachedServiceDiscovery")
     async def test_bootstrap_sdk_with_watchable(
         self,
-        MockWatchableDiscovery,
-        MockRegistry,
-        MockLogger,
-        MockClock,
-        MockKVStore,
-        MockNATSAdapter,
+        mock_watchable_discovery,
+        mock_registry,
+        mock_logger,
+        mock_clock,
+        mock_kv_store,
+        mock_nats_adapter,
         mock_defaults,
     ):
         """Test bootstrapping SDK with watchable discovery."""
@@ -141,22 +143,22 @@ class TestBootstrapSDK:
 
         # Setup mocks
         mock_nats = AsyncMock()
-        MockNATSAdapter.return_value = mock_nats
+        mock_nats_adapter.return_value = mock_nats
 
         mock_kv = AsyncMock()
-        MockKVStore.return_value = mock_kv
+        mock_kv_store.return_value = mock_kv
 
         mock_clock = MagicMock()
-        MockClock.return_value = mock_clock
+        mock_clock.return_value = mock_clock
 
         mock_logger = MagicMock()
-        MockLogger.return_value = mock_logger
+        mock_logger.return_value = mock_logger
 
         mock_registry = MagicMock()
-        MockRegistry.return_value = mock_registry
+        mock_registry.return_value = mock_registry
 
         mock_discovery = MagicMock()
-        MockWatchableDiscovery.return_value = mock_discovery
+        mock_watchable_discovery.return_value = mock_discovery
 
         # Act
         context = await bootstrap_sdk(config)
@@ -165,8 +167,8 @@ class TestBootstrapSDK:
         mock_defaults.assert_called_once()
         mock_nats.connect.assert_called_once_with("nats://localhost:4222")
         mock_kv.connect.assert_called_once_with("service_registry")
-        MockRegistry.assert_called_once_with(mock_kv, mock_logger)
-        MockWatchableDiscovery.assert_called_once_with(mock_registry, mock_clock)
+        mock_registry.assert_called_once_with(mock_kv, mock_logger)
+        mock_watchable_discovery.assert_called_once_with(mock_registry, mock_clock)
 
         assert context.message_bus == mock_nats
         assert context.service_registry == mock_registry
@@ -185,12 +187,12 @@ class TestBootstrapSDK:
     @patch("aegis_sdk_dev.quickstart.bootstrap.CachedServiceDiscovery")
     async def test_bootstrap_sdk_without_watchable(
         self,
-        MockCachedDiscovery,
-        MockRegistry,
-        MockLogger,
-        MockClock,
-        MockKVStore,
-        MockNATSAdapter,
+        mock_cached_discovery,
+        mock_registry,
+        mock_logger,
+        mock_clock,
+        mock_kv_store,
+        mock_nats_adapter,
         mock_defaults,
     ):
         """Test bootstrapping SDK without watchable discovery."""
@@ -203,28 +205,28 @@ class TestBootstrapSDK:
 
         # Setup mocks
         mock_nats = AsyncMock()
-        MockNATSAdapter.return_value = mock_nats
+        mock_nats_adapter.return_value = mock_nats
 
         mock_kv = AsyncMock()
-        MockKVStore.return_value = mock_kv
+        mock_kv_store.return_value = mock_kv
 
         mock_clock = MagicMock()
-        MockClock.return_value = mock_clock
+        mock_clock.return_value = mock_clock
 
         mock_logger = MagicMock()
-        MockLogger.return_value = mock_logger
+        mock_logger.return_value = mock_logger
 
         mock_registry = MagicMock()
-        MockRegistry.return_value = mock_registry
+        mock_registry.return_value = mock_registry
 
         mock_discovery = MagicMock()
-        MockCachedDiscovery.return_value = mock_discovery
+        mock_cached_discovery.return_value = mock_discovery
 
         # Act
         context = await bootstrap_sdk(config)
 
         # Assert
-        MockCachedDiscovery.assert_called_once_with(mock_registry, mock_clock)
+        mock_cached_discovery.assert_called_once_with(mock_registry, mock_clock)
         assert context.service_discovery == mock_discovery
 
 

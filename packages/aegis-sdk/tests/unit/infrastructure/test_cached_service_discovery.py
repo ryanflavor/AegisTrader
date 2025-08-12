@@ -181,10 +181,8 @@ class TestCachedServiceDiscovery:
         mock_inner_discovery.discover_instances.side_effect = Exception("Discovery failed")
 
         # Should raise exception when no cache exists
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Discovery failed"):
             await cached_discovery.discover_instances("test-service")
-
-        assert str(exc_info.value) == "Discovery failed"
 
     @pytest.mark.asyncio
     async def test_cache_invalidation_single_service(

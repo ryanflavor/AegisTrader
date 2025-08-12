@@ -718,7 +718,7 @@ class TestKVOptionsOriginal:
         """Test KVOptions with default values."""
         options = KVOptions()
 
-        assert options.ttl is None
+        # TTL field has been removed - use stream-level TTL instead
         assert options.revision is None
         assert options.create_only is False
         assert options.update_only is False
@@ -726,12 +726,11 @@ class TestKVOptionsOriginal:
     def test_kvoptions_with_values(self):
         """Test KVOptions with custom values."""
         options = KVOptions(
-            ttl=3600,
             revision=5,
             create_only=True,
         )
 
-        assert options.ttl == 3600
+        # TTL field has been removed - use stream-level TTL instead
         assert options.revision == 5
         assert options.create_only is True
         assert options.update_only is False

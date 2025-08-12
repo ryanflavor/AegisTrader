@@ -71,7 +71,7 @@ class SingleActiveProcessor:
                     await msg.ack()
                     print(f"✅ {self.instance_id} completed order")
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # No messages, continue
                 pass
             except Exception as e:

@@ -1,0 +1,114 @@
+# Default values for echo-service-ddd
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: echo-service-ddd
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+service:
+  type: ClusterIP
+  name: echo-service-ddd
+  port: 80
+  targetPort: 8080
+
+# NATS Configuration
+nats:
+  url: "nats://aegis-trader-nats.aegis-trader:4222"
+  # Token can be provided directly or via secret
+  token: ""
+  # Alternative: reference a secret containing the token
+  # secretName: nats-auth
+
+# Monitor API Configuration
+monitorApi:
+  url: "http://aegis-trader-monitor-api:8100"
+
+# Logging Configuration
+logLevel: INFO
+
+# Health Check Probes
+# Disabled for now - service doesn't have HTTP endpoint yet
+livenessProbe:
+  enabled: false
+  path: /health
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: false
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+    # kubernetes.io/tls-acme: "true"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: echo-service-ddd.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: echo-service-ddd-tls
+  #    hosts:
+  #      - echo-service-ddd.example.com
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity rules for pod assignment
+affinity: {}
+
+# Volume mounts for the container
+volumeMounts: []
+
+# Volumes for the pod
+volumes: []
+
+# Additional environment variables
+extraEnv: {}
+  # CUSTOM_VAR: "value"
+
+# ConfigMap data
+config:
+  SERVICE_VERSION: "1.0.0"
+  ECHO_MODES: "simple,reverse,uppercase,delayed,transform,batch"
+  MAX_BATCH_SIZE: "100"
+  MAX_DELAY_MS: "5000"
+  METRICS_ENABLED: "true"
+  HEALTH_CHECK_INTERVAL: "30"

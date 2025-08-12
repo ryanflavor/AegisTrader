@@ -363,7 +363,7 @@ class TestStaleEntryCleanupTask:
         # Service with +00:00 timezone
         service1 = Mock()
         service1.service_name = "test-service-one"
-        dict1 = service1.model_dump.return_value = {
+        _dict1 = service1.model_dump.return_value = {
             "service_name": "test-service-one",
             "instance_id": "instance-1",
             "last_heartbeat": old_timestamp.isoformat() + "+00:00",
@@ -373,7 +373,7 @@ class TestStaleEntryCleanupTask:
         # Service with Z timezone
         service2 = Mock()
         service2.service_name = "test-service-two"
-        dict2 = service2.model_dump.return_value = {
+        _dict2 = service2.model_dump.return_value = {
             "service_name": "test-service-two",
             "instance_id": "instance-2",
             "last_heartbeat": old_timestamp.isoformat() + "Z",

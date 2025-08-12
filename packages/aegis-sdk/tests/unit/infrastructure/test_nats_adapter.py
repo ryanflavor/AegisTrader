@@ -153,12 +153,14 @@ class TestNATSAdapterConnection:
         mock_js = MagicMock()
         mock_conn.jetstream.return_value = mock_js
 
-        with patch.dict(os.environ, {"NATS_JS_DOMAIN": "env-domain"}):
-            with patch.object(adapter, "_ensure_streams", new_callable=AsyncMock):
-                await adapter.connect()
+        with (
+            patch.dict(os.environ, {"NATS_JS_DOMAIN": "env-domain"}),
+            patch.object(adapter, "_ensure_streams", new_callable=AsyncMock),
+        ):
+            await adapter.connect()
 
-                # Verify JetStream initialized with env domain
-                mock_conn.jetstream.assert_called_with(domain="env-domain")
+            # Verify JetStream initialized with env domain
+            mock_conn.jetstream.assert_called_with(domain="env-domain")
 
     @pytest.mark.asyncio
     async def test_connect_without_jetstream(self, mock_nats_module):
@@ -754,7 +756,7 @@ class TestNATSAdapterCommands:
                     break
 
         # Start completion trigger in background
-        asyncio.create_task(trigger_completion())
+        _ = asyncio.create_task(trigger_completion())  # noqa: RUF006
 
         # Send command
         result = await adapter.send_command(command, track_progress=True)

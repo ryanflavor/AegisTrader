@@ -193,7 +193,7 @@ class TestSingleActiveServiceMigration:
         await active_service.on_start()
 
         # Call the RPC method
-        result = await active_service._rpc_handlers["process"]({"data": "test"})
+        result = await active_service._handler_registry._rpc_handlers["process"]({"data": "test"})
         assert result["success"] is True
         assert result["result"]["result"] == "processed"
         assert result["result"]["count"] == 1
@@ -211,7 +211,7 @@ class TestSingleActiveServiceMigration:
         await standby_service.on_start()
 
         # Call the RPC method on standby
-        result = await standby_service._rpc_handlers["process"]({"data": "test"})
+        result = await standby_service._handler_registry._rpc_handlers["process"]({"data": "test"})
         assert not result["success"]
         assert result["error"] == "NOT_ACTIVE"
         assert "STANDBY mode" in result["message"]
@@ -442,7 +442,7 @@ class TestSingleActiveServiceMigration:
         async def test_handler(params: dict) -> dict:
             return {"result": "ok"}
 
-        result = await service._rpc_handlers["test_method"]({"data": "test"})
+        result = await service._handler_registry._rpc_handlers["test_method"]({"data": "test"})
         assert not result["success"]
 
         # Check metrics - InMemoryMetrics stores counters in a nested structure

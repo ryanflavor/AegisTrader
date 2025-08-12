@@ -663,10 +663,8 @@ class TestServiceIntegration:
 
         service = Service("test-service", mock_message_bus)
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(Exception, match="Registration failed"):
             await service.start()
-
-        assert "Registration failed" in str(exc_info.value)
         assert service.lifecycle_state == ServiceLifecycleState.FAILED
 
     @pytest.mark.asyncio
@@ -679,7 +677,7 @@ class TestServiceIntegration:
         # Make stop fail
         mock_message_bus.unregister_service.side_effect = Exception("Unregister failed")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="Unregister failed"):
             await service.stop()
 
         # Should still transition to STOPPED

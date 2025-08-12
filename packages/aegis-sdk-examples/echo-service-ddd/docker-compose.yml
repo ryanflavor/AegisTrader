@@ -1,0 +1,9 @@
+# Docker Compose configuration
+version: '3.8'
+services:
+  echo-service-ddd:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=development

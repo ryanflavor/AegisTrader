@@ -1,0 +1,31 @@
+# Local values for echo-service-ddd testing with existing NATS
+# Override default values for local kind cluster
+
+# Use a simple test image for now
+image:
+  repository: busybox
+  tag: "1.36"
+  pullPolicy: IfNotPresent
+
+# Use existing NATS in aegis-trader namespace
+nats:
+  url: "nats://aegis-trader-nats.aegis-trader:4222"
+
+# Simplified for testing
+replicaCount: 1
+
+# Disable probes for busybox test
+livenessProbe:
+  enabled: false
+
+readinessProbe:
+  enabled: false
+
+# Minimal resources
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

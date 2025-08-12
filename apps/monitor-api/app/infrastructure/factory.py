@@ -38,17 +38,24 @@ class InfrastructureFactory:
         return EnvironmentConfigurationAdapter()
 
     @staticmethod
-    def create_monitoring_port(config: ServiceConfiguration, start_time: Any) -> MonitoringPort:
+    def create_monitoring_port(
+        config: ServiceConfiguration,
+        start_time: Any,
+        instance_repository: ServiceInstanceRepositoryPort | None = None,
+    ) -> MonitoringPort:
         """Create a monitoring port adapter.
 
         Args:
             config: Service configuration
             start_time: Service start time
+            instance_repository: Optional service instance repository
 
         Returns:
             MonitoringPort implementation
         """
-        return MonitoringAdapter(config, start_time)
+        # Note: MonitoringAdapter constructor expects (config, instance_repository),
+        # not (config, start_time). start_time is managed internally by MonitoringAdapter
+        return MonitoringAdapter(config, instance_repository)
 
     @staticmethod
     async def create_kv_store_port(nats_url: str) -> ServiceRegistryKVStorePort:
@@ -111,11 +118,14 @@ class InfrastructureFactory:
         Returns:
             Dictionary of all adapters keyed by port name
         """
+        # Create instance repository first since monitoring depends on it
+        instance_repository = cls.create_service_instance_repository(
+            kv_store, config.stale_threshold_seconds
+        )
+
         return {
             "configuration": cls.create_configuration_port(),
-            "monitoring": cls.create_monitoring_port(config, start_time),
-            "service_instance_repository": cls.create_service_instance_repository(
-                kv_store, config.stale_threshold_seconds
-            ),
+            "monitoring": cls.create_monitoring_port(config, start_time, instance_repository),
+            "service_instance_repository": instance_repository,
             "sdk_monitoring": cls.create_sdk_monitoring_port(kv_store),
         }
