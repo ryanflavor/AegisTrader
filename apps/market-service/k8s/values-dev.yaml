@@ -1,0 +1,21 @@
+# Development environment values for market-service
+# Override default values for development
+
+replicaCount: 1
+
+image:
+  pullPolicy: Always
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+logLevel: DEBUG
+
+# Development NATS
+nats:
+  url: "nats://localhost:4222"

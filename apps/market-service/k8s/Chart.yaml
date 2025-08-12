@@ -1,0 +1,7 @@
+# Helm chart metadata
+apiVersion: v2
+name: market-service
+description: A Helm chart for market-service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

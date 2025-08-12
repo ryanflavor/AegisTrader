@@ -1,0 +1,12 @@
+# Kubernetes configmap
+# This template is designed to work with Helm
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "market-service.fullname" . }}-config
+  labels:
+    {{- include "market-service.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
