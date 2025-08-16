@@ -74,7 +74,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 
 [tool.uv.sources]
-aegis-sdk = { path = "../aegis-sdk" }
+aegis-sdk = { workspace = true }
 
 [dependency-groups]
 dev = [

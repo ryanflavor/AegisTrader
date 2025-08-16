@@ -29,6 +29,23 @@ clean: ## Clean build artifacts and cache
 run: ## Run the service locally
 	uv run python main.py
 
+# Integration Testing (NO pytest, NO Mock)
+.PHONY: test-integration
+test-integration: ## Run real integration tests with k8s and CTP
+	@echo "🚀 Running integration tests with real k8s and CTP..."
+	@echo "⚠️  Requires: kubectl port-forward -n aegis-trader svc/aegis-trader-nats 4222:4222"
+	cd tests/integration && uv run python run_integration_tests.py
+
+.PHONY: test-ctp
+test-ctp: ## Run CTP adapter tests directly
+	@echo "🔌 Testing CTP adapter with real account..."
+	cd tests/integration && uv run python test_real_ctp_no_mock.py
+
+.PHONY: port-forward
+port-forward: ## Setup port forwarding for k8s NATS
+	@echo "📡 Setting up NATS port forwarding..."
+	kubectl port-forward -n aegis-trader svc/aegis-trader-nats 4222:4222
+
 .PHONY: test-local
 test-local: ## Test main.py locally (quick validation before Docker build)
 	@echo "🧪 Testing main.py locally for errors..."
@@ -52,9 +69,6 @@ test: ## Run all tests
 test-unit: ## Run unit tests only
 	uv run pytest tests/unit/
 
-.PHONY: test-integration
-test-integration: ## Run integration tests only
-	uv run pytest tests/integration/
 
 .PHONY: test-coverage
 test-coverage: ## Run tests with coverage report
@@ -105,6 +119,39 @@ docker-build: test-local ## Build Docker image with versioned tag (validates cod
 		PROJECT_DIR=$$(pwd); \
 		PROJECT_PATH=$$(echo "$$PROJECT_DIR" | sed "s|$$AEGIS_ROOT/||"); \
 		echo "  PROJECT_PATH: $$PROJECT_PATH"; \
+		docker build \
+			--build-arg HTTP_PROXY="$$HTTP_PROXY" \
+			--build-arg HTTPS_PROXY="$$HTTPS_PROXY" \
+			--build-arg NO_PROXY="$$NO_PROXY" \
+			--build-arg PROJECT_PATH="$$PROJECT_PATH" \
+			-t market-service:$$VERSION \
+			-f Dockerfile "$$AEGIS_ROOT" && \
+		docker tag market-service:$$VERSION market-service:latest && \
+		echo "✅ Image built: market-service:$$VERSION (also tagged as latest)"; \
+	else \
+		echo "Error: No .env file found with AEGIS_ROOT definition"; \
+		exit 1; \
+	fi
+
+.PHONY: docker-build-nocache
+docker-build-nocache: test-local ## Build Docker image without cache (clean build)
+	@VERSION=$$(date +%Y%m%d-%H%M%S); \
+	echo "🔨 Building Docker image market-service:$$VERSION (no cache)..."; \
+	# Find .env file with AEGIS_ROOT by searching up the directory tree \
+	ENV_FILE=$$(pwd); \
+	FOUND_ROOT=false; \
+	while [ "$$ENV_FILE" != "/" ]; do \
+		if [ -f "$$ENV_FILE/.env" ]; then \
+			if grep -q "^AEGIS_ROOT=" "$$ENV_FILE/.env" 2>/dev/null; then \
+				FOUND_ROOT=true; \
+				break; \
+			fi; \
+		fi; \
+		ENV_FILE=$$(dirname "$$ENV_FILE"); \
+	done; \
+	if [ "$$FOUND_ROOT" = true ]; then \
+		echo "Loading settings from $$ENV_FILE/.env"; \
+		. "$$ENV_FILE/.env"; \
 		docker build --no-cache \
 			--build-arg HTTP_PROXY="$$HTTP_PROXY" \
 			--build-arg HTTPS_PROXY="$$HTTPS_PROXY" \
@@ -114,6 +161,40 @@ docker-build: test-local ## Build Docker image with versioned tag (validates cod
 			-f Dockerfile "$$AEGIS_ROOT" && \
 		docker tag market-service:$$VERSION market-service:latest && \
 		echo "✅ Image built: market-service:$$VERSION (also tagged as latest)"; \
+	else \
+		echo "Error: No .env file found with AEGIS_ROOT definition"; \
+		exit 1; \
+	fi
+
+.PHONY: docker-build-fast
+docker-build-fast: ## Fast Docker build (skip tests, use cache)
+	@VERSION=$$(date +%Y%m%d-%H%M%S); \
+	echo "⚡ Fast building Docker image market-service:$$VERSION..."; \
+	# Find .env file with AEGIS_ROOT by searching up the directory tree \
+	ENV_FILE=$$(pwd); \
+	FOUND_ROOT=false; \
+	while [ "$$ENV_FILE" != "/" ]; do \
+		if [ -f "$$ENV_FILE/.env" ]; then \
+			if grep -q "^AEGIS_ROOT=" "$$ENV_FILE/.env" 2>/dev/null; then \
+				FOUND_ROOT=true; \
+				break; \
+			fi; \
+		fi; \
+		ENV_FILE=$$(dirname "$$ENV_FILE"); \
+	done; \
+	if [ "$$FOUND_ROOT" = true ]; then \
+		. "$$ENV_FILE/.env"; \
+		PROJECT_DIR=$$(pwd); \
+		PROJECT_PATH=$$(echo "$$PROJECT_DIR" | sed "s|$$AEGIS_ROOT/||"); \
+		docker build \
+			--build-arg HTTP_PROXY="$$HTTP_PROXY" \
+			--build-arg HTTPS_PROXY="$$HTTPS_PROXY" \
+			--build-arg NO_PROXY="$$NO_PROXY" \
+			--build-arg PROJECT_PATH="$$PROJECT_PATH" \
+			-t market-service:$$VERSION \
+			-f Dockerfile "$$AEGIS_ROOT" && \
+		docker tag market-service:$$VERSION market-service:latest && \
+		echo "✅ Fast build complete: market-service:$$VERSION"; \
 	else \
 		echo "Error: No .env file found with AEGIS_ROOT definition"; \
 		exit 1; \
@@ -176,10 +257,31 @@ helm-upgrade: ## Upgrade Helm deployment
 helm-uninstall: ## Uninstall Helm deployment
 	helm uninstall market-service -n aegis-trader
 
+# K8s Secret Management
+.PHONY: create-secret
+create-secret: ## Create CTP credentials secret from .env.test.local
+	@if [ -f .env.test.local ]; then \
+		echo "🔑 Creating CTP credentials secret from .env.test.local..."; \
+		kubectl create secret generic ctp-credentials \
+			--from-env-file=.env.test.local \
+			-n aegis-trader \
+			--dry-run=client -o yaml | kubectl apply -f -; \
+		echo "✅ Secret created/updated: ctp-credentials"; \
+	else \
+		echo "❌ .env.test.local not found. Please create it from .env.example:"; \
+		echo "   cp .env.example .env.test.local"; \
+		echo "   # Then edit .env.test.local with your CTP credentials"; \
+		exit 1; \
+	fi
+
 # Combined deployment
 .PHONY: deploy-to-kind
-deploy-to-kind: docker-build kind-load helm-install ## Build, load to kind, and deploy
+deploy-to-kind: docker-build kind-load create-secret helm-install ## Build, load to kind, and deploy
 	@echo "✅ Deployment complete! Check: kubectl get pods -n aegis-trader"
+
+.PHONY: deploy-to-kind-fast
+deploy-to-kind-fast: docker-build-fast kind-load create-secret helm-install ## Fast deploy (use cache)
+	@echo "✅ Fast deployment complete! Check: kubectl get pods -n aegis-trader"
 
 # Validation
 .PHONY: validate

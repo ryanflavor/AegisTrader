@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vnpy-fix-scripts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "market-service.labels" . | nindent 4 }}
+data:
+  fix_vnpy_paths.py: |
+    #!/usr/bin/env python3
+    """Fix vnpy library paths by creating symlinks for all possible build paths."""
+
+    import os
+    import sys
+    from pathlib import Path
+
+    def fix_vnpy_paths():
+        """Create symlinks for vnpy libraries in all possible build paths."""
+
+        # Find vnpy-ctp and vnpy-sopt library directories
+        venv_path = Path("/opt/venv")
+        ctp_api_dir = venv_path / "lib/python3.13/site-packages/vnpy_ctp/api"
+        sopt_api_dir = venv_path / "lib/python3.13/site-packages/vnpy_sopt/api"
+
+        if not ctp_api_dir.exists() or not sopt_api_dir.exists():
+            print("Warning: vnpy library directories not found")
+            return False
+
+        # List of possible build cache paths that vnpy might look for
+        ctp_cache_paths = [
+            "/tmp/uv-cache/sdists-v6/pypi/vnpy-ctp/6.7.7.2/qa22EPoNoiSuHXmv8HTlT/src/vnpy_ctp/api",
+            "/tmp/uv-cache/sdists-v6/pypi/vnpy-ctp/6.7.7.2/BCPEDfIW_cHebAH4juF9s/src/vnpy_ctp/api",
+            "/tmp/pip-wheel-etr6ysa8/vnpy-ctp_0596a67c9f5e4367ac6fab3e484b0f6e/vnpy_ctp/api",
+        ]
+
+        sopt_cache_paths = [
+            "/tmp/uv-cache/sdists-v6/pypi/vnpy-sopt/3.7.1.0/m5W0EsYEwuXJRSh8yc7d2/src/vnpy_sopt/api",
+            "/tmp/pip-wheel-tzjbzvsf/vnpy-sopt_fe5f8c03439b40a4981487ff89b7df6d/vnpy_sopt/api",
+        ]
+
+        # Create directories and symlinks for CTP
+        for cache_path in ctp_cache_paths:
+            cache_dir = Path(cache_path)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Link all .so files
+            for so_file in ctp_api_dir.glob("*.so"):
+                link_path = cache_dir / so_file.name
+                if not link_path.exists():
+                    link_path.symlink_to(so_file)
+                    print(f"Created symlink: {link_path} -> {so_file}")
+
+        # Create directories and symlinks for SOPT
+        for cache_path in sopt_cache_paths:
+            cache_dir = Path(cache_path)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Link all .so files
+            for so_file in sopt_api_dir.glob("*.so"):
+                link_path = cache_dir / so_file.name
+                if not link_path.exists():
+                    link_path.symlink_to(so_file)
+                    print(f"Created symlink: {link_path} -> {so_file}")
+
+        # Also set LD_LIBRARY_PATH
+        ld_paths = [str(ctp_api_dir), str(sopt_api_dir)]
+        current_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        if current_ld_path:
+            ld_paths.append(current_ld_path)
+        os.environ["LD_LIBRARY_PATH"] = ":".join(ld_paths)
+
+        print(f"LD_LIBRARY_PATH set to: {os.environ['LD_LIBRARY_PATH']}")
+        return True
+
+    if __name__ == "__main__":
+        success = fix_vnpy_paths()
+        sys.exit(0 if success else 1)
+  docker-entrypoint.sh: |
+    #!/bin/bash
+    # Docker entrypoint script for market-service
+    # Handles vnpy-ctp shared library path issues
+
+    set -e
+
+    # Fix vnpy library paths
+    echo "Fixing vnpy library paths..."
+    python /scripts/fix_vnpy_paths.py
+
+    # Execute the main application
+    echo "Starting market-service..."
+    exec python main.py "$@"

@@ -351,27 +351,30 @@ class NATSKVStore(KVStorePort):
                         revision = await self._kv.update(key, serialized, last_revision)
                     else:
                         # Normal put with optional revision check
-                        # NATS KV doesn't support revision check on regular put
                         if options.revision is not None:
-                            # Get current revision and verify
+                            # Use update for atomic revision-checked update
                             try:
-                                current = await self._kv.get(key)
-                                if current.revision != options.revision:
-                                    raise KVRevisionMismatchError(
-                                        key, options.revision, current.revision or 0
-                                    )
-                            except KVRevisionMismatchError:
-                                # Re-raise revision mismatch as-is
-                                raise
+                                revision = await self._kv.update(key, serialized, options.revision)
                             except Exception as err:
-                                if "not found" in str(err).lower():
+                                error_msg = str(err).lower()
+                                if "wrong last sequence" in error_msg or "revision" in error_msg:
+                                    # Get current revision for better error message
+                                    try:
+                                        current = await self._kv.get(key)
+                                        current_rev = current.revision if current else 0
+                                    except:
+                                        current_rev = 0
+                                    raise KVRevisionMismatchError(
+                                        key, options.revision, current_rev
+                                    ) from err
+                                elif "not found" in error_msg:
                                     raise KVKeyNotFoundError(key, self._bucket_name) from err
                                 raise KVStoreError(
-                                    "Revision check failed", key=key, operation="put"
+                                    "Update failed", key=key, operation="put"
                                 ) from err
-
-                        # Normal put (stream-level TTL handles expiration)
-                        revision = await self._kv.put(key, serialized)
+                        else:
+                            # Normal put without revision check
+                            revision = await self._kv.put(key, serialized)
                 else:
                     # Normal put without options
                     revision = await self._kv.put(key, serialized)

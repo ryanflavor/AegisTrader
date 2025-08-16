@@ -109,9 +109,9 @@ class SingleActiveConfig(BaseModel):
         """Validate leader TTL is reasonable compared to heartbeat."""
         if "heartbeat_interval" in info.data:
             heartbeat = info.data["heartbeat_interval"]
-            if v > heartbeat:
+            if v <= heartbeat:
                 raise ValueError(
-                    f"Leader TTL ({v}s) should not exceed heartbeat interval ({heartbeat}s)"
+                    f"Leader TTL ({v}s) must be greater than heartbeat interval ({heartbeat}s)"
                 )
         return v
 

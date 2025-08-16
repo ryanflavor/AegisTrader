@@ -264,8 +264,8 @@ class StickyActiveElection(BaseModel):
     last_leader_heartbeat: datetime | None = Field(default=None)
 
     # Configuration
-    leader_ttl_seconds: int = Field(default=5, ge=1, le=300)
-    heartbeat_interval_seconds: int = Field(default=2, ge=1, le=60)
+    leader_ttl_seconds: int = Field(default=2, ge=1, le=300)
+    heartbeat_interval_seconds: int = Field(default=1, ge=1, le=60)
     election_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
     # Timestamps

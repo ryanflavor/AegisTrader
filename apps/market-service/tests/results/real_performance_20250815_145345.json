@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-08-15T14:53:39.332224",
+  "environment": "real_test",
+  "tests": {
+    "real_failover": {
+      "test_name": "real_failover",
+      "status": "failed",
+      "metrics": {},
+      "error": "nats: wrong last sequence: 269150"
+    },
+    "real_heartbeat": {
+      "test_name": "real_heartbeat",
+      "status": "failed",
+      "metrics": {}
+    },
+    "real_k8s_failover": {
+      "test_name": "real_k8s_failover",
+      "status": "failed",
+      "metrics": {},
+      "error": "No market-service pods found"
+    },
+    "real_memory": {
+      "test_name": "real_memory",
+      "status": "passed",
+      "metrics": {
+        "process_count": 9,
+        "total_memory_mb": 308.0,
+        "avg_memory_mb": 34.22222222222222,
+        "target_mb": 500,
+        "target_met": true
+      }
+    }
+  },
+  "overall_status": "failed"
+}

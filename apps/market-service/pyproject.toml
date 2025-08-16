@@ -13,9 +13,18 @@ dependencies = [
     "httpx>=0.24.0",
     "python-dateutil>=2.8.0",
     "clickhouse-driver>=0.2.6",
-    "vnpy>=3.9.0",
+    "vnpy>=4.1.0",
     # Note: aegis-sdk will be installed from local copy in Docker
-    "aegis-sdk>=4.1.0",
+    "aegis-sdk",
+    "testcontainers[nats]>=4.12.0",
+    "meson-python>=0.18.0",
+    "meson>=1.8.3",
+    "pybind11>=3.0.0",
+    "ninja>=1.13.0",
+    "vnpy-sopt>=3.7.1.0",
+    "importlib-metadata>=8.7.0",
+    "vnpy-ctp>=6.7.7.2",
+    "psutil>=7.0.0",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +63,11 @@ warn_unused_configs = true
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-v --cov=market-service --cov-report=term-missing"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+markers = [
+    "real_ctp: marks tests that require real CTP account credentials"
+]
 
 [tool.uv]
 dev-dependencies = [
@@ -69,4 +83,4 @@ dev-dependencies = [
 ]
 
 [tool.uv.sources]
-aegis-sdk = { path = "../../packages/aegis-sdk" }
+aegis-sdk = { path = "../../packages/aegis-sdk", editable = true }

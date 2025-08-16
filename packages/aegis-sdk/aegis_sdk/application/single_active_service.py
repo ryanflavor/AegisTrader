@@ -209,6 +209,7 @@ class SingleActiveService(Service):
                     self.service_name,
                     self.instance_id,
                     self._config.group_id,
+                    self._config.leader_ttl_seconds,
                 )
             except Exception as e:
                 if self._logger:

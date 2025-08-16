@@ -253,3 +253,4 @@ $RECYCLE.BIN/
 .nfs*
 
 helm-legacy/
+.cluade-trace/

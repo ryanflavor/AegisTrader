@@ -16,10 +16,19 @@ spec:
       labels:
         {{- include "market-service.selectorLabels" . | nindent 8 }}
     spec:
+      volumes:
+      - name: vnpy-fix-scripts
+        configMap:
+          name: vnpy-fix-scripts
+          defaultMode: 0755
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["/scripts/docker-entrypoint.sh"]
+        volumeMounts:
+        - name: vnpy-fix-scripts
+          mountPath: /scripts
         ports:
         - name: http
           containerPort: {{ .Values.service.targetPort | default 8080 }}
@@ -35,6 +44,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: ENABLE_CTP_GATEWAY
+          value: "{{ .Values.ctp.enabled }}"
+        envFrom:
+        - secretRef:
+            name: ctp-credentials
         {{- if .Values.livenessProbe.enabled }}
         livenessProbe:
           httpGet:

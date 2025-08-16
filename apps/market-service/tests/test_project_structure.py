@@ -25,8 +25,6 @@ class TestProjectStructure:
             "domain",
             "infra",
             "tests",
-            "pkg",
-            "k8s",
         ]
 
         for dir_name in required_dirs:

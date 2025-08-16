@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-08-15T14:43:25.708654",
+  "environment": "real_test",
+  "tests": {
+    "real_failover": {
+      "test_name": "real_failover",
+      "status": "failed",
+      "metrics": {},
+      "error": "NatsKvElectionRepository.__init__() got an unexpected keyword argument 'instance_id'"
+    },
+    "real_heartbeat": {
+      "test_name": "real_heartbeat",
+      "status": "failed",
+      "metrics": {}
+    },
+    "real_k8s_failover": {
+      "test_name": "real_k8s_failover",
+      "status": "failed",
+      "metrics": {},
+      "error": "No market-service pods found"
+    },
+    "real_memory": {
+      "test_name": "real_memory",
+      "status": "passed",
+      "metrics": {
+        "process_count": 7,
+        "total_memory_mb": 264.0,
+        "avg_memory_mb": 37.714285714285715,
+        "target_mb": 500,
+        "target_met": true
+      }
+    }
+  },
+  "overall_status": "failed"
+}

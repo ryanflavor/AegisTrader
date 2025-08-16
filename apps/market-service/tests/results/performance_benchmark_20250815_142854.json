@@ -1,0 +1,85 @@
+{
+  "timestamp": "2025-08-15T14:27:22.316912",
+  "environment": "k8s",
+  "tests": {
+    "failover_time": {
+      "test_name": "failover_time",
+      "status": "warning",
+      "metrics": {
+        "failover_time_seconds": 2.0022528171539307,
+        "failover_time_ms": 2002,
+        "target_ms": 2000,
+        "target_met": false
+      }
+    },
+    "heartbeat_consistency": {
+      "test_name": "heartbeat_consistency",
+      "status": "passed",
+      "metrics": {
+        "heartbeats_sent": 6,
+        "heartbeats_received": 6,
+        "loss_rate": 0.0,
+        "avg_latency_ms": 24.166666666666668,
+        "max_latency_ms": 38,
+        "avg_interval_seconds": 5.011156988143921,
+        "max_deviation_seconds": 0.013427019119262695,
+        "consistency_score": 99.73145961761475,
+        "target_interval": "5s \u00b1 2s"
+      }
+    },
+    "connection_stability": {
+      "test_name": "connection_stability",
+      "status": "passed",
+      "metrics": {
+        "test_duration_seconds": 60,
+        "connection_drops": 0,
+        "total_uptime_seconds": 60.066988468170166,
+        "uptime_percentage": 100.11164744695027,
+        "connection_attempts": 1,
+        "connection_successes": 1,
+        "connection_failures": 6,
+        "success_rate": 100.0,
+        "target_uptime": "> 99.9%"
+      }
+    },
+    "memory_usage": {
+      "test_name": "memory_usage",
+      "status": "passed",
+      "metrics": {
+        "baseline_memory_mb": 108.0,
+        "current_memory_mb": 108.0,
+        "memory_growth_mb": 0.0,
+        "target_memory_mb": "< 500",
+        "memory_within_target": true,
+        "top_memory_consumers": [
+          {
+            "file": "queues.py",
+            "line": 61,
+            "size_kb": 4.453125
+          },
+          {
+            "file": "queues.py",
+            "line": 51,
+            "size_kb": 4.453125
+          },
+          {
+            "file": "queues.py",
+            "line": 49,
+            "size_kb": 4.453125
+          },
+          {
+            "file": "locks.py",
+            "line": 168,
+            "size_kb": 4.453125
+          },
+          {
+            "file": "queues.py",
+            "line": 53,
+            "size_kb": 1.4765625
+          }
+        ]
+      }
+    }
+  },
+  "overall_status": "passed_with_warnings"
+}

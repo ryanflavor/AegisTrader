@@ -1,4 +1,8 @@
-"""Data translators for market-service."""
+"""
+Data translators for market-service.
+
+Translates between external formats and domain models.
+"""
 
 from abc import ABC, abstractmethod
 from typing import Any
@@ -18,44 +22,25 @@ class Translator(ABC):
         pass
 
 
-class ExternalAPITranslator(Translator):
-    """Translates external API responses."""
+class MarketDataTranslator(Translator):
+    """Translates market data between formats."""
 
     def translate(self, source: dict) -> dict:
-        """Translate external API response to domain model."""
+        """Translate external market data to domain format."""
         return {
-            "id": source.get("external_id"),
-            "name": source.get("display_name"),
-            "email": source.get("email_address"),
-            "created_at": source.get("registration_date"),
+            "symbol": source.get("symbol") or source.get("ticker"),
+            "exchange": source.get("exchange") or source.get("market"),
+            "price": source.get("last_price") or source.get("price"),
+            "volume": source.get("volume") or source.get("qty"),
+            "timestamp": source.get("timestamp") or source.get("time"),
         }
 
     def reverse_translate(self, source: dict) -> dict:
-        """Translate domain model to external API format."""
+        """Translate domain market data to external format."""
         return {
-            "external_id": source.get("id"),
-            "display_name": source.get("name"),
-            "email_address": source.get("email"),
-            "registration_date": source.get("created_at"),
+            "ticker": source.get("symbol"),
+            "market": source.get("exchange"),
+            "last_price": source.get("price"),
+            "qty": source.get("volume"),
+            "time": source.get("timestamp"),
         }
-
-
-class LegacySystemTranslator(Translator):
-    """Translates legacy system data."""
-
-    def translate(self, source: str) -> dict:
-        """Parse legacy format to domain model."""
-        # Example: "ID:123|NAME:John|EMAIL:john@example.com"
-        parts = source.split("|")
-        data = {}
-        for part in parts:
-            key, value = part.split(":")
-            data[key.lower()] = value
-        return data
-
-    def reverse_translate(self, source: dict) -> str:
-        """Convert domain model to legacy format."""
-        parts = []
-        for key, value in source.items():
-            parts.append(f"{key.upper()}:{value}")
-        return "|".join(parts)

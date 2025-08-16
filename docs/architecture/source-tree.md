@@ -4,21 +4,21 @@ The project structure will follow the standard enterprise DDD template generated
 
 Plaintext
 
-market-service/  
-├── .ruff\_cache/  
-├── app\_types/          \# Shared type definitions and interfaces  
-├── application/        \# Application services and use case handlers  
-├── crossdomain/        \# Anti-Corruption Layer for external data  
-├── domain/             \# Core business logic, aggregates, entities  
-├── infra/              \# Database, messaging, gateway adapters  
-├── k8s/                \# Kubernetes and Helm deployment charts  
-├── pkg/                \# Business-agnostic utility packages  
-├── tests/              \# Unit and integration tests  
-├── .dockerignore  
-├── .env.example        \# Environment variable templates  
-├── .gitignore  
-├── Dockerfile          \# Docker container definition  
-├── main.py             \# Main application entry point  
-├── Makefile            \# Automation scripts for build, test, deploy  
-├── pyproject.toml      \# Project metadata and dependencies  
+market-service/
+├── .ruff\_cache/
+├── app\_types/          \# Shared type definitions and interfaces
+├── application/        \# Application services and use case handlers
+├── crossdomain/        \# Anti-Corruption Layer for external data
+├── domain/             \# Core business logic, aggregates, entities
+├── infra/              \# Database, messaging, gateway adapters
+├── k8s/                \# Kubernetes and Helm deployment charts
+├── pkg/                \# Business-agnostic utility packages
+├── tests/              \# Unit and integration tests
+├── .dockerignore
+├── .env.example        \# Environment variable templates
+├── .gitignore
+├── Dockerfile          \# Docker container definition
+├── main.py             \# Main application entry point
+├── Makefile            \# Automation scripts for build, test, deploy
+├── pyproject.toml      \# Project metadata and dependencies
 └── README.md
